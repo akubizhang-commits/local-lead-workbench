@@ -1,0 +1,200 @@
+
+> local-lead-workbench-frontend@0.1.0 test
+> node --experimental-strip-types --test tests/*.test.ts
+
+TAP version 13
+# Subtest: batch status sends selected IDs and captured revisions only
+ok 1 - batch status sends selected IDs and captured revisions only
+  ---
+  duration_ms: 2.509292
+  type: 'test'
+  ...
+# Subtest: business editor preserves existing categories outside default choices
+ok 2 - business editor preserves existing categories outside default choices
+  ---
+  duration_ms: 0.402292
+  type: 'test'
+  ...
+# Subtest: named buyers are separated from procurement departments and unnamed channels
+ok 3 - named buyers are separated from procurement departments and unnamed channels
+  ---
+  duration_ms: 1.372583
+  type: 'test'
+  ...
+# Subtest: invalid review states are hidden regardless of adoption status
+ok 4 - invalid review states are hidden regardless of adoption status
+  ---
+  duration_ms: 0.231291
+  type: 'test'
+  ...
+# Subtest: valid excluded contacts stay separate and accepted buyers remain visible
+ok 5 - valid excluded contacts stay separate and accepted buyers remain visible
+  ---
+  duration_ms: 0.234791
+  type: 'test'
+  ...
+# Subtest: pending evidence is never usable; adoption exclusion takes precedence
+ok 6 - pending evidence is never usable; adoption exclusion takes precedence
+  ---
+  duration_ms: 0.215708
+  type: 'test'
+  ...
+# Subtest: all distinct evidence/page pairs appear and field provenance is preserved
+ok 7 - all distinct evidence/page pairs appear and field provenance is preserved
+  ---
+  duration_ms: 33.537583
+  type: 'test'
+  ...
+# Subtest: legacy and empty sources preserve evidence and the missing-evidence fallback
+ok 8 - legacy and empty sources preserve evidence and the missing-evidence fallback
+  ---
+  duration_ms: 1.48925
+  type: 'test'
+  ...
+# Subtest: people and channels are visible while other contacts start collapsed
+ok 9 - people and channels are visible while other contacts start collapsed
+  ---
+  duration_ms: 1.57725
+  type: 'test'
+  ...
+# Subtest: invalid review states render neither standalone cards nor grouped identities
+ok 10 - invalid review states render neither standalone cards nor grouped identities
+  ---
+  duration_ms: 0.761125
+  type: 'test'
+  ...
+# Subtest: conflicting field values and their individual sources remain visible
+ok 11 - conflicting field values and their individual sources remain visible
+  ---
+  duration_ms: 0.659834
+  type: 'test'
+  ...
+# Subtest: backend grouped records retain separate cards and counts without frontend merging
+ok 12 - backend grouped records retain separate cards and counts without frontend merging
+  ---
+  duration_ms: 0.80725
+  type: 'test'
+  ...
+# Subtest: pending and rejected records render only inside their separate folded groups
+ok 13 - pending and rejected records render only inside their separate folded groups
+  ---
+  duration_ms: 1.13475
+  type: 'test'
+  ...
+# Subtest: export query retains Chinese, ampersands and selected filters
+ok 14 - export query retains Chinese, ampersands and selected filters
+  ---
+  duration_ms: 0.872334
+  type: 'test'
+  ...
+# Subtest: external links reject executable and relative URLs
+ok 15 - external links reject executable and relative URLs
+  ---
+  duration_ms: 0.091833
+  type: 'test'
+  ...
+# Subtest: manual recovery is offered for blocked and failed runs but not completed runs
+ok 16 - manual recovery is offered for blocked and failed runs but not completed runs
+  ---
+  duration_ms: 0.768458
+  type: 'test'
+  ...
+# Subtest: market and run filters survive pagination without leaking pagination into exports
+ok 17 - market and run filters survive pagination without leaking pagination into exports
+  ---
+  duration_ms: 0.23375
+  type: 'test'
+  ...
+# Subtest: empty optional market filters are omitted and pagination starts at one
+ok 18 - empty optional market filters are omitted and pagination starts at one
+  ---
+  duration_ms: 0.390209
+  type: 'test'
+  ...
+# Subtest: capability-exhausted runs never offer ineffective resume; retryable runs still do
+ok 19 - capability-exhausted runs never offer ineffective resume; retryable runs still do
+  ---
+  duration_ms: 0.309209
+  type: 'test'
+  ...
+# Subtest: detail refresh and returning to list retain the entire list context
+ok 20 - detail refresh and returning to list retain the entire list context
+  ---
+  duration_ms: 3.097792
+  type: 'test'
+  ...
+# Subtest: invalid route and pagination values fall back safely
+ok 21 - invalid route and pagination values fall back safely
+  ---
+  duration_ms: 0.240792
+  type: 'test'
+  ...
+# Subtest: new filter retains other constraints but resets page
+ok 22 - new filter retains other constraints but resets page
+  ---
+  duration_ms: 0.093916
+  type: 'test'
+  ...
+# Subtest: repeated failures become short Chinese reasons without URLs
+ok 23 - repeated failures become short Chinese reasons without URLs
+  ---
+  duration_ms: 1.402917
+  type: 'test'
+  ...
+# Subtest: run report preserves mixed outcomes instead of treating completion as success
+ok 24 - run report preserves mixed outcomes instead of treating completion as success
+  ---
+  duration_ms: 115.564917
+  type: 'test'
+  ...
+# Subtest: page preview retains access failure and treats extracted contacts as unconfirmed
+ok 25 - page preview retains access failure and treats extracted contacts as unconfirmed
+  ---
+  duration_ms: 34.179959
+  type: 'test'
+  ...
+# Subtest: unknown statuses and absent metrics are not presented as successful zero results
+ok 26 - unknown statuses and absent metrics are not presented as successful zero results
+  ---
+  duration_ms: 0.830292
+  type: 'test'
+  ...
+# Subtest: preview escapes source content and rejects executable source URLs
+ok 27 - preview escapes source content and rejects executable source URLs
+  ---
+  duration_ms: 0.345875
+  type: 'test'
+  ...
+# Subtest: real DOM: single-company run, cancel, retry and refresh use the API contract
+ok 28 - real DOM: single-company run, cancel, retry and refresh use the API contract
+  ---
+  duration_ms: 560.522583
+  type: 'test'
+  ...
+# Subtest: real DOM: settings save, blocked probe and 20-company pilot preserve their meanings
+ok 29 - real DOM: settings save, blocked probe and 20-company pilot preserve their meanings
+  ---
+  duration_ms: 99.848666
+  type: 'test'
+  ...
+# Subtest: backend public-page adapter statuses and read stage are shown in Chinese
+ok 30 - backend public-page adapter statuses and read stage are shown in Chinese
+  ---
+  duration_ms: 1.583916
+  type: 'test'
+  ...
+# Subtest: API connectivity never implies worker liveness
+ok 31 - API connectivity never implies worker liveness
+  ---
+  duration_ms: 0.768125
+  type: 'test'
+  ...
+1..31
+# tests 31
+# suites 0
+# pass 31
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1302.597625

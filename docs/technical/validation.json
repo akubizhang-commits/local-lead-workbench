@@ -1,0 +1,150 @@
+{
+  "documentation_date": "2026-09-26",
+  "scope": "Offline source, links, OpenAPI route set and in-memory DDL; no live DB, network or service changes",
+  "source_files": 119,
+  "local_links_checked": 106,
+  "api_business_operations": 52,
+  "openapi_operations_including_spa": 53,
+  "schema_tables": 38,
+  "explicit_indexes": 8,
+  "schema_integrity": "ok",
+  "foreign_key_errors": [],
+  "diagram_count": 22,
+  "diagrams": [
+    {
+      "file": "architecture.md",
+      "number": 1,
+      "kind": "flowchart LR",
+      "line": 15
+    },
+    {
+      "file": "architecture.md",
+      "number": 2,
+      "kind": "flowchart TB",
+      "line": 37
+    },
+    {
+      "file": "architecture.md",
+      "number": 3,
+      "kind": "flowchart LR",
+      "line": 145
+    },
+    {
+      "file": "database.md",
+      "number": 1,
+      "kind": "erDiagram",
+      "line": 41
+    },
+    {
+      "file": "database.md",
+      "number": 2,
+      "kind": "erDiagram",
+      "line": 73
+    },
+    {
+      "file": "deployment-topology.md",
+      "number": 1,
+      "kind": "flowchart TB",
+      "line": 7
+    },
+    {
+      "file": "deployment-topology.md",
+      "number": 2,
+      "kind": "sequenceDiagram",
+      "line": 101
+    },
+    {
+      "file": "maps-pacing.md",
+      "number": 1,
+      "kind": "flowchart LR",
+      "line": 15
+    },
+    {
+      "file": "market-social-integration.md",
+      "number": 1,
+      "kind": "flowchart LR",
+      "line": 19
+    },
+    {
+      "file": "module-design.md",
+      "number": 1,
+      "kind": "sequenceDiagram",
+      "line": 50
+    },
+    {
+      "file": "module-design.md",
+      "number": 2,
+      "kind": "sequenceDiagram",
+      "line": 134
+    },
+    {
+      "file": "module-design.md",
+      "number": 3,
+      "kind": "sequenceDiagram",
+      "line": 242
+    },
+    {
+      "file": "module-design.md",
+      "number": 4,
+      "kind": "sequenceDiagram",
+      "line": 326
+    },
+    {
+      "file": "module-design.md",
+      "number": 5,
+      "kind": "sequenceDiagram",
+      "line": 406
+    },
+    {
+      "file": "outreach-planned.md",
+      "number": 1,
+      "kind": "flowchart LR",
+      "line": 15
+    },
+    {
+      "file": "outreach-planned.md",
+      "number": 2,
+      "kind": "erDiagram",
+      "line": 38
+    },
+    {
+      "file": "outreach-planned.md",
+      "number": 3,
+      "kind": "sequenceDiagram",
+      "line": 97
+    },
+    {
+      "file": "outreach-planned.md",
+      "number": 4,
+      "kind": "stateDiagram-v2",
+      "line": 146
+    },
+    {
+      "file": "search-stability-review.md",
+      "number": 1,
+      "kind": "flowchart LR",
+      "line": 7
+    },
+    {
+      "file": "task-activity-design.md",
+      "number": 1,
+      "kind": "flowchart LR",
+      "line": 19
+    },
+    {
+      "file": "us-geography-design.md",
+      "number": 1,
+      "kind": "flowchart LR",
+      "line": 29
+    },
+    {
+      "file": "website-batch-design.md",
+      "number": 1,
+      "kind": "sequenceDiagram",
+      "line": 47
+    }
+  ],
+  "mermaid_check": "Code fences, diagram headers and current ER table references only; not rendered",
+  "errors": [],
+  "passed": true
+}

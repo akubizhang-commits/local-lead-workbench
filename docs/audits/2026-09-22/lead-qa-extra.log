@@ -1,0 +1,153 @@
+..................................identity reassignment: [('Alex', 'alex@qa.example', 'auto_recorded'), ('Bob', 'alex@qa.example', 'auto_recorded')] reviews= []
+Frejected contact: Buyer reject procurement= 1 xlsx contacts= 0
+Ffinal status= candidate global changes= [] detail changes= []
+Faddress=California; page= {'items': [], 'total': 0, 'page': 1, 'page_size': 50} csv= []
+Frun-only headers= ['id', 'name', 'address', 'phone', 'website', 'city', 'country', 'business_types', 'status', 'source_kind', 'notes', 'created_at', 'last_checked_at', 'source_url', 'observed_at'] explicit headers= ['id', 'name', 'address', 'phone', 'website', 'city', 'country', 'business_types', 'status', 'source_kind', 'notes', 'created_at', 'last_checked_at', 'source_url', 'observed_at', 'market_segment', 'market_changed', 'first_seen', 'last_seen']
+Frun-only headers= ['id', 'name', 'address', 'phone', 'website', 'city', 'country', 'business_types', 'status', 'source_kind', 'notes', 'created_at', 'last_checked_at', 'source_url', 'observed_at'] explicit headers= ['id', 'name', 'address', 'phone', 'website', 'city', 'country', 'business_types', 'status', 'source_kind', 'notes', 'created_at', 'last_checked_at', 'source_url', 'observed_at', 'market_segment', 'market_changed', 'first_seen', 'last_seen']
+F.......................
+=================================== FAILURES ===================================
+___________ test_defect_1_name_reassignment_requires_identity_review ___________
+
+qa = (<starlette.testclient.TestClient object at 0x10b62c8d0>, <leadworkbench.db.Store object at 0x10b4af650>)
+
+    def test_defect_1_name_reassignment_requires_identity_review(qa):
+        item = company(qa)
+        enrich(qa, item['id'], contacts=[contact()])
+        enrich(qa, item['id'], contacts=[{**contact(), 'name': 'Bob', 'evidence': 'Bob Sales alex@qa.example'}])
+        rows = qa[0].get(f"/api/companies/{item['id']}").json()['contacts']
+        print('identity reassignment:', [(r['name'], r['email'], r['review_status']) for r in rows], 'reviews=', reviews(qa))
+>       assert len(reviews(qa)) == 1, 'Same email/source changed from Alex to Bob but no identity review exists'
+E       AssertionError: Same email/source changed from Alex to Bob but no identity review exists
+E       assert 0 == 1
+E        +  where 0 = len([])
+E        +    where [] = reviews((<starlette.testclient.TestClient object at 0x10b62c8d0>, <leadworkbench.db.Store object at 0x10b4af650>))
+
+/tmp/test_lead_qa_audit.py:218: AssertionError
+__________ test_defect_2_rejected_identity_not_counted_as_procurement __________
+
+qa = (<starlette.testclient.TestClient object at 0x10b62f790>, <leadworkbench.db.Store object at 0x10b5f7050>)
+
+    def test_defect_2_rejected_identity_not_counted_as_procurement(qa):
+        item = company(qa)
+        enrich(qa, item['id'], contacts=[contact()])
+        enrich(qa, item['id'], contacts=[{**contact(), 'role': 'Buyer', 'kind': 'procurement', 'evidence': 'Alex Buyer'}])
+        assert decide(qa, reviews(qa)[0], 'reject').status_code == 200
+        rows = qa[0].get(f"/api/companies/{item['id']}").json()['contacts']
+        js = "import {groupContacts} from " + json.dumps((ROOT/'frontend/src/groupContacts.ts').as_uri()) + ";console.log(JSON.stringify(groupContacts(" + json.dumps(rows) + ")));"
+        result = subprocess.run(['node', '--experimental-strip-types', '--input-type=module', '-e', js], capture_output=True, text=True, check=True)
+        grouped = json.loads(result.stdout)
+        print('rejected contact:', rows[0]['role'], rows[0]['review_status'], 'procurement=', len(grouped['procurement']), 'xlsx contacts=', len(exported(qa, 'xlsx')['Contacts']))
+>       assert grouped['procurement'] == [], 'Rejected identity remains counted/displayed as a procurement contact'
+E       AssertionError: Rejected identity remains counted/displayed as a procurement contact
+E       assert [{'id': 'ea3d...'Buyer', ...}] == []
+E         
+E         Left contains one more item: {'id': 'ea3dd437059f4ef8a75e48a6f76e10ad', 'company_id': 'd2b33c3614c94ed0a12c7ca67802aaf5', 'name': 'Alex', 'role': 'Buyer', ...}
+E         Use -v to get more diff
+
+/tmp/test_lead_qa_audit.py:231: AssertionError
+_____________________ test_defect_3_manual_status_history ______________________
+
+qa = (<starlette.testclient.TestClient object at 0x10b6e7020>, <leadworkbench.db.Store object at 0x10b5f74d0>)
+
+    def test_defect_3_manual_status_history(qa):
+        item = company(qa)
+        for status in ['verified', 'do_not_contact', 'candidate']:
+            patch(qa, item['id'], status=status)
+        changes = qa[0].get('/api/changes').json()
+        detail = qa[0].get(f"/api/companies/{item['id']}").json()
+        print('final status=', detail['company']['status'], 'global changes=', changes, 'detail changes=', detail['changes'])
+>       assert [r['new_value'] for r in changes if r['field'] == 'status'], 'Manual status changes including removal of refusal have no audit history'
+E       AssertionError: Manual status changes including removal of refusal have no audit history
+E       assert []
+
+/tmp/test_lead_qa_audit.py:241: AssertionError
+_________________ test_defect_4_region_search_ignores_address __________________
+
+qa = (<starlette.testclient.TestClient object at 0x10b7fe030>, <leadworkbench.db.Store object at 0x10b69dd90>)
+
+    def test_defect_4_region_search_ignores_address(qa):
+        item = company(qa, city='Los Angeles')
+        patch(qa, item['id'], fields={'address': '10 QA Street, California 90001'})
+        response = qa[0].get('/api/company-page', params={'q': 'California'})
+        print('address=California; page=', response.json(), 'csv=', exported(qa, 'csv', q='California'))
+>       assert response.json()['total'] == 1, 'UI promises region search but state/address is ignored'
+E       AssertionError: UI promises region search but state/address is ignored
+E       assert 0 == 1
+
+/tmp/test_lead_qa_audit.py:249: AssertionError
+___________ test_defect_5_run_only_export_loses_market_metadata[csv] ___________
+
+qa = (<starlette.testclient.TestClient object at 0x10b739150>, <leadworkbench.db.Store object at 0x10b69f470>)
+market = ({'id': 'f100f37c18fc41999a4d7a2996e867d7', 'name': 'QA 市场', 'country': 'US', 'state': 'California', ...}, {'id': '09f...93fb000b4c0bc5b6', 'name': 'Market 企业', 'address': '10 QA Street, Los Angeles, CA 90001', 'phone': '12125550000', ...})
+fmt = 'csv'
+
+    @pytest.mark.parametrize('fmt', ['csv', 'xlsx'])
+    def test_defect_5_run_only_export_loses_market_metadata(qa, market, fmt):
+        m, run, item = market
+        filters = dict(run_id=run['id'], segment='new')
+        page = qa[0].get('/api/company-page', params=filters).json()
+        assert page['items'][0]['market_segment'] == 'new'
+        rows = exported(qa, fmt, **filters)
+        rows = rows if fmt == 'csv' else rows['Companies']
+        explicit = exported(qa, fmt, **filters, market_id=m['id'])
+        explicit = explicit if fmt == 'csv' else explicit['Companies']
+        print('run-only headers=', list(rows[0]), 'explicit headers=', list(explicit[0]))
+>       assert set(rows[0]) == set(explicit[0]), 'Equivalent run filter loses market_segment/market_changed/first_seen/last_seen columns'
+E       AssertionError: Equivalent run filter loses market_segment/market_changed/first_seen/last_seen columns
+E       assert {'address', '...t', 'id', ...} == {'address', '...st_seen', ...}
+E         
+E         Extra items in the right set:
+E         'first_seen'
+E         'last_seen'
+E         'market_changed'
+E         'market_segment'
+E         Use -v to get more diff
+
+/tmp/test_lead_qa_audit.py:262: AssertionError
+__________ test_defect_5_run_only_export_loses_market_metadata[xlsx] ___________
+
+qa = (<starlette.testclient.TestClient object at 0x10b5a8160>, <leadworkbench.db.Store object at 0x10b69fa10>)
+market = ({'id': '66ee355b76e64b6e8a56ef996027000f', 'name': 'QA 市场', 'country': 'US', 'state': 'California', ...}, {'id': 'fac...9657e824c39f5607', 'name': 'Market 企业', 'address': '10 QA Street, Los Angeles, CA 90001', 'phone': '12125550000', ...})
+fmt = 'xlsx'
+
+    @pytest.mark.parametrize('fmt', ['csv', 'xlsx'])
+    def test_defect_5_run_only_export_loses_market_metadata(qa, market, fmt):
+        m, run, item = market
+        filters = dict(run_id=run['id'], segment='new')
+        page = qa[0].get('/api/company-page', params=filters).json()
+        assert page['items'][0]['market_segment'] == 'new'
+        rows = exported(qa, fmt, **filters)
+        rows = rows if fmt == 'csv' else rows['Companies']
+        explicit = exported(qa, fmt, **filters, market_id=m['id'])
+        explicit = explicit if fmt == 'csv' else explicit['Companies']
+        print('run-only headers=', list(rows[0]), 'explicit headers=', list(explicit[0]))
+>       assert set(rows[0]) == set(explicit[0]), 'Equivalent run filter loses market_segment/market_changed/first_seen/last_seen columns'
+E       AssertionError: Equivalent run filter loses market_segment/market_changed/first_seen/last_seen columns
+E       assert {'address', '...t', 'id', ...} == {'address', '...st_seen', ...}
+E         
+E         Extra items in the right set:
+E         'first_seen'
+E         'last_seen'
+E         'market_changed'
+E         'market_segment'
+E         Use -v to get more diff
+
+/tmp/test_lead_qa_audit.py:262: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.14/site-packages/fastapi/testclient.py:1
+  /Users/zhangnu/outputs/local-lead-workbench/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.14/site-packages/starlette/testclient.py:53
+  /Users/zhangnu/outputs/local-lead-workbench/.venv/lib/python3.14/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ../../../../tmp/test_lead_qa_audit.py::test_defect_1_name_reassignment_requires_identity_review
+FAILED ../../../../tmp/test_lead_qa_audit.py::test_defect_2_rejected_identity_not_counted_as_procurement
+FAILED ../../../../tmp/test_lead_qa_audit.py::test_defect_3_manual_status_history
+FAILED ../../../../tmp/test_lead_qa_audit.py::test_defect_4_region_search_ignores_address
+FAILED ../../../../tmp/test_lead_qa_audit.py::test_defect_5_run_only_export_loses_market_metadata[csv]
+FAILED ../../../../tmp/test_lead_qa_audit.py::test_defect_5_run_only_export_loses_market_metadata[xlsx]
+6 failed, 57 passed, 2 warnings in 4.08s

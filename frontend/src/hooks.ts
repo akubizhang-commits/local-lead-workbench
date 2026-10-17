@@ -1,0 +1,3 @@
+import {useEffect,useState} from 'react';
+import {api} from './api';
+export function useResource<T>(path:string|null,version=0,poll=false) {const [data,setData]=useState<T>();const [error,setError]=useState('');const [loading,setLoading]=useState(!!path);useEffect(()=>{let active=true;let controller:ReturnType<typeof setTimeout>;setData(undefined);setError('');setLoading(!!path);async function load(){if(!path)return;try {const result=await api<T>(path);if(active){setData(result);setError('');}}catch(e){if(active)setError(e instanceof Error?e.message:'无法连接本地服务');}finally{if(active){setLoading(false);if(poll)controller=setTimeout(load,5000);}}}void load();return()=>{active=false;clearTimeout(controller);};},[path,version,poll]);return {data,error,loading};}

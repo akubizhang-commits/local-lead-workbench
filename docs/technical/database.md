@@ -1,0 +1,360 @@
+# 当前数据库设计与迁移
+
+状态：2026-09-25 同步市场社媒结构；本次只改文档，最终业务验收待确认。依据 `db.py`、market/social Store mixin、`market_social.py` 和 `social_policy.py`。本文描述实际结构，不代表人员统一关联、邮件发送或社媒发送已实现。
+
+配套：本目录`schema.current.sql`为完整结构附件，`api-contract.md`说明HTTP投影。附件生成于临时Store；**未实例化真实数据目录Store，也未打开真实数据库**。因此本文不是线上数据量、索引使用率或真实数据完整性审计。
+
+## 1. 存储与版本事实
+
+- 使用Python标准库 **sqlite3 + 手写SQL**。没有SQLAlchemy模型、ORM session、Alembic revision链或Alembic迁移命令。
+- `Store(directory)`将目录expanduser/resolve后创建`workbench.sqlite3`，新目录请求权限0700、数据库文件chmod0600；不能假定已有目录权限已被重新收紧。
+- 每次连接设置`foreign_keys=ON`、`busy_timeout=15000`，sqlite3连接timeout=15秒、row_factory=sqlite3.Row；成功commit、异常rollback、最终close。
+- 初始化设置`journal_mode=WAL`。附件仅记录DDL和user_version，**没有把WAL、连接超时或文件权限固化到DDL**。
+- 当前`PRAGMA user_version=2`。版本2之后仍有幂等扩展迁移及数据修复，所以“user_version相同”不保证表组完整或应用版本一致。
+- 2026-09-25 临时 Store 启动结构为 **37 张表**；`market_exhausted_items` 仍按需创建，完整附件为 **38 张表**、8 个显式索引、45 个自动索引。数量以同批次 DDL 与 `validation.json` 为证，自动索引不单独导出 SQL。
+- 当前没有view、trigger、虚拟表、STRICT表或WITHOUT ROWID表。DDL中的TEXT/INTEGER/REAL按实际列声明保存；业务状态多数没有CHECK约束。
+
+源码入口：`db.py:56–184`；`market_store.py:74–148,458–464`；`social_store.py:19–46`；`social_discovery_store.py:17–33`。
+
+## 2. 迁移顺序与生命周期
+
+| 顺序 | 触发条件 / 实际动作 |
+|---|---|
+| 版本检查 | 读取user_version，>2报错；不是完整schema diff |
+| 基础v1 | version=0时执行`db.SCHEMA`：企业、来源、联系人、审核、任务、计划等12张表和2个索引，设置user_version=1 |
+| 市场v2 | 启动时原version<2，执行`_migrate_market`：4张市场表、3个索引；所有旧tasks.limit改为0；回填market_keys、market_runs、membership/run分类；活动旧发现项保存进snapshot后替换为planning；最后user_version=2 |
+| audit扩展 | 每次启动执行`_migrate_audit`：先建listing_aliases及索引、回填别名；再建contact_decisions/contact_versions/company_manual_checks；从历史审核回填采用决定，保护已接受的字段override |
+| social扩展 | 每次启动建social_entities/company_social/evidence/decisions/outreach/migrations；调用social discovery扩展建config/runs/work/page_observations；纠正无官网项no_results→skipped，result同步missing_website |
+| 市场社媒扩展 | 社媒基础迁移后建 task_social_settings、market_social_runs、social_platform_gates；没有设置记录时默认关闭，不为历史任务创建社媒运行/队列 |
+| 一次性社媒回填 | `social_migrations.name='legacy_links_v1'`不存在时，将非合并企业已有social_links/观察转为社媒实体及证据，写迁移标记 |
+| 启动业务修复 | 初始化完成后调用resolve_branch_reviews、resolve_empty_reviews、resolve_format_reviews；可能修改审核、联系人状态和字段采用，不是只创建表 |
+| 运行时扩展 | `record_market_exhausted`中建market_exhausted_items并保存不可续查项及reason，不提升user_version |
+
+市场迁移使用`BEGIN IMMEDIATE`，表创建、回填和版本提升在其事务中执行；整个Store初始化并非一个统一原子迁移事务，`executescript`、社媒扩展显式commit等存在事务边界。不能把手写迁移描述成全量自动回滚的Alembic upgrade。
+
+完整DDL附件不含业务INSERT、迁移标记或历史回填代码；它能重建**空结构**，不能替代旧库升级，更不能直接对现有库执行。启动Store即可能写库，真实库只读检查应使用sqlite3 URI `mode=ro`，不能先创建Store再声称只读。
+
+## 3. 实体关系图
+
+图仅画主要已声明FK；具体可空性与所有关联见表清单及DDL。虚线表示逻辑关系、数据库不强制；PK复合项详见§4。为了可读性，market_memberships的first/last_run两个FK与部分辅助证据关系放在表格中。
+
+```mermaid
+erDiagram
+    companies ||--o{ listings : company_id
+    listings ||--o{ listing_aliases : source_key
+    companies ||--o{ locations : company_id
+    companies ||--o{ observations : company_id
+    companies ||--o{ contacts : company_id
+    contacts ||--o| contact_decisions : contact_id
+    contacts ||--o{ contact_versions : contact_id
+    companies ||--o| company_manual_checks : company_id
+    companies o|--o{ reviews : company_id
+    companies o|--o{ changes : company_id
+    tasks ||--o{ market_keys : task_id
+    tasks ||--o| task_social_settings : task_id
+    tasks o|--o{ runs : task_id
+    runs o|--o{ work_items : run_id
+    work_items ||--o| market_exhausted_items : item_id
+    runs ||--o| market_runs : run_id
+    tasks ||--o{ market_runs : market_id
+    tasks ||--o{ market_memberships : market_id
+    companies ||--o{ market_memberships : company_id
+    runs ||--o{ run_companies : run_id
+    companies ||--o{ run_companies : company_id
+    tasks ||--o{ run_companies : market_id
+    tasks o|--o{ schedules : task_id
+    companies o|--o{ schedules : company_id
+    schedules ||..o{ occurrences : logical_schedule_id
+    runs ||..o{ occurrences : logical_run_id
+    companies ||..o{ runs : logical_company_id
+    runs ||..o{ observations : logical_run_id
+```
+
+```mermaid
+erDiagram
+    companies ||--o{ company_social : company_id
+    social_entities ||--o{ company_social : entity_id
+    companies ||--o{ social_evidence : company_id
+    social_entities o|--o{ social_evidence : entity_id
+    companies ||--o{ social_outreach : company_id
+    social_entities ||--o{ social_outreach : entity_id
+    companies ||..o{ social_decisions : logical_company_id
+    social_entities ||..o{ social_decisions : logical_entity_id
+    social_runs ||--o{ social_work : run_id
+    runs ||--o| market_social_runs : market_run_id
+    social_runs ||--o| market_social_runs : social_run_id
+    companies ||--o{ social_work : company_id
+    social_entities ||--o{ social_page_observations : entity_id
+    social_runs ||--o{ social_page_observations : run_id
+```
+
+`social_config`、`social_migrations`、`social_platform_gates` 是独立键表。平台门控通过平台字符串关联执行行为，没有到具体运行的 FK；市场父子关系则由 market_social_runs 显式约束。没有独立 Person/Channel 实体，也没有 contacts 到社媒实体的人员 FK；scope=employee 不是已确认采购人员身份。
+
+## 4. 完整表清单、PK/FK与逻辑关联
+
+以下覆盖当前 38 张表。列类型、NOT NULL、DEFAULT及完整CREATE语句以`schema.current.sql`为准。表中“→”为声明FK，“逻辑”是应用解释，不由SQLite保障。
+
+### 4.1 企业、来源、联系人及审核（11张）
+
+| 表 | 主键 / 唯一键 | 声明FK及用途 |
+|---|---|---|
+| companies | PK id | 无FK。name/address/phone/website/city/country为当前值；business_types/overrides/social_links为JSON；status/notes/revision及时间。merged_into逻辑指向companies.id，无自引用FK |
+| listings | PK source_key | company_id→companies.id；来源地点实体、source_url、first_seen/last_seen |
+| listing_aliases | PK alias | source_key→listings.source_key；同来源place/CID等标识统一；一个alias只能映射一个listing |
+| locations | PK id；UNIQUE source_key | company_id→companies.id；地址/坐标/source_url/observed_at。source_key只唯一，**未声明到listings的FK** |
+| observations | PK id；UNIQUE fingerprint | company_id→companies.id；field/value/source_url/evidence/observed_at/method/run_id/query；run_id逻辑关联runs，可空串或null |
+| contacts | PK id；UNIQUE fingerprint | company_id→companies.id；name/role/email/url/kind/role_status/association_status/source/evidence/time/review_status。email/url没有全局唯一约束 |
+| contact_decisions | PK contact_id | contact_id→contacts.id；采用状态accepted/excluded及decided_at |
+| contact_versions | PK id | contact_id→contacts.id；payload JSON与原observed_at；保留字段/来源版本，无内容唯一约束 |
+| company_manual_checks | PK company_id | company_id→companies.id；最近人工checked_at，与官网last_checked_at分开 |
+| changes | PK id | 可空company_id→companies.id；field/old_value/new_value/created_at/reason；审计变更记录 |
+| reviews | PK id；UNIQUE fingerprint | 可空company_id→companies.id；kind/field/old_value/new_value/source/evidence/status/time；多态引用见§5 |
+
+### 4.2 市场、轮次、工作项和计划（10张）
+
+| 表 | 主键 / 唯一键 | 声明FK及用途 |
+|---|---|---|
+| tasks | PK id | 无FK；市场名称、地域、keywords/company_types JSON、limit、auto_enrich、created_at；limit=0为市场模式 |
+| market_keys | PK identity | task_id→tasks.id；市场规范化SHA-256；task_id没有UNIQUE，数据库不强制一个task只有一个identity |
+| runs | PK id | 可空task_id→tasks.id；kind/company_id/status/progress/message/error/time/snapshot；company_id仅逻辑关联 |
+| work_items | PK id；UNIQUE(run_id,stage,target) | 可空run_id→runs.id；stage/target/state/result；target按stage为ID、查询或JSON |
+| market_runs | PK run_id | run_id→runs.id；market_id→tasks.id；plan/unresolved JSON |
+| market_memberships | PK(market_id,company_id) | market_id→tasks、company_id→companies、可空first_run_id/last_run_id→runs；长期市场成员及首次/最近遇见 |
+| run_companies | PK(run_id,company_id) | run_id→runs、company_id→companies、market_id→tasks；segment CHECK仅new/existing；changed独立整数标记，first_seen/last_seen |
+| market_exhausted_items | PK item_id | item_id→work_items.id；reason非空；按需创建，记录不能靠同策略重试补齐的项 |
+| schedules | PK id | 可空task_id→tasks、company_id→companies；kind/interval_months/timezone/next_due_at/enabled/anchor |
+| occurrences | PK(schedule_id,due_at) | **无FK**；schedule_id/run_id分别逻辑关联schedules/runs，避免同一期重复调度 |
+
+### 4.3 社媒实体、观察和任务（8张）
+
+| 表 | 主键 / 唯一键 | 声明FK及用途 |
+|---|---|---|
+| social_entities | PK id；UNIQUE url | 无FK；platform/kind/url/label/created_at，跨企业共享规范化账号/帖子/集合实体 |
+| company_social | PK(company_id,entity_id) | company_id→companies、entity_id→social_entities；status/scope/revision/decided_at；确认属于当前企业关系，不改变全局实体 |
+| social_evidence | PK id | company_id→companies、可空entity_id→social_entities；original_url/source_url/evidence/method/observed_at/reason；无法分类链接entity_id可null |
+| social_decisions | PK id | **无FK**；company_id/entity_id逻辑指向关联两端；old_status/new_status/scope/decided_at |
+| social_outreach | PK id | company_id→companies、entity_id→social_entities；state/note/created_at；只记人工事件，无发送凭据 |
+| social_runs | PK id | 无FK；status/time/company_ids/settings/sample；后三者JSON；company_ids元素没有数据库FK |
+| social_work | PK id；UNIQUE(run_id,company_id,stage,target) | run_id→social_runs、company_id→companies；stage/target/state/result/created_at/finished_at |
+| social_page_observations | PK id | entity_id→social_entities、run_id→social_runs；payload JSON/observed_at；观察按实体共享，不按企业复制 |
+
+### 4.4 配置与迁移元数据（2张）
+
+| 表 | 主键 | 内容 |
+|---|---|---|
+| social_config | PK key | 无FK；value TEXT。当前key为searxng_url，value是普通字符串，非JSON对象 |
+| social_migrations | PK name | 无FK；一次性数据回填标记，当前为legacy_links_v1 |
+
+### 4.5 后续扩展：地域、创建人、访问策略与市场社媒（6张）
+
+| 表 | 主键 / 关联 | 内容与生命周期 |
+|---|---|---|
+| task_metadata | PK task_id→tasks.id | 创建人预留 created_by_user_id，可空；无发送身份语义 |
+| task_geography | PK task_id→tasks.id | payload JSON；所选地域身份与来源信息 |
+| maps_access_policy | PK id，CHECK id=1 | 地图全局 not_before/manual_required/failures/reason，独立于社媒平台门控 |
+| task_social_settings | PK task_id→tasks.id | payload JSON，三个未来社媒选项；缺行默认 auto_social=false、三平台、read_posts=false |
+| market_social_runs | PK market_run_id→runs.id；UNIQUE social_run_id→social_runs.id | 一父轮次对应至多一个子社媒运行；手动独立社媒无此关联 |
+| social_platform_gates | PK platform | state、not_before（Unix 秒）、reason、failures；同平台跨市场共享，持久化间隔和人工恢复要求 |
+| website_host_gates | PK host | gate JSON（not_before/manual_required/reason/http_status）、last_request、min_interval；HTTP/HTTPS 与 www 别名共用官网访问节奏，跨企业和轮次持久保留；在 audit 迁移及恢复备份时补建 |
+
+未来设置与 `runs.snapshot`、`social_runs.settings.market_options` 的执行快照分开；PATCH 设置不修改已排队项。平台恢复可更新活动市场父轮次下未取消社媒子运行的 `settings.connections`，使用最新保存的连接配置；不改本轮业务快照、既有队列范围或手动独立运行。显式补充可给活动父轮次附加快照/关联，无活动轮次则新建 `kind=social`、`social_only=true` 的父轮次，旧轮次保留。
+
+企业入库和官网新增账号在同事务中追加市场关联社媒项，利用已有 `UNIQUE(run_id,company_id,stage,target)` 去重；手动创建运行另按归属排除市场子运行，不能跨归属复用。领取元数据 `claim_token/attempts` 保存在 `social_work.result`，完成时重新核对令牌和父子状态，拒绝暂停/取消前的迟到领取结果；API 投影删除 claim_token。profile/read 提交同时检查该企业账号关联的 excluded 状态，取消该项并丢弃迟到观察/帖子，不覆盖已有证据。有效部分预览先写页面观察，再按恢复规则保留 pending；result.partial 进入企业与父轮次异常汇总。候选证据先入已有 evidence/entity/association 表，8 个 profile 项预算不删除候选。详见[集成设计](market-social-integration.md)。
+
+## 5. 约束与索引
+
+### SQL确实保障的内容
+
+- 8个显式索引如下。其它PK/UNIQUE的自动索引由SQLite重建，不应手工创建`sqlite_autoindex_*`。
+- `run_companies.segment`的CHECK限制new/existing。其余业务状态、布尔0/1、岗位类型、JSON合法性、revision正数等大多由应用约束，**没有等价SQL CHECK**。
+- 所有声明FK均未设置CASCADE、SET NULL或DEFERRABLE，PRAGMA显示默认NO ACTION；不能假设删企业会级联删历史。当前没有公开删除API。
+- 常规rowid表的TEXT PRIMARY KEY不等价于显式NOT NULL；部分复合PK列也未写NOT NULL。附件保留源码原样，不额外强化可空性。业务入口通常提供非空ID，但直接SQL写入的保障更弱。
+
+| 显式索引名 | 列 | 主要用途 |
+|---|---|---|
+| observations_company | observations(company_id,observed_at) | 企业证据时间查询 |
+| work_items_run | work_items(run_id,state) | 轮次工作项领取/统计 |
+| market_membership_company | market_memberships(company_id,market_id) | 企业所属市场反查 |
+| run_companies_market | run_companies(market_id,run_id,segment,changed) | 市场本轮分类与变化筛选 |
+| market_runs_market | market_runs(market_id,run_id) | 市场轮次关联 |
+| listing_alias_source | listing_aliases(source_key) | 来源别名反查 |
+| social_evidence_company | social_evidence(company_id,entity_id) | 企业账号证据查询 |
+| social_work_state | social_work(state,run_id) | 社媒任务状态调度 |
+
+### 仅由应用维持的关系
+
+| 逻辑引用 | 解释 / 限制 |
+|---|---|
+| companies.merged_into | 指向另一company；没有自FK；市场入库可追踪该链，列表排除merged_into非null |
+| locations.source_key | 与listings同来源键，无FK，允许null且UNIQUE不等于“所有地点必有listing” |
+| runs.company_id / observations.run_id | 分别指company和普通run，无FK；人工observations.run_id可"" |
+| reviews.old_value/new_value | contact类new_value为contact id、old_value可JSON快照；duplicate_candidate为两个company id；field_update为字段值；没有多态FK |
+| changes.old_value/new_value | 字段旧新值、JSON或业务ID；没有统一类型或FK |
+| work_items.target | planning为task id、refresh为company id、市场discovery为job JSON；没有目标FK |
+| social_work.target | website为URL、search为查询、platform_search为平台名、read/profile为URL；不引用social_entities.id FK |
+| social_decisions两个ID | 独立文本，不强制company_social关联存在 |
+| social_outreach两个FK | 仅确保两端存在；没有复合FK确保company_social存在。应用写前校验归属confirmed和企业非拒绝联系 |
+| market_runs / run_companies / membership | 多个FK只验证各自存在，不能保证所有run属于同一market；业务层检查一致性 |
+| schedules两个目标 | SQL允许同时有值或都为空；应用要求二选一并匹配kind |
+| occurrences / social_runs.company_ids | 逻辑引用，不受foreign_key_check检查 |
+
+因此`foreign_key_check`通过不能证明企业归属正确、人员去重正确或JSON有效。公司名称、官网域名、邮箱均没有独立全局唯一约束；共享品牌/邮箱不会仅靠DDL变成同一人。
+
+## 6. JSON字段及序列化规则
+
+SQLite存储均为TEXT，没有声明原生JSON列或`CHECK(json_valid(...))`。应用查询实际使用json_each/json_extract/json_set/json_valid，运行环境必须支持这些函数。JSON格式不合法可能导致运行期SQL/解析错误，并非入库即被数据库拒绝。
+
+| 表.字段 | 结构与生命周期 |
+|---|---|
+| companies.business_types | 字符串数组；业务分类，可由用户编辑；Store.row解码 |
+| companies.overrides | 字符串数组；已人工采用/修正的字段名，防止来源静默覆盖；Store.row解码 |
+| companies.social_links | URL数组；官网补全按集合累积、sync读取；不是唯一社媒事实来源；Store.row解码 |
+| tasks.keywords/company_types | 字符串数组；新市场排序、规范化、去重；Store.row解码 |
+| runs.progress | 计数对象，随worker进度更新；Store.row解码，不是不可变事件日志 |
+| runs.snapshot | 任务配置对象；refresh含company_id，market可补market_plan；旧迁移可含legacy_snapshot/legacy_discovery_items；Store.row解码 |
+| market_runs.plan/unresolved | 计划对象与原因数组；plan含jobs/coverage/status/warnings；unresolved可更新/清理，耗尽原因还保存在独立表 |
+| work_items.target | 只有市场discovery采用规范JSON，典型键query/geo/zoom/depth/bbox/level/key；其余stage不是JSON |
+| work_items.result | 可null或对象；含message/status/retryable/stop_reason、官网summary等；不通过普通run端点直接返回整组item |
+| contact_versions.payload | 当前或历史联系人字段及证据对象；为来源历史追加，不能代替已采用决定 |
+| social_runs.company_ids | 排序后的ID数组，用于活动任务匹配；无元素FK |
+| social_runs.settings | 社媒设置和连接参数快照，加read_only/platform_search/profile_only；API响应主动移除此字段；不是密钥存储 |
+| social_runs.sample | pilot样本数组，含id/name/stratum；非pilot通常[] |
+| social_work.result | 对象，默认{}；原始来源状态、reason/message/links/posts等；API显式解码后返回 |
+| social_page_observations.payload | 来源读取对象，含status、字段/帖子/来源等；成功失败都可留存，详情通过投影选择可用旧资料 |
+| observations.value、reviews/changes的old_value/new_value | 混合普通文本和JSON编码文本；按field/kind解释，不能无条件json.loads |
+
+Store.row只统一解码business_types/overrides/social_links/keywords/company_types/progress/snapshot，并把enabled/auto_enrich转bool。其它字段由各方法显式处理；详情observations.value仍是存储文本。
+
+时间通常由UTC `datetime.isoformat()`生成，SQL主要按TEXT排序；外部观察可能保留来源时间，DDL没有强制日期格式。社媒最新观察选择使用rowid顺序，字段上显示自己的observed_at；不要把API查询时刻或缓存复用时刻当采集时刻。
+
+## 7. 业务数据流与状态生命周期
+
+### 企业发现和市场覆盖
+
+`create_market`用规范化country/state/city、关键词集合和类型集合计算identity；名称和auto_enrich不参与。同identity返回旧定义，不自动更新旧配置。每轮runs关联market_runs；work_items持久化planning/discovery/refresh。
+
+Maps记录先按source_key/alias解析，找不到时做保守企业匹配；名称+域名不构成通用全局合并规则，不同门店保留。入库同步listing、location、observations及market_memberships/run_companies。
+
+membership描述长期市场归属；new表示首次进入该市场，不一定全库新企业。run_companies.changed是独立标记，不能作为第三种互斥segment；not_seen由查询投影得出，不存在该segment存储值，也不等于停业。
+
+coverage由计划与work_items计算，done数成功discovery，unresolved汇总规划失败/未完成/耗尽原因。达到策略边界会保留企业并记录market_exhausted_items；resume跳过这些项。**coverage不是全城企业分母，也未证明实际地址属于目标行政区**。
+
+### 联系人、证据和人工采用
+
+官网补全只接受completed/partial来源结果，并要求联系人/观察有source_url和evidence。contacts指纹由企业、email或url、name、source_url计算；同企业邮箱还可命中已有记录。它不是全局人员身份解析。
+
+新联系人通常auto_recorded，同时写contact_versions。后续字段/来源差异保留版本，实质身份冲突设pending并生成review；人工accept/reject落contact_decisions。联系人当前行、历史版本、采用状态是三层：
+
+- review_status：pending/auto_recorded/accept/reject/invalid/superseded等证据处理状态。
+- adoption_status：表中accepted/excluded；缺少决定时API投影automatic（历史reject可推导excluded），不是表内第三个默认枚举。
+- kind/role_status/association_status：采购类型、岗位证据与同块/企业入口关联，不等价于投递能力。
+
+查询与导出过滤pending/reject/invalid/superseded和人工excluded；详情可保留不采用项以供追溯。投影只把与当前身份字段相同的版本证据挂回当前记录，避免把共享邮箱的另一人的岗位拼上来。岗位和邮箱真实有效性仍依赖证据及人工核对。
+
+observations以指纹去重，同一事实不同时间可以形成新观察；`_observe`使用INSERT OR IGNORE，当前没有UPDATE observations路径。与之不同，social_evidence的重复指纹会更新observed_at，reviews也会转状态，不能把所有表笼统称为不可变事件库。changes追加变更，人工字段由overrides保护；没有完整历史撤销API。
+
+### 社媒关联、共享账号与资料投影
+
+`social_entities.id`是规范URL的SHA-256前32位，url另有UNIQUE；同账号跨企业共享实体。company_social分别保存各企业的candidate/confirmed/excluded、scope及revision。social_evidence.id按企业+链接+来源+证据+方法生成，重复证据更新观察时间。
+
+确认归属只改company_social并追加social_decisions，不自动确认采购员工。social_work发现站内候选后可追加profile项；结果存social_page_observations，不直接建contacts人员关系。取消/拒绝联系/企业合并后的迟到结果不会按正常成功入库。
+
+账号资料读取失败时保留历史；`social_projection.project_account`以最近非空成功字段建立视图，旧值进入field_history，retained及字段时间标明沿用。仅`preview_read`视为可用内容；失败页面的内容不冒充账号资料。同轮共享账号复用结果不新增“新采集”的观察行。
+
+### 人工跟进与发送缺口
+
+social_outreach追加draft/contacted/replied/closed事件，note为正文备注，没有状态转换前提、revision或重复请求唯一键。确认归属的共享账号历史可跨关联企业展示。企业do_not_contact阻止新增记录。
+
+没有message、delivery、provider receipt、sender identity、template、person-channel association等发送表。没有邮件跟进表、入口级拒绝状态或统一草稿对象；不能把social_outreach当已实现的发送队列。
+
+### 任务恢复与日历调度
+
+普通run：queued/running/paused/completed/partial/blocked/failed/cancelled。worker中断恢复把活动/暂停轮次中的running work_items回pending，把running runs回queued；成功项不重置。市场耗尽项另行排除续查。
+
+社媒run：queued/running/completed/partial/cancelled；work还含succeeded/no_results/blocked/failed/skipped。来源auth_required/challenge/unreadable映射blocked，原状态留result。cancel保留历史；retry新建或复用同签名活动轮次，并非原run失败项局部重试。
+
+schedule按时区及anchor日历月计算next_due_at，occurrences复合PK防同一期重复调度；暂停旧任务时保留欠执行期，不写occurrence。错过多期后推进到当前时间之后，不逐期追补所有历史月份。它是采集/复核计划，不是消息发送计划。
+
+## 8. 并发、文件与备份恢复
+
+- 企业及company_social分别有revision乐观锁；批量企业状态先核对全部revision再更新，单事务原子。review还核对pending及字段旧值。数据库没有覆盖所有对象的统一revision机制。
+- API每实例串行锁；worker-single.lock用于单worker，worker.lock为worker操作/恢复互斥。SQLite事务仍是实际读写协调机制，不能声称仅有一个连接。
+- 配置/密钥/浏览器会话不全在SQLite：social-connections.json保存reader/proxy/max_posts等；social-secrets.json保存YouTube key且公开API只返回是否配置；专用浏览器目录保存登录会话。social_config仅存SearXNG配置。
+- worker-heartbeat.json、运行采集文件、geocoding缓存、浏览器目录与锁文件不是SQL表。数据库备份不会自动包含这些文件；仅恢复SQLite不等于恢复全部运行环境或登录态。
+- 备份使用sqlite3.Connection.backup生成backups目录文件，不是直接复制正在WAL写入的主文件。备份文件chmod0600。
+- restore检查文件名、版本、完整性和部分必需表；先备份当前库，复制后依次执行适用的 market、audit、social、market_social 迁移，再恢复中断项。旧备份补建 task_social_settings/market_social_runs/social_platform_gates，缺历史设置保持默认关闭；v1可升级。没有版本降级、独立回滚迁移或完整业务关联校验。
+- 当前未见自动数据保留期、历史归档清理或审计表定期裁剪。API返回条数上限不等于数据库删除旧记录。
+
+源码：`db.py:348–407,846–938`、`worker.py:18–94`、`social_connections.py`。敏感配置不应写进OpenAPI/schema附件；本次附件均未包含临时数据或密钥。
+
+## 9. DDL再生成与校验
+
+附件从**执行当前迁移后的临时库**读取 sqlite_master；按需耗尽表的 CREATE 语句从 `record_market_exhausted` 源码 AST 提取后只在临时库执行，不创建任务/运行 fixture，不依赖业务投影成功。输出只有 DDL，不启动 Worker。
+
+```bash
+cd <项目目录>
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python - <<'PY'
+import ast
+import hashlib
+import sqlite3
+import tempfile
+from pathlib import Path
+from leadworkbench.db import Store
+
+files = [
+    "leadworkbench/api.py", "leadworkbench/db.py",
+    "leadworkbench/market_store.py", "leadworkbench/social_store.py",
+    "leadworkbench/social_discovery_store.py", "leadworkbench/maps_policy.py",
+    "leadworkbench/market_social.py", "leadworkbench/social_policy.py",
+]
+hashes = {p: hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in files}
+tree = ast.parse(Path("leadworkbench/market_store.py").read_text())
+function = next(n for n in ast.walk(tree)
+                if isinstance(n, ast.FunctionDef) and n.name == "record_market_exhausted")
+lazy = [n.value for n in ast.walk(function)
+        if isinstance(n, ast.Constant) and isinstance(n.value, str)
+        and n.value.lstrip().startswith("CREATE TABLE IF NOT EXISTS market_exhausted_items(")]
+assert len(lazy) == 1
+with tempfile.TemporaryDirectory(prefix="lead-schema-") as directory:
+    store = Store(directory)  # 不得替换成生产目录
+    with store.connect() as con:
+        con.execute(lazy[0])
+        rows = con.execute("""
+            SELECT type,name,sql FROM sqlite_master
+            WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'
+            ORDER BY CASE type WHEN 'table' THEN 0
+                               WHEN 'index' THEN 1 ELSE 2 END, rowid
+        """).fetchall()
+        version = con.execute("PRAGMA user_version").fetchone()[0]
+    ddl = "-- Generated from a temporary Store; no production DB opened.\n"
+    ddl += "-- Startup migrations plus lazy market_exhausted_items DDL; schema only, no data.\n"
+    ddl += "-- Not an upgrade migration; use only to inspect/reconstruct an empty schema.\n"
+    ddl += "".join(f"-- SHA256 {p}: {h}\n" for p, h in hashes.items())
+    ddl += "PRAGMA foreign_keys=ON;\nBEGIN TRANSACTION;\n"
+    ddl += "\n\n".join(
+        ("-- Lazy runtime table; absent from a fresh Store until exhaustion is recorded.\n"
+         if row["name"] == "market_exhausted_items" else "") + row["sql"] + ";"
+        for row in rows
+    )
+    ddl += f"\nPRAGMA user_version={version};\nCOMMIT;\n"
+    with sqlite3.connect(":memory:") as check:
+        check.executescript(ddl)
+        assert check.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+        assert not check.execute("PRAGMA foreign_key_check").fetchall()
+    assert hashes == {p: hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in files}
+    Path("docs/technical/schema.current.sql").write_text(ddl)
+PY
+```
+
+上述命令保留核心源码哈希和按需表说明，并拒绝生成期间源码变化。Store 迁移自身的初始配置只存在临时库，附件不包含 INSERT、公司数据、访问令牌或配置值。本次实际生成另禁用了 socket connect，OpenAPI 也用独立临时子目录且不启动 lifespan。
+
+2026-09-25 稳定性评审新增官网共享状态后：37 张启动表、38 张完整表、8 个显式索引、45 个自动索引、user_version=2；内存重建检查结果见 validation.json。只证明当前空结构可重建，不证明旧库迁移和业务链路通过。最终业务测试与部署记录见[稳定性实施审计](../validation/2026-09-25-search-stability-review.md)。
+
+## 2026-09-24：持久化官网检查点
+
+`work_items.result`的refresh JSON增加checkpoint/has_more/summary；队列、已访问集合、累计统计和逐URL日志见[官网分批方案](website-batch-design.md)。没有新表/列，DDL保持不变。claim按stage、checkpoint.batches、rowid排序，使同run企业分批轮转。资料应用与检查点保存不在同一事务，中断允许重做未确认批次，不声明exactly-once。
+
+
+## 地区选择扩展（2026-09-24）
+
+`task_geography(task_id PRIMARY KEY REFERENCES tasks(id), payload TEXT NOT NULL)` 保存任务所选州、县、Place编码、Place的多县关联、版本及whole_place范围，幂等启动迁移创建。参考地区目录为随程序分发的JSON.gz静态数据，不在企业业务表中。详见 [美国地区目录设计](us-geography-design.md)。

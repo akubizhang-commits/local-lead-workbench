@@ -1,0 +1,17 @@
+
+> local-lead-workbench-frontend@0.1.0 build
+> tsc --noEmit && vite build --outDir /tmp/lead-qa-build.EomIRB
+
+vite v7.3.6 building client environment for production...
+transforming...
+✓ 43 modules transformed.
+
+(!) outDir /tmp/lead-qa-build.EomIRB is not inside project root and will not be emptied.
+Use --emptyOutDir to override.
+
+rendering chunks...
+computing gzip size...
+../../../../../tmp/lead-qa-build.EomIRB/index.html                   0.42 kB │ gzip:  0.32 kB
+../../../../../tmp/lead-qa-build.EomIRB/assets/index-D_DwGv4p.css   22.06 kB │ gzip:  5.75 kB
+../../../../../tmp/lead-qa-build.EomIRB/assets/index-D_0rneme.js   238.83 kB │ gzip: 74.54 kB
+✓ built in 483ms

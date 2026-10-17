@@ -1,0 +1,35 @@
+{
+  "status": "partial",
+  "summary": {
+    "total": 251,
+    "pending": 0,
+    "running": 0,
+    "succeeded": 9,
+    "no_results": 0,
+    "blocked": 229,
+    "failed": 9,
+    "cancelled": 0,
+    "skipped": 4,
+    "new_links": 6
+  },
+  "stages": {
+    "website": {
+      "succeeded": 9,
+      "failed": 4,
+      "blocked": 3,
+      "skipped": 4
+    },
+    "search": {
+      "blocked": 210
+    },
+    "read": {
+      "failed": 5,
+      "blocked": 16
+    }
+  },
+  "companies": 20,
+  "worker": {
+    "alive": true,
+    "last_seen": "2026-09-22T09:35:21.759987+00:00"
+  }
+}

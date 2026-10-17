@@ -1,0 +1,14 @@
+[
+  {
+    "case": "corrupt.sqlite3",
+    "http_status": 500,
+    "body": "Internal Server Error",
+    "business_data_unchanged": true
+  },
+  {
+    "case": "incomplete.sqlite3",
+    "http_status": 500,
+    "body": "Internal Server Error",
+    "business_data_unchanged": true
+  }
+]

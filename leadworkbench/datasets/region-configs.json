@@ -1,0 +1,21 @@
+[
+  {
+    "country": "US", "name": "美国", "mode": "county_filter",
+    "dataset": "us-geography-2026.json.gz",
+    "labels": {"state": "州 / 特区", "county": "县 / 同级地区（可选）", "place": "城市 / 居民点"},
+    "levels": ["country", "state", "county", "place"],
+    "attribution": "美国人口普查局 · 2026年1月地区数据 · 50州及华盛顿特区",
+    "hint": "县筛选可选；跨县城市仍按整个城市 / 居民点检索，不裁剪市场范围。",
+    "scope_label": "城市 / 居民点", "scope": "whole_place"
+  },
+  {
+    "country": "ZA", "name": "南非", "mode": "municipal_branch",
+    "dataset": "za-geography-2026.json.gz",
+    "labels": {"state": "省", "county": "地区 / 大都市自治市", "place": "地方自治市"},
+    "levels": ["country", "state", "county", "place"],
+    "terminal_subtypes": ["metropolitan_municipality"],
+    "attribution": "南非国家财政部 · Municipal Money 自治市目录",
+    "hint": "大都市自治市选到第三级；其他地区继续选择地方自治市。自治市范围可能包含多个城镇，不等同于单个城市。",
+    "scope_label": "自治市", "scope": "whole_municipality"
+  }
+]

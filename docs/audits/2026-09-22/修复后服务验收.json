@@ -1,0 +1,30 @@
+{
+  "overview": {
+    "companies": 272,
+    "contacts": 151,
+    "running_runs": 1,
+    "queued_runs": 1,
+    "worker": {
+      "alive": true,
+      "last_seen": "2026-09-22T07:48:52.099351+00:00"
+    }
+  },
+  "fashion_atlas": {
+    "usable": 3,
+    "cards": 3,
+    "procurement": 0
+  },
+  "procurement_filter_total": 7,
+  "runs": [
+    {
+      "id": "53c5f82b597540949c5eed0e230f8e48",
+      "status": "queued",
+      "kind": "discovery"
+    },
+    {
+      "id": "cce8f6dd35184d24becc3970f0ffc2db",
+      "status": "running",
+      "kind": "discovery"
+    }
+  ]
+}

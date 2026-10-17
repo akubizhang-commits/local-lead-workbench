@@ -1,0 +1,456 @@
+
+> local-lead-workbench-frontend@0.1.0 test
+> node --experimental-strip-types --test tests/*.test.ts
+
+TAP version 13
+# Subtest: real DOM: company/account navigation and browser back retain filters and page; pagination clears selection
+not ok 1 - real DOM: company/account navigation and browser back retain filters and page; pagination clears selection
+  ---
+  duration_ms: 1392.24175
+  type: 'test'
+  location: '/Users/zhangnu/outputs/local-lead-workbench/frontend/tests/appDom.test.ts:125:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /已选 0 家/. Input:
+    
+    '寻迹本地线索工作台工作空间 LOCAL目标市场企业库待审核更新记录设置数据保存在本机公开来源 · 人工核验本本地工作空间内部测试版工作空间/企业库API 已连接后台采集状态未知LEAD WORKBENCH / 02企业库整理企业资料、查看来源，为下一次联系做好准备。人工录入企业搜索全部市场全部分类本轮新增存量企业资料变化未再次找到全部客户匹配状态候选企业符合目标客户不符合目标客户拒绝联系全部类型批发商零售商进口贸易商全部联系入口有采购联系人有其他公开邮箱最新建档优先采购联系人优先其他邮箱优先最近更新优先重置查看新增、存量与资料变化的统计口径新增＝本轮首次进入该市场；存量＝此前已有且本轮再次找到；变化为其中资料发生变化的企业。未再次找到不代表停业，候选企业仍需业务核验。共 101 家 · 每页 50 家CSVXLSX企业 / 地区业务类型市场分类客户匹配状态联系入口市场发现时间官网采集时间人工确认时间示示例企业上海 / 中国零售商待分类示例企业 客户匹配状态候选企业符合目标客户不符合目标客户拒绝联系采购 —其他社媒 —其他邮箱 —首次 尚未记录最近 尚未记录尚未记录尚未记录第 3 / 3 页 · 共 101 家上一页下一页导出当前筛选下的全部结果，不受分页限制，默认排除拒绝联系记录。CSV 为企业表；XLSX 包含企业、联系人与地点表。寻迹 · 本地线索工作台真实查询 / 可追溯证据 / 人工判断'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: '寻迹本地线索工作台工作空间 LOCAL目标市场企业库待审核更新记录设置数据保存在本机公开来源 · 人工核验本本地工作空间内部测试版工作空间/企业库API 已连接后台采集状态未知LEAD WORKBENCH / 02企业库整理企业资料、查看来源，为下一次联系做好准备。人工录入企业搜索全部市场全部分类本轮新增存量企业资料变化未再次找到全部客户匹配状态候选企业符合目标客户不符合目标客户拒绝联系全部类型批发商零售商进口贸易商全部联系入口有采购联系人有其他公开邮箱最新建档优先采购联系人优先其他邮箱优先最近更新优先重置查看新增、存量与资料变化的统计口径新增＝本轮首次进入该市场；存量＝此前已有且本轮再次找到；变化为其中资料发生变化的企业。未再次找到不代表停业，候选企业仍需业务核验。共 101 家 · 每页 50 家CSVXLSX企业 / 地区业务类型市场分类客户匹配状态联系入口市场发现时间官网采集时间人工确认时间示示例企业上海 / 中国零售商待分类示例企业 客户匹配状态候选企业符合目标客户不符合目标客户拒绝联系采购 —其他社媒 —其他邮箱 —首次 尚未记录最近 尚未记录尚未记录尚未记录第 3 / 3 页 · 共 101 家上一页下一页导出当前筛选下的全部结果，不受分页限制，默认排除拒绝联系记录。CSV 为企业表；XLSX 包含企业、联系人与地点表。寻迹 · 本地线索工作台真实查询 / 可追溯证据 / 人工判断'
+  operator: 'match'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/zhangnu/outputs/local-lead-workbench/frontend/tests/appDom.test.ts:136:12)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# Subtest: real DOM: batch conflict is not retried, clears selected revisions and leaves a visible error
+not ok 2 - real DOM: batch conflict is not retried, clears selected revisions and leaves a visible error
+  ---
+  duration_ms: 105.106042
+  type: 'test'
+  location: '/Users/zhangnu/outputs/local-lead-workbench/frontend/tests/appDom.test.ts:189:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /已选 0 家/. Input:
+    
+    '寻迹本地线索工作台工作空间 LOCAL目标市场企业库待审核更新记录设置数据保存在本机公开来源 · 人工核验本本地工作空间内部测试版工作空间/企业库API 已连接后台采集状态未知LEAD WORKBENCH / 02企业库整理企业资料、查看来源，为下一次联系做好准备。人工录入企业修订冲突。资料已变化，请刷新后重新选择或编辑；本次操作未重试。搜索全部市场全部分类本轮新增存量企业资料变化未再次找到全部客户匹配状态候选企业符合目标客户不符合目标客户拒绝联系全部类型批发商零售商进口贸易商全部联系入口有采购联系人有其他公开邮箱最新建档优先采购联系人优先其他邮箱优先最近更新优先重置查看新增、存量与资料变化的统计口径新增＝本轮首次进入该市场；存量＝此前已有且本轮再次找到；变化为其中资料发生变化的企业。未再次找到不代表停业，候选企业仍需业务核验。共 101 家 · 每页 50 家CSVXLSX企业 / 地区业务类型市场分类客户匹配状态联系入口市场发现时间官网采集时间人工确认时间示示例企业上海 / 中国零售商待分类示例企业 客户匹配状态候选企业符合目标客户不符合目标客户拒绝联系采购 —其他社媒 —其他邮箱 —首次 尚未记录最近 尚未记录尚未记录尚未记录第 2 / 3 页 · 共 101 家上一页下一页导出当前筛选下的全部结果，不受分页限制，默认排除拒绝联系记录。CSV 为企业表；XLSX 包含企业、联系人与地点表。寻迹 · 本地线索工作台真实查询 / 可追溯证据 / 人工判断'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: '寻迹本地线索工作台工作空间 LOCAL目标市场企业库待审核更新记录设置数据保存在本机公开来源 · 人工核验本本地工作空间内部测试版工作空间/企业库API 已连接后台采集状态未知LEAD WORKBENCH / 02企业库整理企业资料、查看来源，为下一次联系做好准备。人工录入企业修订冲突。资料已变化，请刷新后重新选择或编辑；本次操作未重试。搜索全部市场全部分类本轮新增存量企业资料变化未再次找到全部客户匹配状态候选企业符合目标客户不符合目标客户拒绝联系全部类型批发商零售商进口贸易商全部联系入口有采购联系人有其他公开邮箱最新建档优先采购联系人优先其他邮箱优先最近更新优先重置查看新增、存量与资料变化的统计口径新增＝本轮首次进入该市场；存量＝此前已有且本轮再次找到；变化为其中资料发生变化的企业。未再次找到不代表停业，候选企业仍需业务核验。共 101 家 · 每页 50 家CSVXLSX企业 / 地区业务类型市场分类客户匹配状态联系入口市场发现时间官网采集时间人工确认时间示示例企业上海 / 中国零售商待分类示例企业 客户匹配状态候选企业符合目标客户不符合目标客户拒绝联系采购 —其他社媒 —其他邮箱 —首次 尚未记录最近 尚未记录尚未记录尚未记录第 2 / 3 页 · 共 101 家上一页下一页导出当前筛选下的全部结果，不受分页限制，默认排除拒绝联系记录。CSV 为企业表；XLSX 包含企业、联系人与地点表。寻迹 · 本地线索工作台真实查询 / 可追溯证据 / 人工判断'
+  operator: 'match'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/zhangnu/outputs/local-lead-workbench/frontend/tests/appDom.test.ts:207:12)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: batch status sends selected IDs and captured revisions only
+ok 3 - batch status sends selected IDs and captured revisions only
+  ---
+  duration_ms: 3.093125
+  type: 'test'
+  ...
+# Subtest: business editor preserves existing categories outside default choices
+ok 4 - business editor preserves existing categories outside default choices
+  ---
+  duration_ms: 0.277708
+  type: 'test'
+  ...
+# Subtest: named buyers are separated from procurement departments and unnamed channels
+ok 5 - named buyers are separated from procurement departments and unnamed channels
+  ---
+  duration_ms: 1.273958
+  type: 'test'
+  ...
+# Subtest: invalid review states are hidden regardless of adoption status
+ok 6 - invalid review states are hidden regardless of adoption status
+  ---
+  duration_ms: 0.229333
+  type: 'test'
+  ...
+# Subtest: valid excluded contacts stay separate and accepted buyers remain visible
+ok 7 - valid excluded contacts stay separate and accepted buyers remain visible
+  ---
+  duration_ms: 0.072125
+  type: 'test'
+  ...
+# Subtest: pending evidence is never usable; adoption exclusion takes precedence
+ok 8 - pending evidence is never usable; adoption exclusion takes precedence
+  ---
+  duration_ms: 0.058958
+  type: 'test'
+  ...
+# Subtest: recruitment is retained outside outreach groups
+ok 9 - recruitment is retained outside outreach groups
+  ---
+  duration_ms: 0.099833
+  type: 'test'
+  ...
+# Subtest: unified list puts buyers first and keeps irrelevant and pending separate
+ok 10 - unified list puts buyers first and keeps irrelevant and pending separate
+  ---
+  duration_ms: 1.200042
+  type: 'test'
+  ...
+# Subtest: a navigation-only contact page is supplementary, real channels remain
+ok 11 - a navigation-only contact page is supplementary, real channels remain
+  ---
+  duration_ms: 0.103833
+  type: 'test'
+  ...
+# Subtest: all distinct evidence/page pairs appear and field provenance is preserved
+ok 12 - all distinct evidence/page pairs appear and field provenance is preserved
+  ---
+  duration_ms: 28.374541
+  type: 'test'
+  ...
+# Subtest: legacy and empty sources preserve evidence and the missing-evidence fallback
+ok 13 - legacy and empty sources preserve evidence and the missing-evidence fallback
+  ---
+  duration_ms: 3.604834
+  type: 'test'
+  ...
+# Subtest: people and channels are visible while other contacts start collapsed
+ok 14 - people and channels are visible while other contacts start collapsed
+  ---
+  duration_ms: 3.073791
+  type: 'test'
+  ...
+# Subtest: invalid review states render neither standalone cards nor grouped identities
+ok 15 - invalid review states render neither standalone cards nor grouped identities
+  ---
+  duration_ms: 0.67575
+  type: 'test'
+  ...
+# Subtest: conflicting field values and their individual sources remain visible
+ok 16 - conflicting field values and their individual sources remain visible
+  ---
+  duration_ms: 0.635625
+  type: 'test'
+  ...
+# Subtest: backend grouped records retain separate cards and counts without frontend merging
+ok 17 - backend grouped records retain separate cards and counts without frontend merging
+  ---
+  duration_ms: 0.738875
+  type: 'test'
+  ...
+# Subtest: pending and rejected records render only inside their separate folded groups
+ok 18 - pending and rejected records render only inside their separate folded groups
+  ---
+  duration_ms: 0.753334
+  type: 'test'
+  ...
+# Subtest: export query retains Chinese, ampersands and selected filters
+ok 19 - export query retains Chinese, ampersands and selected filters
+  ---
+  duration_ms: 0.788041
+  type: 'test'
+  ...
+# Subtest: external links reject executable and relative URLs
+ok 20 - external links reject executable and relative URLs
+  ---
+  duration_ms: 0.067916
+  type: 'test'
+  ...
+# Subtest: manual recovery is offered for blocked and failed runs but not completed runs
+ok 21 - manual recovery is offered for blocked and failed runs but not completed runs
+  ---
+  duration_ms: 0.547541
+  type: 'test'
+  ...
+# Subtest: market and run filters survive pagination without leaking pagination into exports
+ok 22 - market and run filters survive pagination without leaking pagination into exports
+  ---
+  duration_ms: 0.212625
+  type: 'test'
+  ...
+# Subtest: empty optional market filters are omitted and pagination starts at one
+ok 23 - empty optional market filters are omitted and pagination starts at one
+  ---
+  duration_ms: 0.153625
+  type: 'test'
+  ...
+# Subtest: capability-exhausted runs never offer ineffective resume; retryable runs still do
+ok 24 - capability-exhausted runs never offer ineffective resume; retryable runs still do
+  ---
+  duration_ms: 0.094375
+  type: 'test'
+  ...
+# Subtest: detail refresh and returning to list retain the entire list context
+ok 25 - detail refresh and returning to list retain the entire list context
+  ---
+  duration_ms: 4.036416
+  type: 'test'
+  ...
+# Subtest: invalid route and pagination values fall back safely
+ok 26 - invalid route and pagination values fall back safely
+  ---
+  duration_ms: 0.491875
+  type: 'test'
+  ...
+# Subtest: new filter retains other constraints but resets page
+ok 27 - new filter retains other constraints but resets page
+  ---
+  duration_ms: 0.191583
+  type: 'test'
+  ...
+# Subtest: account detail route retains company and list context
+ok 28 - account detail route retains company and list context
+  ---
+  duration_ms: 0.474833
+  type: 'test'
+  ...
+# Subtest: task refresh detail survives reload with list context
+ok 29 - task refresh detail survives reload with list context
+  ---
+  duration_ms: 0.328167
+  type: 'test'
+  ...
+# Subtest: PRD IT01: changing country must not retain the previous state and city
+not ok 30 - PRD IT01: changing country must not retain the previous state and city
+  ---
+  duration_ms: 907.927166
+  type: 'test'
+  location: '/Users/zhangnu/outputs/local-lead-workbench/frontend/tests/prdInteraction20260924.test.ts:41:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    'California' !== ''
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: ''
+  actual: 'California'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/zhangnu/outputs/local-lead-workbench/frontend/tests/prdInteraction20260924.test.ts:51:10)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# Subtest: PRD IT07: switching targets must not silently attach A draft to B
+not ok 31 - PRD IT07: switching targets must not silently attach A draft to B
+  ---
+  duration_ms: 249.333125
+  type: 'test'
+  location: '/Users/zhangnu/outputs/local-lead-workbench/frontend/tests/prdInteraction20260924.test.ts:56:1'
+  failureType: 'testCodeFailure'
+  error: 'B inherited A content without explicit copying'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///Users/zhangnu/outputs/local-lead-workbench/frontend/tests/prdInteraction20260924.test.ts:70:10)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: PRD-10: manually recorded replies must identify their manual provenance
+not ok 32 - PRD-10: manually recorded replies must identify their manual provenance
+  ---
+  duration_ms: 51.713083
+  type: 'test'
+  location: '/Users/zhangnu/outputs/local-lead-workbench/frontend/tests/prdInteraction20260924.test.ts:74:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /人工/. Input:
+    
+    '已收到回复2026/09/24 08:00Fixture · Facebook · Account a ↗User entered this'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: '已收到回复2026/09/24 08:00Fixture · Facebook · Account a ↗User entered this'
+  operator: 'match'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/zhangnu/outputs/local-lead-workbench/frontend/tests/prdInteraction20260924.test.ts:83:10)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: PRD refusal: blocked company retains history without editable follow-up or sends
+ok 33 - PRD refusal: blocked company retains history without editable follow-up or sends
+  ---
+  duration_ms: 31.3385
+  type: 'test'
+  ...
+# Subtest: PRD IX-01: removed social account provides an explicit back action
+ok 34 - PRD IX-01: removed social account provides an explicit back action
+  ---
+  duration_ms: 29.316542
+  type: 'test'
+  ...
+# Subtest: PRD stale loading: a late response for A cannot replace the selected B detail
+ok 35 - PRD stale loading: a late response for A cannot replace the selected B detail
+  ---
+  duration_ms: 70.6905
+  type: 'test'
+  ...
+# Subtest: repeated failures become short Chinese reasons without URLs
+ok 36 - repeated failures become short Chinese reasons without URLs
+  ---
+  duration_ms: 2.492833
+  type: 'test'
+  ...
+# Subtest: proxy accepts only the supported protocols, exact loopback hosts and port boundaries
+ok 37 - proxy accepts only the supported protocols, exact loopback hosts and port boundaries
+  ---
+  duration_ms: 157.74675
+  type: 'test'
+  ...
+# Subtest: proxy rejects unsupported protocols, alternate hosts, credentials and invalid ports
+ok 38 - proxy rejects unsupported protocols, alternate hosts, credentials and invalid ports
+  ---
+  duration_ms: 0.164292
+  type: 'test'
+  ...
+# Subtest: post limit accepts only integers from one through five
+ok 39 - post limit accepts only integers from one through five
+  ---
+  duration_ms: 0.118417
+  type: 'test'
+  ...
+# Subtest: real DOM: post limits, reader guidance and open sessions guard configuration saves
+ok 40 - real DOM: post limits, reader guidance and open sessions guard configuration saves
+  ---
+  duration_ms: 889.934541
+  type: 'test'
+  ...
+# Subtest: run report preserves mixed outcomes instead of treating completion as success
+ok 41 - run report preserves mixed outcomes instead of treating completion as success
+  ---
+  duration_ms: 176.776584
+  type: 'test'
+  ...
+# Subtest: page preview retains access failure and treats extracted contacts as unconfirmed
+ok 42 - page preview retains access failure and treats extracted contacts as unconfirmed
+  ---
+  duration_ms: 175.301667
+  type: 'test'
+  ...
+# Subtest: unknown statuses and absent metrics are not presented as successful zero results
+ok 43 - unknown statuses and absent metrics are not presented as successful zero results
+  ---
+  duration_ms: 1.467
+  type: 'test'
+  ...
+# Subtest: preview escapes source content and rejects executable source URLs
+ok 44 - preview escapes source content and rejects executable source URLs
+  ---
+  duration_ms: 0.732375
+  type: 'test'
+  ...
+# Subtest: real DOM: single-company run, cancel, retry and refresh use the API contract
+ok 45 - real DOM: single-company run, cancel, retry and refresh use the API contract
+  ---
+  duration_ms: 884.108958
+  type: 'test'
+  ...
+# Subtest: real DOM: settings save, blocked probe and 20-company pilot preserve their meanings
+ok 46 - real DOM: settings save, blocked probe and 20-company pilot preserve their meanings
+  ---
+  duration_ms: 316.837541
+  type: 'test'
+  ...
+# Subtest: backend public-page adapter statuses and read stage are shown in Chinese
+ok 47 - backend public-page adapter statuses and read stage are shown in Chinese
+  ---
+  duration_ms: 1.702917
+  type: 'test'
+  ...
+# Subtest: account summary separates platform, name, identifier and discovery source
+ok 48 - account summary separates platform, name, identifier and discovery source
+  ---
+  duration_ms: 1.83275
+  type: 'test'
+  ...
+# Subtest: saved posts render inline with platform and capture time and escaped text
+ok 49 - saved posts render inline with platform and capture time and escaped text
+  ---
+  duration_ms: 1.019084
+  type: 'test'
+  ...
+# Subtest: account list is concise and legacy is not called a discovery
+ok 50 - account list is concise and legacy is not called a discovery
+  ---
+  duration_ms: 1.12225
+  type: 'test'
+  ...
+# Subtest: website discovery is explicit while legacy dates are entry dates
+ok 51 - website discovery is explicit while legacy dates are entry dates
+  ---
+  duration_ms: 1.694166
+  type: 'test'
+  ...
+# Subtest: account list has four columns and failed attempts do not advance update time
+ok 52 - account list has four columns and failed attempts do not advance update time
+  ---
+  duration_ms: 0.680833
+  type: 'test'
+  ...
+# Subtest: account details distinguish retained field and text sources from current observations and folded history
+ok 53 - account details distinguish retained field and text sources from current observations and folded history
+  ---
+  duration_ms: 3.401667
+  type: 'test'
+  ...
+# Subtest: account fields remain visible without title or description and cannot borrow another account source
+ok 54 - account fields remain visible without title or description and cannot borrow another account source
+  ---
+  duration_ms: 0.993209
+  type: 'test'
+  ...
+# Subtest: generic platform titles are removed but real account names remain
+ok 55 - generic platform titles are removed but real account names remain
+  ---
+  duration_ms: 0.844166
+  type: 'test'
+  ...
+# Subtest: real DOM: account decision refreshes revision and manual follow-up stays a saved draft
+ok 56 - real DOM: account decision refreshes revision and manual follow-up stays a saved draft
+  ---
+  duration_ms: 1177.993542
+  type: 'test'
+  ...
+# Subtest: refresh list identifies company, origin and preserves distinct attempts
+ok 57 - refresh list identifies company, origin and preserves distinct attempts
+  ---
+  duration_ms: 947.205291
+  type: 'test'
+  ...
+# Subtest: refresh detail is main content, not a header action or duplicate market list
+ok 58 - refresh detail is main content, not a header action or duplicate market list
+  ---
+  duration_ms: 271.439292
+  type: 'test'
+  ...
+# Subtest: website progress distinguishes company completion from scanned and remaining pages
+ok 59 - website progress distinguishes company completion from scanned and remaining pages
+  ---
+  duration_ms: 981.477542
+  type: 'test'
+  ...
+# Subtest: refresh run names its company and opens the matching detail
+ok 60 - refresh run names its company and opens the matching detail
+  ---
+  duration_ms: 15.368417
+  type: 'test'
+  ...
+# Subtest: API connectivity never implies worker liveness
+ok 61 - API connectivity never implies worker liveness
+  ---
+  duration_ms: 3.44175
+  type: 'test'
+  ...
+1..61
+# tests 61
+# suites 0
+# pass 56
+# fail 5
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2281.227041

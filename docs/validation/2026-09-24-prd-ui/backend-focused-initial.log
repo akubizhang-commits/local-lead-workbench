@@ -1,0 +1,51 @@
+OFFLINE GUARDS: temporary Store/SQLite only; test-bound loopback sockets only; no real browser/Maps binary.
+F...F.....................FFF..                                          [100%]
+=================================== FAILURES ===================================
+______ test_prd03_replay_empty_fill_manual_conflict_and_market_membership ______
+tests/test_prd_acceptance_20260924.py:96: in test_prd03_replay_empty_fill_manual_conflict_and_market_membership
+    assert store.company_page(market_id=second_market["id"], segment="new")["total"] == 1
+E   assert 0 == 1
+__________ test_prd07_empty_contact_fill_conflict_and_export_adoption __________
+tests/test_prd_acceptance_20260924.py:123: in test_prd07_empty_contact_fill_conflict_and_export_adoption
+    assert not store.reviews()
+E   AssertionError: assert not [{'id': 'f159d9576b6445da9d0326ab034e1c47', 'company_id': '209f42e3e6de45d6a85236ac98e53eca', 'kind': 'contact', 'field': 'contact', ...}]
+E    +  where [{'id': 'f159d9576b6445da9d0326ab034e1c47', 'company_id': '209f42e3e6de45d6a85236ac98e53eca', 'kind': 'contact', 'field': 'contact', ...}] = reviews()
+E    +    where reviews = <leadworkbench.db.Store object at 0x1092e7bb0>.reviews
+_____ test_api_schedule_invalid_definition_never_creates_schedule[extra0] ______
+tests/test_prd_acceptance_20260924.py:293: in test_api_schedule_invalid_definition_never_creates_schedule
+    assert client.post("/api/schedules", json=extra).status_code == 422
+E   AssertionError: assert 400 == 422
+E    +  where 400 = <Response [400 Bad Request]>.status_code
+E    +    where <Response [400 Bad Request]> = post('/api/schedules', json={'company_id': 'missing', 'task_id': 'missing', 'kind': 'refresh'})
+E    +      where post = <starlette.testclient.TestClient object at 0x1096756a0>.post
+_____ test_api_schedule_invalid_definition_never_creates_schedule[extra1] ______
+tests/test_prd_acceptance_20260924.py:293: in test_api_schedule_invalid_definition_never_creates_schedule
+    assert client.post("/api/schedules", json=extra).status_code == 422
+E   AssertionError: assert 400 == 422
+E    +  where 400 = <Response [400 Bad Request]>.status_code
+E    +    where <Response [400 Bad Request]> = post('/api/schedules', json={'kind': 'refresh'})
+E    +      where post = <starlette.testclient.TestClient object at 0x109677350>.post
+_____ test_api_schedule_invalid_definition_never_creates_schedule[extra2] ______
+tests/test_prd_acceptance_20260924.py:293: in test_api_schedule_invalid_definition_never_creates_schedule
+    assert client.post("/api/schedules", json=extra).status_code == 422
+E   AssertionError: assert 400 == 422
+E    +  where 400 = <Response [400 Bad Request]>.status_code
+E    +    where <Response [400 Bad Request]> = post('/api/schedules', json={'company_id': 'missing', 'kind': 'discovery'})
+E    +      where post = <starlette.testclient.TestClient object at 0x1097c7790>.post
+=============================== warnings summary ===============================
+.venv/lib/python3.14/site-packages/fastapi/testclient.py:1
+  /Users/zhangnu/outputs/local-lead-workbench/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.14/site-packages/starlette/testclient.py:53
+  /Users/zhangnu/outputs/local-lead-workbench/.venv/lib/python3.14/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_prd_acceptance_20260924.py::test_prd03_replay_empty_fill_manual_conflict_and_market_membership
+FAILED tests/test_prd_acceptance_20260924.py::test_prd07_empty_contact_fill_conflict_and_export_adoption
+FAILED tests/test_prd_acceptance_20260924.py::test_api_schedule_invalid_definition_never_creates_schedule[extra0]
+FAILED tests/test_prd_acceptance_20260924.py::test_api_schedule_invalid_definition_never_creates_schedule[extra1]
+FAILED tests/test_prd_acceptance_20260924.py::test_api_schedule_invalid_definition_never_creates_schedule[extra2]
+5 failed, 26 passed, 2 warnings in 1.08s

@@ -1,0 +1,487 @@
+diff --git a/gmaps/job.go b/gmaps/job.go
+--- a/gmaps/job.go
++++ b/gmaps/job.go
+@@ -60,7 +60,7 @@
+ 	}
+ 
+ 	const (
+-		maxRetries = 3
++		maxRetries = localMaxRetries
+ 		prio       = scrapemate.PriorityLow
+ 	)
+ 
+@@ -205,7 +205,7 @@
+ func (j *GmapJob) BrowserActions(ctx context.Context, page scrapemate.BrowserPage) scrapemate.Response {
+ 	var resp scrapemate.Response
+ 
+-	pageResponse, err := page.Goto(j.GetFullURL(), scrapemate.WaitUntilDOMContentLoaded)
++	pageResponse, err := localNavigation.gotoPage(ctx, page, j.GetFullURL())
+ 	if err != nil {
+ 		resp.Error = err
+ 
+diff --git a/gmaps/place.go b/gmaps/place.go
+--- a/gmaps/place.go
++++ b/gmaps/place.go
+@@ -29,7 +29,7 @@
+ func NewPlaceJob(parentID, langCode, u string, extractEmail, extraExtraReviews bool, opts ...PlaceJobOptions) *PlaceJob {
+ 	const (
+ 		defaultPrio       = scrapemate.PriorityMedium
+-		defaultMaxRetries = 3
++		defaultMaxRetries = localMaxRetries
+ 	)
+ 
+ 	u = sanitizePlaceURL(u)
+@@ -185,7 +185,7 @@
+ func (j *PlaceJob) BrowserActions(ctx context.Context, page scrapemate.BrowserPage) scrapemate.Response {
+ 	var resp scrapemate.Response
+ 
+-	pageResponse, err := page.Goto(j.GetURL(), scrapemate.WaitUntilDOMContentLoaded)
++	pageResponse, err := localNavigation.gotoPage(ctx, page, j.GetURL())
+ 	if err != nil {
+ 		resp.Error = err
+ 
+@@ -203,7 +203,7 @@
+ 	resp.StatusCode = pageResponse.StatusCode
+ 	resp.Headers = pageResponse.Headers
+ 
+-	raw, err := j.extractJSON(page)
++	raw, err := j.extractJSON(ctx, page)
+ 	if err != nil {
+ 		resp.Error = err
+ 
+@@ -251,21 +251,27 @@
+ 			raw, err := page.Eval(js)
+ 			if err != nil {
+ 				// Continue retrying on error
+-				<-time.After(time.Millisecond * 200)
++				if err := localWait(ctx, time.Millisecond*200); err != nil {
++					return nil, err
++				}
+ 				continue
+ 			}
+ 
+ 			// Check for valid non-null result.
+ 			// JS null may arrive as nil, and empty strings are not useful here.
+ 			if raw == nil {
+-				<-time.After(time.Millisecond * 200)
++				if err := localWait(ctx, time.Millisecond*200); err != nil {
++					return nil, err
++				}
+ 				continue
+ 			}
+ 
+ 			// If it's a string, make sure it's not empty
+ 			if str, ok := raw.(string); ok {
+ 				if str == "" {
+-					<-time.After(time.Millisecond * 200)
++					if err := localWait(ctx, time.Millisecond*200); err != nil {
++						return nil, err
++					}
+ 					continue
+ 				}
+ 			}
+@@ -275,49 +281,22 @@
+ 	}
+ }
+ 
+-func (j *PlaceJob) extractJSON(page scrapemate.BrowserPage) ([]byte, error) {
+-	const maxRetries = 2
+-
+-	for attempt := range maxRetries {
+-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+-		rawI, err := j.getRaw(ctx, page)
+-
+-		cancel()
+-
+-		if err != nil {
+-			// On timeout, try reloading the page
+-			if attempt < maxRetries-1 {
+-				if reloadErr := page.Reload(scrapemate.WaitUntilDOMContentLoaded); reloadErr == nil {
+-					continue
+-				}
+-			}
+-
+-			return nil, err
+-		}
+-
+-		if rawI == nil {
+-			if attempt < maxRetries-1 {
+-				if reloadErr := page.Reload(scrapemate.WaitUntilDOMContentLoaded); reloadErr == nil {
+-					continue
+-				}
+-			}
+-
+-			return nil, fmt.Errorf("APP_INITIALIZATION_STATE data not found")
+-		}
+-
+-		raw, ok := rawI.(string)
+-		if !ok {
+-			return nil, fmt.Errorf("could not convert to string, got type %T", rawI)
+-		}
+-
+-		const prefix = `)]}'`
+-
+-		raw = strings.TrimSpace(strings.TrimPrefix(raw, prefix))
+-
+-		return []byte(raw), nil
+-	}
+-
+-	return nil, fmt.Errorf("APP_INITIALIZATION_STATE data not found after retries")
++func (j *PlaceJob) extractJSON(ctx context.Context, page scrapemate.BrowserPage) ([]byte, error) {
++	// Poll local page data once; only the durable outer queue may retry navigation.
++	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
++	defer cancel()
++	rawI, err := j.getRaw(ctx, page)
++	if err != nil {
++		return nil, err
++	}
++	raw, ok := rawI.(string)
++	if !ok {
++		return nil, fmt.Errorf("could not convert to string, got type %T", rawI)
++	}
++
++	const prefix = `)]}'`
++	raw = strings.TrimSpace(strings.TrimPrefix(raw, prefix))
++	return []byte(raw), nil
+ }
+ 
+ func (j *PlaceJob) getReviewCount(data []byte) int {
+diff --git a/gmaps/searchjob.go b/gmaps/searchjob.go
+--- a/gmaps/searchjob.go
++++ b/gmaps/searchjob.go
+@@ -39,7 +39,7 @@
+ func NewSearchJob(params *MapSearchParams, opts ...SearchJobOptions) *SearchJob {
+ 	const (
+ 		defaultPrio       = scrapemate.PriorityMedium
+-		defaultMaxRetries = 3
++		defaultMaxRetries = localMaxRetries
+ 		baseURL           = "https://maps.google.com/search"
+ 	)
+ 
+diff --git a/main.go b/main.go
+--- a/main.go
++++ b/main.go
+@@ -2,6 +2,7 @@
+ 
+ import (
+ 	"context"
++	"encoding/json"
+ 	"errors"
+ 	"fmt"
+ 	"log"
+@@ -9,6 +10,7 @@
+ 	"os/signal"
+ 	"syscall"
+ 
++	"github.com/gosom/google-maps-scraper/gmaps"
+ 	"github.com/gosom/google-maps-scraper/runner"
+ 	"github.com/gosom/google-maps-scraper/runner/databaserunner"
+ 	"github.com/gosom/google-maps-scraper/runner/filerunner"
+@@ -18,6 +20,14 @@
+ )
+ 
+ func main() {
++	// Build verification only: no banner, telemetry, runner or browser startup.
++	if len(os.Args) == 2 && os.Args[1] == "-local-stability-info" {
++		if err := json.NewEncoder(os.Stdout).Encode(gmaps.LocalStabilityInfo()); err != nil {
++			os.Exit(1)
++		}
++		return
++	}
++
+ 	ctx, cancel := context.WithCancel(context.Background())
+ 
+ 	runner.Banner()
+diff --git a/go.mod b/go.mod
+--- a/go.mod
++++ b/go.mod
+@@ -343,3 +343,7 @@
+ 	github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+ 	golang.org/x/vuln/cmd/govulncheck
+ )
++
++// Local stability patch: scripts/patch_maps_stability.py --prepare-scrapemate
++// creates this patched copy (Chromium without --single-process).
++replace github.com/gosom/scrapemate v1.4.0 => ./local_overlay/scrapemate
+diff --git a/gmaps/local_stability.go b/gmaps/local_stability.go
+new file mode 100644
+--- /dev/null
++++ b/gmaps/local_stability.go
+@@ -0,0 +1,95 @@
++package gmaps
++
++import (
++	"context"
++	"fmt"
++	"slices"
++	"time"
++
++	"github.com/gosom/scrapemate"
++	"github.com/gosom/scrapemate/adapters/fetchers/jshttp"
++)
++
++// This downstream policy is version-bound by scripts/patch_maps_stability.py.
++// The durable Python queue owns all retries and pauses between search jobs.
++const (
++	localMaxRetries    = 0
++	localNavigationGap = 5 * time.Second
++	localPatchVersion  = "local-maps-stability-v2"
++)
++
++type navigationPacer struct {
++	permit    chan struct{}
++	notBefore time.Time
++	gap       time.Duration
++}
++
++var localNavigation = newNavigationPacer(localNavigationGap)
++
++func newNavigationPacer(gap time.Duration) *navigationPacer {
++	return &navigationPacer{permit: make(chan struct{}, 1), gap: gap}
++}
++
++func localWait(ctx context.Context, delay time.Duration) error {
++	if err := ctx.Err(); err != nil {
++		return err
++	}
++	if delay <= 0 {
++		return nil
++	}
++	timer := time.NewTimer(delay)
++	defer timer.Stop()
++	select {
++	case <-ctx.Done():
++		return ctx.Err()
++	case <-timer.C:
++		return ctx.Err()
++	}
++}
++
++func (p *navigationPacer) gotoPage(ctx context.Context, page scrapemate.BrowserPage, url string) (*scrapemate.PageResponse, error) {
++	select {
++	case p.permit <- struct{}{}:
++		defer func() { <-p.permit }()
++	case <-ctx.Done():
++		return nil, ctx.Err()
++	}
++	if err := localWait(ctx, time.Until(p.notBefore)); err != nil {
++		return nil, err
++	}
++	// Serialize navigation and leave a gap after each completion, including errors.
++	defer func() { p.notBefore = time.Now().Add(p.gap) }()
++	resp, err := page.Goto(url, scrapemate.WaitUntilDOMContentLoaded)
++	if err != nil {
++		return nil, err
++	}
++	if resp == nil {
++		return nil, fmt.Errorf("Maps navigation returned no response")
++	}
++	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
++		// Stop before cookie clicks, scrolling or detail polling on a rejected page.
++		return nil, fmt.Errorf("Maps navigation HTTP %d", resp.StatusCode)
++	}
++	return resp, nil
++}
++
++// localChromiumSingleProcess reports whether the compiled scrapemate launches
++// Chromium with --single-process. jshttp.LocalChromiumLaunchArgs only exists
++// when scripts/maps_scrapemate_launch.patch is applied via the build overlay,
++// so a build without it fails to compile instead of shipping the crash.
++func localChromiumSingleProcess() bool {
++	return slices.Contains(jshttp.LocalChromiumLaunchArgs(), "--single-process")
++}
++
++// LocalStabilityInfo reports the compiled policy without opening a browser.
++func LocalStabilityInfo() map[string]any {
++	return map[string]any{
++		"patch":                   localPatchVersion,
++		"search_max_retries":      NewGmapJob("check", "en", "check", 1, false, "", 0).GetMaxRetries(),
++		"place_max_retries":       NewPlaceJob("check", "en", "https://www.google.com/maps/place/check", false, false).GetMaxRetries(),
++		"fast_search_max_retries": NewSearchJob(&MapSearchParams{Query: "check"}).GetMaxRetries(),
++		"detail_reload":           false,
++		"navigation_gap_seconds":  int(localNavigationGap / time.Second),
++		"chromium_single_process": localChromiumSingleProcess(),
++	}
++}
+diff --git a/gmaps/local_stability_test.go b/gmaps/local_stability_test.go
+new file mode 100644
+--- /dev/null
++++ b/gmaps/local_stability_test.go
+@@ -0,0 +1,177 @@
++package gmaps
++
++import (
++	"context"
++	"errors"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/gosom/scrapemate"
++	"github.com/gosom/scrapemate/adapters/fetchers/jshttp"
++	"github.com/gosom/scrapemate/adapters/providers/memory"
++)
++
++type localFailingFetcher struct {
++	calls int
++}
++
++func (f *localFailingFetcher) Fetch(context.Context, scrapemate.IJob) scrapemate.Response {
++	f.calls++
++	return scrapemate.Response{StatusCode: 429, Error: errors.New("HTTP 429 fixture")}
++}
++
++func (*localFailingFetcher) Close() error { return nil }
++
++func TestLocalStabilityFailedJobsFetchOnlyOnce(t *testing.T) {
++	jobs := map[string]scrapemate.IJob{
++		"search": NewGmapJob("fixture", "en", "fixture", 1, false, "", 0),
++		"place":  NewPlaceJob("fixture", "en", "https://www.google.com/maps/place/fixture", false, false),
++		"fast":   NewSearchJob(&MapSearchParams{Query: "fixture"}),
++		"email":  NewEmailJob("fixture", &Entry{WebSite: "https://fixture.invalid"}),
++	}
++	for name, job := range jobs {
++		t.Run(name, func(t *testing.T) {
++			fetcher := &localFailingFetcher{}
++			mate, err := scrapemate.New(
++				scrapemate.WithHTTPFetcher(fetcher),
++				scrapemate.WithJobProvider(memory.New()),
++			)
++			if err != nil {
++				t.Fatal(err)
++			}
++			defer mate.Close()
++			_, _, _ = mate.DoJob(context.Background(), job)
++			if fetcher.calls != 1 {
++				t.Fatalf("failed job fetched %d times; durable queue must own retries", fetcher.calls)
++			}
++		})
++	}
++}
++
++type localFixturePage struct {
++	scrapemate.BrowserPage
++	navigations int
++	status      int
++	raw         any
++	reloads     int
++	evals       int
++}
++
++func (p *localFixturePage) Goto(string, scrapemate.WaitUntilState) (*scrapemate.PageResponse, error) {
++	p.navigations++
++	if p.status != 0 {
++		return &scrapemate.PageResponse{StatusCode: p.status}, nil
++	}
++	return nil, errors.New("navigation fixture")
++}
++
++func (p *localFixturePage) Eval(string, ...any) (any, error) {
++	p.evals++
++	return p.raw, nil
++}
++
++func (p *localFixturePage) Reload(scrapemate.WaitUntilState) error {
++	p.reloads++
++	return nil
++}
++
++func TestLocalStabilityCancelledJobsDoNotNavigate(t *testing.T) {
++	ctx, cancel := context.WithCancel(context.Background())
++	cancel()
++	jobs := []scrapemate.IJob{
++		NewGmapJob("fixture", "en", "fixture", 1, false, "", 0),
++		NewPlaceJob("fixture", "en", "https://www.google.com/maps/place/fixture", false, false),
++	}
++	for _, job := range jobs {
++		page := &localFixturePage{}
++		resp := job.BrowserActions(ctx, page)
++		if page.navigations != 0 || !errors.Is(resp.Error, context.Canceled) {
++			t.Fatalf("cancelled job navigated %d times: %v", page.navigations, resp.Error)
++		}
++	}
++}
++
++func TestLocalStabilityRejectedPagesStopBeforeActions(t *testing.T) {
++	prior := localNavigation
++	localNavigation = newNavigationPacer(0)
++	defer func() { localNavigation = prior }()
++	jobs := []scrapemate.IJob{
++		NewGmapJob("fixture", "en", "fixture", 1, false, "", 0),
++		NewPlaceJob("fixture", "en", "https://www.google.com/maps/place/fixture", false, false),
++	}
++	for _, status := range []int{403, 429} {
++		for _, job := range jobs {
++			page := &localFixturePage{status: status}
++			resp := job.BrowserActions(context.Background(), page)
++			if resp.Error == nil || !strings.Contains(resp.Error.Error(), "HTTP ") {
++				t.Fatalf("restriction was not explicit: %v", resp.Error)
++			}
++			if page.navigations != 1 || page.evals != 0 || page.reloads != 0 {
++				t.Fatalf("rejected page performed further actions: %+v", page)
++			}
++		}
++	}
++}
++
++func TestLocalStabilityDetailDeadlineDoesNotReload(t *testing.T) {
++	job := NewPlaceJob("fixture", "en", "https://www.google.com/maps/place/fixture", false, false)
++	page := &localFixturePage{}
++	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
++	defer cancel()
++	start := time.Now()
++	_, err := job.extractJSON(ctx, page)
++	if !errors.Is(err, context.DeadlineExceeded) || time.Since(start) > time.Second {
++		t.Fatalf("detail read ignored parent deadline: %v", err)
++	}
++	if page.reloads != 0 || page.evals == 0 {
++		t.Fatalf("expected local polling without reload: %+v", page)
++	}
++}
++
++func TestLocalStabilityDetailDataPreserved(t *testing.T) {
++	job := NewPlaceJob("fixture", "en", "https://www.google.com/maps/place/fixture", false, false)
++	page := &localFixturePage{raw: `)]}' {"fixture":"preserved"}`}
++	raw, err := job.extractJSON(context.Background(), page)
++	if err != nil || string(raw) != `{"fixture":"preserved"}` || page.reloads != 0 {
++		t.Fatalf("detail data changed: %s, %v", raw, err)
++	}
++}
++
++func TestLocalStabilityNavigationGapAndCancellation(t *testing.T) {
++	const gap = 25 * time.Millisecond
++	pacer := newNavigationPacer(gap)
++	page := &localFixturePage{status: 200}
++	if _, err := pacer.gotoPage(context.Background(), page, "fixture"); err != nil {
++		t.Fatal(err)
++	}
++	start := time.Now()
++	if _, err := pacer.gotoPage(context.Background(), page, "fixture"); err != nil {
++		t.Fatal(err)
++	}
++	if time.Since(start) < gap {
++		t.Fatal("consecutive navigation did not wait for the gap")
++	}
++	ctx, cancel := context.WithCancel(context.Background())
++	cancel()
++	if _, err := pacer.gotoPage(ctx, page, "fixture"); !errors.Is(err, context.Canceled) {
++		t.Fatalf("cancelled navigation continued: %v", err)
++	}
++	if page.navigations != 2 {
++		t.Fatalf("cancelled wait navigated: %d", page.navigations)
++	}
++}
++
++func TestLocalStabilityChromiumIsNotSingleProcess(t *testing.T) {
++	args := jshttp.LocalChromiumLaunchArgs()
++	for _, flag := range []string{"--single-process", "--no-zygote"} {
++		for _, arg := range args {
++			if arg == flag {
++				t.Fatalf("Chromium launch args still contain %s", flag)
++			}
++		}
++	}
++	if len(args) == 0 || localChromiumSingleProcess() {
++		t.Fatalf("unexpected Chromium launch args: %v", args)
++	}
++}

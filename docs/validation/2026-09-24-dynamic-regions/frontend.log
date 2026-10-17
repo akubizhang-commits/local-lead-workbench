@@ -1,0 +1,518 @@
+
+> local-lead-workbench-frontend@0.1.0 test
+> node --experimental-strip-types --test tests/*.test.ts
+
+TAP version 13
+# Subtest: real DOM: company/account navigation and browser back retain filters and page; pagination clears selection
+ok 1 - real DOM: company/account navigation and browser back retain filters and page; pagination clears selection
+  ---
+  duration_ms: 2144.616625
+  type: 'test'
+  ...
+# Subtest: real DOM: batch conflict is not retried, clears selected revisions and leaves a visible error
+ok 2 - real DOM: batch conflict is not retried, clears selected revisions and leaves a visible error
+  ---
+  duration_ms: 84.246667
+  type: 'test'
+  ...
+# Subtest: batch status sends selected IDs and captured revisions only
+ok 3 - batch status sends selected IDs and captured revisions only
+  ---
+  duration_ms: 3.032167
+  type: 'test'
+  ...
+# Subtest: business editor preserves existing categories outside default choices
+ok 4 - business editor preserves existing categories outside default choices
+  ---
+  duration_ms: 0.147417
+  type: 'test'
+  ...
+# Subtest: named buyers are separated from procurement departments and unnamed channels
+ok 5 - named buyers are separated from procurement departments and unnamed channels
+  ---
+  duration_ms: 1.165541
+  type: 'test'
+  ...
+# Subtest: invalid review states are hidden regardless of adoption status
+ok 6 - invalid review states are hidden regardless of adoption status
+  ---
+  duration_ms: 0.194
+  type: 'test'
+  ...
+# Subtest: valid excluded contacts stay separate and accepted buyers remain visible
+ok 7 - valid excluded contacts stay separate and accepted buyers remain visible
+  ---
+  duration_ms: 0.062291
+  type: 'test'
+  ...
+# Subtest: pending evidence is never usable; adoption exclusion takes precedence
+ok 8 - pending evidence is never usable; adoption exclusion takes precedence
+  ---
+  duration_ms: 0.053541
+  type: 'test'
+  ...
+# Subtest: recruitment is retained outside outreach groups
+ok 9 - recruitment is retained outside outreach groups
+  ---
+  duration_ms: 0.09425
+  type: 'test'
+  ...
+# Subtest: unified list puts buyers first and keeps irrelevant and pending separate
+ok 10 - unified list puts buyers first and keeps irrelevant and pending separate
+  ---
+  duration_ms: 2.412709
+  type: 'test'
+  ...
+# Subtest: a navigation-only contact page is supplementary, real channels remain
+ok 11 - a navigation-only contact page is supplementary, real channels remain
+  ---
+  duration_ms: 0.2085
+  type: 'test'
+  ...
+# Subtest: all distinct evidence/page pairs appear and field provenance is preserved
+ok 12 - all distinct evidence/page pairs appear and field provenance is preserved
+  ---
+  duration_ms: 90.810875
+  type: 'test'
+  ...
+# Subtest: legacy and empty sources preserve evidence and the missing-evidence fallback
+ok 13 - legacy and empty sources preserve evidence and the missing-evidence fallback
+  ---
+  duration_ms: 2.466291
+  type: 'test'
+  ...
+# Subtest: people and channels are visible while other contacts start collapsed
+ok 14 - people and channels are visible while other contacts start collapsed
+  ---
+  duration_ms: 4.836625
+  type: 'test'
+  ...
+# Subtest: invalid review states render neither standalone cards nor grouped identities
+ok 15 - invalid review states render neither standalone cards nor grouped identities
+  ---
+  duration_ms: 1.716916
+  type: 'test'
+  ...
+# Subtest: conflicting field values and their individual sources remain visible
+ok 16 - conflicting field values and their individual sources remain visible
+  ---
+  duration_ms: 1.461708
+  type: 'test'
+  ...
+# Subtest: backend grouped records retain separate cards and counts without frontend merging
+ok 17 - backend grouped records retain separate cards and counts without frontend merging
+  ---
+  duration_ms: 2.462709
+  type: 'test'
+  ...
+# Subtest: pending and rejected records render only inside their separate folded groups
+ok 18 - pending and rejected records render only inside their separate folded groups
+  ---
+  duration_ms: 1.154959
+  type: 'test'
+  ...
+# Subtest: statewide places use the state endpoint and distinguish official city/CDP choices
+ok 19 - statewide places use the state endpoint and distinguish official city/CDP choices
+  ---
+  duration_ms: 1513.506375
+  type: 'test'
+  ...
+# Subtest: geography terminology includes county equivalents and DC without changing canonical values
+ok 20 - geography terminology includes county equivalents and DC without changing canonical values
+  ---
+  duration_ms: 154.927709
+  type: 'test'
+  ...
+# Subtest: optional county filters places without making a cross-county place its child
+ok 21 - optional county filters places without making a cross-county place its child
+  ---
+  duration_ms: 180.048625
+  type: 'test'
+  ...
+# Subtest: manual edits remove only nonmatching geographic IDs and clear descendants
+ok 22 - manual edits remove only nonmatching geographic IDs and clear descendants
+  ---
+  duration_ms: 274.794
+  type: 'test'
+  ...
+# Subtest: free country/state/city text submits without fabricated region identifiers
+ok 23 - free country/state/city text submits without fabricated region identifiers
+  ---
+  duration_ms: 99.090458
+  type: 'test'
+  ...
+# Subtest: ambiguous plain place name never picks an arbitrary city or CDP identifier
+ok 24 - ambiguous plain place name never picks an arbitrary city or CDP identifier
+  ---
+  duration_ms: 79.292875
+  type: 'test'
+  ...
+# Subtest: county lookup failure remains visible while statewide place selection still works
+ok 25 - county lookup failure remains visible while statewide place selection still works
+  ---
+  duration_ms: 80.2715
+  type: 'test'
+  ...
+# Subtest: retrying a failed catalog preserves an already matched canonical place while requests load
+ok 26 - retrying a failed catalog preserves an already matched canonical place while requests load
+  ---
+  duration_ms: 83.077167
+  type: 'test'
+  ...
+# Subtest: identical official place names remain selectable: different-counties
+ok 27 - identical official place names remain selectable: different-counties
+  ---
+  duration_ms: 85.934375
+  type: 'test'
+  ...
+# Subtest: identical official place names remain selectable: same-county
+ok 28 - identical official place names remain selectable: same-county
+  ---
+  duration_ms: 81.379666
+  type: 'test'
+  ...
+# Subtest: identical official place names remain selectable: county-unavailable
+ok 29 - identical official place names remain selectable: county-unavailable
+  ---
+  duration_ms: 82.275334
+  type: 'test'
+  ...
+# Subtest: identical official place names remain selectable: missing-geoid
+ok 30 - identical official place names remain selectable: missing-geoid
+  ---
+  duration_ms: 84.215834
+  type: 'test'
+  ...
+# Subtest: country dropdown uses API configuration names and codes
+ok 31 - country dropdown uses API configuration names and codes
+  ---
+  duration_ms: 23.415667
+  type: 'test'
+  ...
+# Subtest: ZA metro ends at three controls and submits municipality identity without county
+ok 32 - ZA metro ends at three controls and submits municipality identity without county
+  ---
+  duration_ms: 101.772958
+  type: 'test'
+  ...
+# Subtest: ZA district requires and submits a matching local municipality as the fourth level
+ok 33 - ZA district requires and submits a matching local municipality as the fourth level
+  ---
+  duration_ms: 143.342
+  type: 'test'
+  ...
+# Subtest: ZA province alone cannot create a task, including a direct submit event
+ok 34 - ZA province alone cannot create a task, including a direct submit event
+  ---
+  duration_ms: 80.743
+  type: 'test'
+  ...
+# Subtest: ZA branch, province and country switches cannot retain previous municipality IDs
+ok 35 - ZA branch, province and country switches cannot retain previous municipality IDs
+  ---
+  duration_ms: 199.828458
+  type: 'test'
+  ...
+# Subtest: server labels and hints override built-in display text
+ok 36 - server labels and hints override built-in display text
+  ---
+  duration_ms: 85.50975
+  type: 'test'
+  ...
+# Subtest: terminal subtype and mode come from configuration rather than the country code
+ok 37 - terminal subtype and mode come from configuration rather than the country code
+  ---
+  duration_ms: 85.23625
+  type: 'test'
+  ...
+# Subtest: a district catalogue failure does not disable already loaded metro choices
+ok 38 - a district catalogue failure does not disable already loaded metro choices
+  ---
+  duration_ms: 101.428916
+  type: 'test'
+  ...
+# Subtest: three-level county_filter configuration omits county controls, requests and payload
+ok 39 - three-level county_filter configuration omits county controls, requests and payload
+  ---
+  duration_ms: 81.576167
+  type: 'test'
+  ...
+# Subtest: export query retains Chinese, ampersands and selected filters
+ok 40 - export query retains Chinese, ampersands and selected filters
+  ---
+  duration_ms: 0.869416
+  type: 'test'
+  ...
+# Subtest: external links reject executable and relative URLs
+ok 41 - external links reject executable and relative URLs
+  ---
+  duration_ms: 0.079875
+  type: 'test'
+  ...
+# Subtest: manual recovery is offered for blocked and failed runs but not completed runs
+ok 42 - manual recovery is offered for blocked and failed runs but not completed runs
+  ---
+  duration_ms: 0.968916
+  type: 'test'
+  ...
+# Subtest: market and run filters survive pagination without leaking pagination into exports
+ok 43 - market and run filters survive pagination without leaking pagination into exports
+  ---
+  duration_ms: 0.699
+  type: 'test'
+  ...
+# Subtest: empty optional market filters are omitted and pagination starts at one
+ok 44 - empty optional market filters are omitted and pagination starts at one
+  ---
+  duration_ms: 0.764583
+  type: 'test'
+  ...
+# Subtest: capability-exhausted runs never offer ineffective resume; retryable runs still do
+ok 45 - capability-exhausted runs never offer ineffective resume; retryable runs still do
+  ---
+  duration_ms: 0.34225
+  type: 'test'
+  ...
+# Subtest: detail refresh and returning to list retain the entire list context
+ok 46 - detail refresh and returning to list retain the entire list context
+  ---
+  duration_ms: 3.392291
+  type: 'test'
+  ...
+# Subtest: invalid route and pagination values fall back safely
+ok 47 - invalid route and pagination values fall back safely
+  ---
+  duration_ms: 0.244083
+  type: 'test'
+  ...
+# Subtest: new filter retains other constraints but resets page
+ok 48 - new filter retains other constraints but resets page
+  ---
+  duration_ms: 0.093416
+  type: 'test'
+  ...
+# Subtest: account detail route retains company and list context
+ok 49 - account detail route retains company and list context
+  ---
+  duration_ms: 0.170041
+  type: 'test'
+  ...
+# Subtest: task refresh detail survives reload with list context
+ok 50 - task refresh detail survives reload with list context
+  ---
+  duration_ms: 0.138125
+  type: 'test'
+  ...
+# Subtest: refresh detail back retains the original page, status and selected round
+ok 51 - refresh detail back retains the original page, status and selected round
+  ---
+  duration_ms: 0.485666
+  type: 'test'
+  ...
+# Subtest: PRD IT01: changing country must not retain the previous state and city
+ok 52 - PRD IT01: changing country must not retain the previous state and city
+  ---
+  duration_ms: 1564.624416
+  type: 'test'
+  ...
+# Subtest: PRD IT07: switching targets must not silently attach A draft to B
+ok 53 - PRD IT07: switching targets must not silently attach A draft to B
+  ---
+  duration_ms: 206.305792
+  type: 'test'
+  ...
+# Subtest: PRD-10: manually recorded replies must identify their manual provenance
+ok 54 - PRD-10: manually recorded replies must identify their manual provenance
+  ---
+  duration_ms: 49.819042
+  type: 'test'
+  ...
+# Subtest: PRD refusal: blocked company retains history without editable follow-up or sends
+ok 55 - PRD refusal: blocked company retains history without editable follow-up or sends
+  ---
+  duration_ms: 34.161208
+  type: 'test'
+  ...
+# Subtest: PRD IX-01: removed social account provides an explicit back action
+ok 56 - PRD IX-01: removed social account provides an explicit back action
+  ---
+  duration_ms: 49.237583
+  type: 'test'
+  ...
+# Subtest: PRD stale loading: a late response for A cannot replace the selected B detail
+ok 57 - PRD stale loading: a late response for A cannot replace the selected B detail
+  ---
+  duration_ms: 79.956333
+  type: 'test'
+  ...
+# Subtest: PRD IT08: company/account panel remount retains unsaved target content
+ok 58 - PRD IT08: company/account panel remount retains unsaved target content
+  ---
+  duration_ms: 68.865959
+  type: 'test'
+  ...
+# Subtest: repeated failures become short Chinese reasons without URLs
+ok 59 - repeated failures become short Chinese reasons without URLs
+  ---
+  duration_ms: 1.589916
+  type: 'test'
+  ...
+# Subtest: proxy accepts only the supported protocols, exact loopback hosts and port boundaries
+ok 60 - proxy accepts only the supported protocols, exact loopback hosts and port boundaries
+  ---
+  duration_ms: 243.429542
+  type: 'test'
+  ...
+# Subtest: proxy rejects unsupported protocols, alternate hosts, credentials and invalid ports
+ok 61 - proxy rejects unsupported protocols, alternate hosts, credentials and invalid ports
+  ---
+  duration_ms: 0.320667
+  type: 'test'
+  ...
+# Subtest: post limit accepts only integers from one through five
+ok 62 - post limit accepts only integers from one through five
+  ---
+  duration_ms: 0.215875
+  type: 'test'
+  ...
+# Subtest: real DOM: post limits, reader guidance and open sessions guard configuration saves
+ok 63 - real DOM: post limits, reader guidance and open sessions guard configuration saves
+  ---
+  duration_ms: 1184.816667
+  type: 'test'
+  ...
+# Subtest: run report preserves mixed outcomes instead of treating completion as success
+ok 64 - run report preserves mixed outcomes instead of treating completion as success
+  ---
+  duration_ms: 263.99575
+  type: 'test'
+  ...
+# Subtest: page preview retains access failure and treats extracted contacts as unconfirmed
+ok 65 - page preview retains access failure and treats extracted contacts as unconfirmed
+  ---
+  duration_ms: 267.710167
+  type: 'test'
+  ...
+# Subtest: unknown statuses and absent metrics are not presented as successful zero results
+ok 66 - unknown statuses and absent metrics are not presented as successful zero results
+  ---
+  duration_ms: 1.692875
+  type: 'test'
+  ...
+# Subtest: preview escapes source content and rejects executable source URLs
+ok 67 - preview escapes source content and rejects executable source URLs
+  ---
+  duration_ms: 1.118833
+  type: 'test'
+  ...
+# Subtest: real DOM: single-company run, cancel, retry and refresh use the API contract
+ok 68 - real DOM: single-company run, cancel, retry and refresh use the API contract
+  ---
+  duration_ms: 1077.557291
+  type: 'test'
+  ...
+# Subtest: real DOM: settings save, blocked probe and 20-company pilot preserve their meanings
+ok 69 - real DOM: settings save, blocked probe and 20-company pilot preserve their meanings
+  ---
+  duration_ms: 373.284583
+  type: 'test'
+  ...
+# Subtest: backend public-page adapter statuses and read stage are shown in Chinese
+ok 70 - backend public-page adapter statuses and read stage are shown in Chinese
+  ---
+  duration_ms: 1.1155
+  type: 'test'
+  ...
+# Subtest: account summary separates platform, name, identifier and discovery source
+ok 71 - account summary separates platform, name, identifier and discovery source
+  ---
+  duration_ms: 1.01925
+  type: 'test'
+  ...
+# Subtest: saved posts render inline with platform and capture time and escaped text
+ok 72 - saved posts render inline with platform and capture time and escaped text
+  ---
+  duration_ms: 0.482125
+  type: 'test'
+  ...
+# Subtest: account list is concise and legacy is not called a discovery
+ok 73 - account list is concise and legacy is not called a discovery
+  ---
+  duration_ms: 0.80025
+  type: 'test'
+  ...
+# Subtest: website discovery is explicit while legacy dates are entry dates
+ok 74 - website discovery is explicit while legacy dates are entry dates
+  ---
+  duration_ms: 1.254791
+  type: 'test'
+  ...
+# Subtest: account list has four columns and failed attempts do not advance update time
+ok 75 - account list has four columns and failed attempts do not advance update time
+  ---
+  duration_ms: 0.46475
+  type: 'test'
+  ...
+# Subtest: account details distinguish retained field and text sources from current observations and folded history
+ok 76 - account details distinguish retained field and text sources from current observations and folded history
+  ---
+  duration_ms: 1.609917
+  type: 'test'
+  ...
+# Subtest: account fields remain visible without title or description and cannot borrow another account source
+ok 77 - account fields remain visible without title or description and cannot borrow another account source
+  ---
+  duration_ms: 0.438
+  type: 'test'
+  ...
+# Subtest: generic platform titles are removed but real account names remain
+ok 78 - generic platform titles are removed but real account names remain
+  ---
+  duration_ms: 1.358125
+  type: 'test'
+  ...
+# Subtest: real DOM: account decision refreshes revision and manual follow-up stays a saved draft
+ok 79 - real DOM: account decision refreshes revision and manual follow-up stays a saved draft
+  ---
+  duration_ms: 1656.434542
+  type: 'test'
+  ...
+# Subtest: refresh list identifies company, origin and preserves distinct attempts
+ok 80 - refresh list identifies company, origin and preserves distinct attempts
+  ---
+  duration_ms: 1343.332625
+  type: 'test'
+  ...
+# Subtest: refresh detail is main content, not a header action or duplicate market list
+ok 81 - refresh detail is main content, not a header action or duplicate market list
+  ---
+  duration_ms: 367.835708
+  type: 'test'
+  ...
+# Subtest: website progress distinguishes company completion from scanned and remaining pages
+ok 82 - website progress distinguishes company completion from scanned and remaining pages
+  ---
+  duration_ms: 1227.346833
+  type: 'test'
+  ...
+# Subtest: refresh run names its company and opens the matching detail
+ok 83 - refresh run names its company and opens the matching detail
+  ---
+  duration_ms: 17.485667
+  type: 'test'
+  ...
+# Subtest: API connectivity never implies worker liveness
+ok 84 - API connectivity never implies worker liveness
+  ---
+  duration_ms: 1.347208
+  type: 'test'
+  ...
+1..84
+# tests 84
+# suites 0
+# pass 84
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 4335.538334

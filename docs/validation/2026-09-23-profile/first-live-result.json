@@ -1,0 +1,350 @@
+{
+  "id": "4289f600679949e5a4c3d143362e2120",
+  "status": "partial",
+  "created_at": "2026-09-23T09:53:46.014839+00:00",
+  "finished_at": "2026-09-23T09:56:04.058604+00:00",
+  "company_ids": [
+    "193ea042358f4b23b9f34fec6a33a89d"
+  ],
+  "sample": [],
+  "items": [
+    {
+      "id": "d5c997615e284c9ab90a4a2c550d158b",
+      "run_id": "4289f600679949e5a4c3d143362e2120",
+      "company_id": "193ea042358f4b23b9f34fec6a33a89d",
+      "stage": "profile",
+      "target": "https://www.facebook.com/palmtrs/",
+      "state": "blocked",
+      "result": {
+        "status": "unreadable",
+        "title": "",
+        "description": "",
+        "fields": [],
+        "source_url": "https://www.facebook.com/palmtrs/",
+        "provider": "browser",
+        "posts": [],
+        "profile_only": true,
+        "message": "账号资料尚未加载或当前结构无法识别；未判定账号不存在",
+        "new_links": 0
+      },
+      "created_at": "2026-09-23T09:53:46.015065+00:00",
+      "finished_at": "2026-09-23T09:53:59.312483+00:00",
+      "company_name": "Ambiance Apparel"
+    },
+    {
+      "id": "f8e42d031698407b8057b1e1266a51ae",
+      "run_id": "4289f600679949e5a4c3d143362e2120",
+      "company_id": "193ea042358f4b23b9f34fec6a33a89d",
+      "stage": "profile",
+      "target": "https://www.facebook.com/profile.php?id=100067454602857",
+      "state": "blocked",
+      "result": {
+        "status": "unreadable",
+        "title": "",
+        "description": "",
+        "fields": [],
+        "source_url": "https://www.facebook.com/profile.php?id=100067454602857",
+        "provider": "browser",
+        "posts": [],
+        "profile_only": true,
+        "message": "账号资料尚未加载或当前结构无法识别；未判定账号不存在",
+        "new_links": 0
+      },
+      "created_at": "2026-09-23T09:53:46.015131+00:00",
+      "finished_at": "2026-09-23T09:54:10.417108+00:00",
+      "company_name": "Ambiance Apparel"
+    },
+    {
+      "id": "b00ed190ba7f428e828cd631b2181142",
+      "run_id": "4289f600679949e5a4c3d143362e2120",
+      "company_id": "193ea042358f4b23b9f34fec6a33a89d",
+      "stage": "profile",
+      "target": "https://www.facebook.com/profile.php?id=100069696972235",
+      "state": "blocked",
+      "result": {
+        "status": "unreadable",
+        "title": "",
+        "description": "",
+        "fields": [],
+        "source_url": "https://www.facebook.com/profile.php?id=100069696972235",
+        "provider": "browser",
+        "posts": [],
+        "profile_only": true,
+        "message": "账号资料尚未加载或当前结构无法识别；未判定账号不存在",
+        "new_links": 0
+      },
+      "created_at": "2026-09-23T09:53:46.015143+00:00",
+      "finished_at": "2026-09-23T09:54:22.945721+00:00",
+      "company_name": "Ambiance Apparel"
+    },
+    {
+      "id": "693cf513ad214e8bb22cebfe63ea96fe",
+      "run_id": "4289f600679949e5a4c3d143362e2120",
+      "company_id": "193ea042358f4b23b9f34fec6a33a89d",
+      "stage": "profile",
+      "target": "https://www.facebook.com/profile.php?id=100071031642766",
+      "state": "blocked",
+      "result": {
+        "status": "unreadable",
+        "title": "",
+        "description": "",
+        "fields": [],
+        "source_url": "https://www.facebook.com/profile.php?id=100071031642766",
+        "provider": "browser",
+        "posts": [],
+        "profile_only": true,
+        "message": "账号资料尚未加载或当前结构无法识别；未判定账号不存在",
+        "new_links": 0
+      },
+      "created_at": "2026-09-23T09:53:46.015161+00:00",
+      "finished_at": "2026-09-23T09:54:35.744723+00:00",
+      "company_name": "Ambiance Apparel"
+    },
+    {
+      "id": "b75df6d7c64a499694f0baba4214b84d",
+      "run_id": "4289f600679949e5a4c3d143362e2120",
+      "company_id": "193ea042358f4b23b9f34fec6a33a89d",
+      "stage": "profile",
+      "target": "https://www.facebook.com/profile.php?id=61551751302111",
+      "state": "blocked",
+      "result": {
+        "status": "unreadable",
+        "title": "",
+        "description": "",
+        "fields": [],
+        "source_url": "https://www.facebook.com/profile.php?id=61551751302111",
+        "provider": "browser",
+        "posts": [],
+        "profile_only": true,
+        "message": "账号资料尚未加载或当前结构无法识别；未判定账号不存在",
+        "new_links": 0
+      },
+      "created_at": "2026-09-23T09:53:46.015170+00:00",
+      "finished_at": "2026-09-23T09:54:47.450430+00:00",
+      "company_name": "Ambiance Apparel"
+    },
+    {
+      "id": "704ad886875c4d2e9c52d75a2de1fba7",
+      "run_id": "4289f600679949e5a4c3d143362e2120",
+      "company_id": "193ea042358f4b23b9f34fec6a33a89d",
+      "stage": "profile",
+      "target": "https://www.facebook.com/profile.php?id=61554998475619",
+      "state": "blocked",
+      "result": {
+        "status": "unreadable",
+        "title": "",
+        "description": "",
+        "fields": [],
+        "source_url": "https://www.facebook.com/profile.php?id=61554998475619",
+        "provider": "browser",
+        "posts": [],
+        "profile_only": true,
+        "message": "账号资料尚未加载或当前结构无法识别；未判定账号不存在",
+        "new_links": 0
+      },
+      "created_at": "2026-09-23T09:53:46.015179+00:00",
+      "finished_at": "2026-09-23T09:54:59.113157+00:00",
+      "company_name": "Ambiance Apparel"
+    },
+    {
+      "id": "2d453cd6b1ec4e24b6708d63988910ae",
+      "run_id": "4289f600679949e5a4c3d143362e2120",
+      "company_id": "193ea042358f4b23b9f34fec6a33a89d",
+      "stage": "profile",
+      "target": "https://www.instagram.com/ambiance.apparel/",
+      "state": "succeeded",
+      "result": {
+        "status": "preview_read",
+        "title": "ambiance.apparel",
+        "description": "ambiance.apparel\n选项\nAmbiance Apparel\n11\n帖子\n90\n粉丝\n0\n关注\n服装（品牌）\nAmbiance Apparel 🇹🇭\nGood Vibes. All Day, Everyday.\n📦  Free Shipping\n关注\n发消息\n类似账户",
+        "fields": [],
+        "source_url": "https://www.instagram.com/ambiance.apparel/",
+        "provider": "browser",
+        "posts": [],
+        "profile_only": true,
+        "message": "已读取实际呈现的账号基础资料；缺失字段未推测，账号归属待核对",
+        "new_links": 0
+      },
+      "created_at": "2026-09-23T09:53:46.015187+00:00",
+      "finished_at": "2026-09-23T09:55:10.230341+00:00",
+      "company_name": "Ambiance Apparel"
+    },
+    {
+      "id": "f701491535d44a2ea51077436ecbdaed",
+      "run_id": "4289f600679949e5a4c3d143362e2120",
+      "company_id": "193ea042358f4b23b9f34fec6a33a89d",
+      "stage": "profile",
+      "target": "https://www.instagram.com/ambiance_apparel/",
+      "state": "succeeded",
+      "result": {
+        "status": "preview_read",
+        "title": "ambiance_apparel",
+        "description": "ambiance_apparel\n选项\n97\n帖子\n190\n粉丝\n141\n关注\nNO TRADES!❌\nHAPPY BIDDING 😊No CENTS\nSHIPPING! Extra $\n...\n更多\n关注\n类似账户",
+        "fields": [],
+        "source_url": "https://www.instagram.com/ambiance_apparel/",
+        "provider": "browser",
+        "posts": [],
+        "profile_only": true,
+        "message": "已读取实际呈现的账号基础资料；缺失字段未推测，账号归属待核对",
+        "new_links": 0
+      },
+      "created_at": "2026-09-23T09:53:46.015197+00:00",
+      "finished_at": "2026-09-23T09:55:20.901025+00:00",
+      "company_name": "Ambiance Apparel"
+    },
+    {
+      "id": "187a21a0f29e42288e869a4cbc1bf187",
+      "run_id": "4289f600679949e5a4c3d143362e2120",
+      "company_id": "193ea042358f4b23b9f34fec6a33a89d",
+      "stage": "profile",
+      "target": "https://www.instagram.com/ambiance_apparel_inc/",
+      "state": "succeeded",
+      "result": {
+        "status": "preview_read",
+        "title": "ambiance_apparel_inc",
+        "description": "ambiance_apparel_inc\n选项\nAmbiance Apparel Inc.\n0\n帖子\n26\n粉丝\n0\n关注\n关注\n类似账户",
+        "fields": [],
+        "source_url": "https://www.instagram.com/ambiance_apparel_inc/",
+        "provider": "browser",
+        "posts": [],
+        "profile_only": true,
+        "message": "已读取实际呈现的账号基础资料；缺失字段未推测，账号归属待核对",
+        "new_links": 0
+      },
+      "created_at": "2026-09-23T09:53:46.015204+00:00",
+      "finished_at": "2026-09-23T09:55:31.886794+00:00",
+      "company_name": "Ambiance Apparel"
+    },
+    {
+      "id": "e955caebecbe4b94b10b95ace096f7ad",
+      "run_id": "4289f600679949e5a4c3d143362e2120",
+      "company_id": "193ea042358f4b23b9f34fec6a33a89d",
+      "stage": "profile",
+      "target": "https://www.instagram.com/ambianceapparel_wholesale/",
+      "state": "succeeded",
+      "result": {
+        "status": "preview_read",
+        "title": "ambianceapparel_wholesale",
+        "description": "ambianceapparel_wholesale\n选项\nAmbiance Apparel\n28\n帖子\n2796\n粉丝\n166\n关注\n服装（品牌）\n#wholesale\nWomen & Junior Clothing\nAmbiance Apparel Designed in LA 🌸California🌸Fashion District\nDiscover Ambiance\n...\n更多\n链接图标\nambianceapparel.com\n关注\n发消息\n类似账户\nSPRING\nFALL/WINTER’23\nSHOWROOM\nFW ‘23\nSUMMER",
+        "fields": [],
+        "source_url": "https://www.instagram.com/ambianceapparel_wholesale/",
+        "provider": "browser",
+        "posts": [],
+        "profile_only": true,
+        "message": "已读取实际呈现的账号基础资料；缺失字段未推测，账号归属待核对",
+        "new_links": 0
+      },
+      "created_at": "2026-09-23T09:53:46.015217+00:00",
+      "finished_at": "2026-09-23T09:55:43.055748+00:00",
+      "company_name": "Ambiance Apparel"
+    },
+    {
+      "id": "77f7617efa434c91a82ddbcda4c91458",
+      "run_id": "4289f600679949e5a4c3d143362e2120",
+      "company_id": "193ea042358f4b23b9f34fec6a33a89d",
+      "stage": "profile",
+      "target": "https://x.com/ambianceapparel",
+      "state": "succeeded",
+      "result": {
+        "status": "preview_read",
+        "title": "Ambiance Apparel Inc @AmbianceApparel",
+        "description": "President & Founder- Sriram Nalla  \n                           -Create Your Atmosphere-",
+        "fields": [
+          {
+            "key": "location",
+            "value": "Colorado, USA",
+            "evidence": "Colorado, USA",
+            "source_url": "https://x.com/ambianceapparel"
+          },
+          {
+            "key": "joined_at",
+            "value": "Joined February 2017",
+            "evidence": "Joined February 2017",
+            "source_url": "https://x.com/ambianceapparel"
+          },
+          {
+            "key": "website",
+            "value": "https://t.co/IpfMTDok4h",
+            "evidence": "ambiance-apparel.com",
+            "source_url": "https://x.com/ambianceapparel"
+          },
+          {
+            "key": "following",
+            "value": "55 Following",
+            "evidence": "55 Following",
+            "source_url": "https://x.com/ambianceapparel"
+          },
+          {
+            "key": "followers",
+            "value": "19 Followers",
+            "evidence": "19 Followers",
+            "source_url": "https://x.com/ambianceapparel"
+          }
+        ],
+        "source_url": "https://x.com/ambianceapparel",
+        "provider": "browser",
+        "posts": [],
+        "profile_only": true,
+        "message": "已读取实际呈现的账号基础资料；缺失字段未推测，账号归属待核对",
+        "new_links": 0
+      },
+      "created_at": "2026-09-23T09:53:46.015226+00:00",
+      "finished_at": "2026-09-23T09:55:52.674639+00:00",
+      "company_name": "Ambiance Apparel"
+    },
+    {
+      "id": "b8b738de14fa49bfabbef5affdcb3f61",
+      "run_id": "4289f600679949e5a4c3d143362e2120",
+      "company_id": "193ea042358f4b23b9f34fec6a33a89d",
+      "stage": "profile",
+      "target": "https://x.com/ambiancecanada",
+      "state": "succeeded",
+      "result": {
+        "status": "preview_read",
+        "title": "AmbianceApparel @AmbianceCanada",
+        "description": "",
+        "fields": [
+          {
+            "key": "joined_at",
+            "value": "Joined November 2022",
+            "evidence": "Joined November 2022",
+            "source_url": "https://x.com/ambiancecanada"
+          },
+          {
+            "key": "following",
+            "value": "2 Following",
+            "evidence": "2 Following",
+            "source_url": "https://x.com/ambiancecanada"
+          },
+          {
+            "key": "followers",
+            "value": "0 Followers",
+            "evidence": "0 Followers",
+            "source_url": "https://x.com/ambiancecanada"
+          }
+        ],
+        "source_url": "https://x.com/ambiancecanada",
+        "provider": "browser",
+        "posts": [],
+        "profile_only": true,
+        "message": "已读取实际呈现的账号基础资料；缺失字段未推测，账号归属待核对",
+        "new_links": 0
+      },
+      "created_at": "2026-09-23T09:53:46.015239+00:00",
+      "finished_at": "2026-09-23T09:56:04.058353+00:00",
+      "company_name": "Ambiance Apparel"
+    }
+  ],
+  "summary": {
+    "total": 12,
+    "pending": 0,
+    "running": 0,
+    "succeeded": 6,
+    "no_results": 0,
+    "blocked": 6,
+    "failed": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "new_links": 0
+  }
+}

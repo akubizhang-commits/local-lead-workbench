@@ -1,0 +1,49 @@
+{
+  "identity_promotion_move": {
+    "keys": [
+      "google_maps:place_id:PLACE_A",
+      "google_maps:cid:123"
+    ],
+    "same_url": true,
+    "companies": 2,
+    "pending_reviews": 0,
+    "addresses": [
+      "2 New Road New York",
+      "1 Old Road New York"
+    ]
+  },
+  "accepted_field_overwritten": {
+    "accepted": "12125550222",
+    "overrides": [],
+    "after_maps": "12125550333",
+    "pending_reviews": 0
+  },
+  "rejected_contact_returns": {
+    "after_reject_export_count": 0,
+    "after_role_change_review_status": "pending",
+    "after_role_change_export_count": 1,
+    "role": "Sales"
+  },
+  "coverage_no_forward_progress": {
+    "source_matches": 121,
+    "stored": 120,
+    "calls": 3,
+    "same_request_parameters": true,
+    "latest_status": "partial",
+    "coverage": {
+      "scope_label": "",
+      "planned": 1,
+      "done": 0,
+      "unresolved": [
+        "部分密集区域仍有未完成检索，已保留结果，可稍后继续更新市场",
+        "1 discovery jobs incomplete"
+      ]
+    }
+  },
+  "scheduled_occurrence_consumed": {
+    "occurrence_reuses_paused_run": true,
+    "active_runs_after_dispatch": 0,
+    "next_due_at": "2026-10-01T00:00:00+00:00",
+    "active_runs_after_cancel_and_redispatch": 0
+  }
+}

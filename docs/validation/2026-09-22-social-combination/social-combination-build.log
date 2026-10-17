@@ -1,0 +1,13 @@
+
+> local-lead-workbench-frontend@0.1.0 build
+> tsc --noEmit && vite build
+
+vite v7.3.6 building client environment for production...
+transforming...
+✓ 54 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.42 kB │ gzip:  0.32 kB
+dist/assets/index-DdKRG0sT.css   27.96 kB │ gzip:  6.97 kB
+dist/assets/index-olPsI7lw.js   279.09 kB │ gzip: 86.50 kB
+✓ built in 421ms

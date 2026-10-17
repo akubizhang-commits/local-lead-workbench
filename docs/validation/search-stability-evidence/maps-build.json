@@ -1,0 +1,14 @@
+{
+  "commit": "549e4b5e61c7103685ef8392f246ebdba783ed03",
+  "stability": {
+    "detail_reload": false,
+    "fast_search_max_retries": 0,
+    "navigation_gap_seconds": 5,
+    "patch": "local-maps-stability-v1",
+    "place_max_retries": 0,
+    "search_max_retries": 0
+  },
+  "binary_sha256": "21c19eb40c53db308bcb2524bd4f7b1c50b541799cd9b045c5b32206753fc0d1",
+  "patch_sha256": "7114cc5b54807ee1942fc08ccfc2c3614fbea8dbe65764d3fcb06bd425cff467",
+  "source_sha256": "aa351cec526a8af7157a863fa4f226c36ef310e6714661624d0130fa2d3d14ec"
+}

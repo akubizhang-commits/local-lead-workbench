@@ -1,0 +1,56 @@
+
+> local-lead-workbench-frontend@0.1.0 test
+> node --experimental-strip-types --test tests/*.test.ts
+
+TAP version 13
+# Subtest: procurement evidence is shown first; sales, unknown and historical roles stay in other contacts
+ok 1 - procurement evidence is shown first; sales, unknown and historical roles stay in other contacts
+  ---
+  duration_ms: 1.107458
+  type: 'test'
+  ...
+# Subtest: export query retains Chinese, ampersands and selected filters
+ok 2 - export query retains Chinese, ampersands and selected filters
+  ---
+  duration_ms: 1.7925
+  type: 'test'
+  ...
+# Subtest: external links reject executable and relative URLs
+ok 3 - external links reject executable and relative URLs
+  ---
+  duration_ms: 0.16575
+  type: 'test'
+  ...
+# Subtest: manual recovery is offered for blocked and failed runs but not completed runs
+ok 4 - manual recovery is offered for blocked and failed runs but not completed runs
+  ---
+  duration_ms: 1.239375
+  type: 'test'
+  ...
+# Subtest: market and run filters survive pagination without leaking pagination into exports
+ok 5 - market and run filters survive pagination without leaking pagination into exports
+  ---
+  duration_ms: 0.271958
+  type: 'test'
+  ...
+# Subtest: empty optional market filters are omitted and pagination starts at one
+ok 6 - empty optional market filters are omitted and pagination starts at one
+  ---
+  duration_ms: 0.194083
+  type: 'test'
+  ...
+# Subtest: repeated failures become short Chinese reasons without URLs
+ok 7 - repeated failures become short Chinese reasons without URLs
+  ---
+  duration_ms: 0.84925
+  type: 'test'
+  ...
+1..7
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 147.368667

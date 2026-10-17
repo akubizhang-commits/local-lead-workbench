@@ -1,0 +1,18 @@
+[
+  {
+    "stage": "read",
+    "target": "https://www.instagram.com/shop.storia/",
+    "state": "succeeded",
+    "result": {
+      "status": "preview_read",
+      "message": "已读取公开预览；不是完整帖子或已验证人员资料；仅保存实际加载的页面内容，帖子数量不代表全部历史",
+      "title": "⠀S T O R I A (@shop.storia) · Instagram 照片和视频",
+      "description": "10K 位粉丝、已关注 3,398 人、 1,175 篇帖子 - 查看 ⠀S T O R I A (@shop.storia) 的 Instagram 照片和视频。",
+      "fields": [],
+      "source_url": "https://www.instagram.com/shop.storia/",
+      "provider": "browser",
+      "posts": [],
+      "new_links": 0
+    }
+  }
+]

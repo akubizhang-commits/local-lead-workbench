@@ -1,0 +1,16 @@
+{
+  "documentation_date": "2026-09-24",
+  "scope": "Offline source, links, OpenAPI route set and in-memory DDL; no live DB, network or service changes",
+  "source_files": 100,
+  "local_links_checked": 70,
+  "api_business_operations": 47,
+  "openapi_operations_including_spa": 48,
+  "schema_tables": 32,
+  "explicit_indexes": 8,
+  "schema_integrity": "ok",
+  "foreign_key_errors": [],
+  "diagram_count": 19,
+  "mermaid_check": "Code fences, diagram headers and current ER table references only; not rendered",
+  "errors": [],
+  "passed": true
+}

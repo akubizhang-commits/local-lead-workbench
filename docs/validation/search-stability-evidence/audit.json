@@ -1,0 +1,35 @@
+{
+  "observed_at": "2026-09-25T16:47:30.688530+00:00",
+  "mode": "read-only SQLite transaction",
+  "companies": 195,
+  "contacts_total": 2925,
+  "eligible_before_new_rules": 2924,
+  "quality": {
+    "ok": 2291,
+    "placeholder_contact_link": 561,
+    "non_contact_form": 2,
+    "placeholder_email": 1,
+    "page_wrapper_form": 69
+  },
+  "non_outreach_emails": {
+    "privacy_or_abuse_email": 7
+  },
+  "invalid_affected_companies": 6,
+  "raw_record_deletions": 0,
+  "stages": {
+    "planning": {
+      "succeeded": 2
+    },
+    "discovery": {
+      "blocked": 4,
+      "pending": 62,
+      "succeeded": 42
+    },
+    "refresh": {
+      "blocked": 71,
+      "failed": 9,
+      "partial": 38,
+      "succeeded": 18
+    }
+  }
+}

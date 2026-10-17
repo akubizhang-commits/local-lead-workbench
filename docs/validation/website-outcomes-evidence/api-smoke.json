@@ -1,0 +1,74 @@
+{
+  "task_id": "55223aa67f4e46d19bb6fc803a37f1a6",
+  "current": "本轮已结束，已取得的结果已保存；部分来源未能获取资料",
+  "website_summary": {
+    "total": 14,
+    "processed": 14,
+    "with_pages": 3,
+    "without_pages": 11,
+    "pending": 0,
+    "running": 0,
+    "files_unparsed_companies": 1,
+    "reasons": [
+      {
+        "code": "access_denied",
+        "label": "网站拒绝访问或要求验证",
+        "companies": 4,
+        "with_pages": 0,
+        "without_pages": 4
+      },
+      {
+        "code": "unsupported_content",
+        "label": "网页或附件内容未解析",
+        "companies": 3,
+        "with_pages": 0,
+        "without_pages": 3
+      },
+      {
+        "code": "scan_limit",
+        "label": "达到本次扫描范围或预算",
+        "companies": 2,
+        "with_pages": 2,
+        "without_pages": 0
+      },
+      {
+        "code": "content_limit",
+        "label": "页面过大或解析受限",
+        "companies": 1,
+        "with_pages": 0,
+        "without_pages": 1
+      },
+      {
+        "code": "network",
+        "label": "网络或连接失败",
+        "companies": 1,
+        "with_pages": 0,
+        "without_pages": 1
+      },
+      {
+        "code": "other",
+        "label": "其他读取问题（见企业详情）",
+        "companies": 1,
+        "with_pages": 1,
+        "without_pages": 0
+      },
+      {
+        "code": "redirect",
+        "label": "跳转地址无法自动读取",
+        "companies": 1,
+        "with_pages": 0,
+        "without_pages": 1
+      },
+      {
+        "code": "timeout",
+        "label": "网页访问超时",
+        "companies": 1,
+        "with_pages": 0,
+        "without_pages": 1
+      }
+    ]
+  },
+  "worker_alive": true,
+  "companies": 195,
+  "valid_contacts": 420
+}

@@ -1,0 +1,25 @@
+{
+  "fashion_atlas": {
+    "accounts": 5,
+    "posts": 8,
+    "ignored_links": 0,
+    "platforms": [
+      "facebook",
+      "instagram",
+      "linkedin",
+      "tiktok",
+      "youtube"
+    ],
+    "all_candidates": true
+  },
+  "worker": {
+    "alive": true,
+    "last_seen": "2026-09-22T08:34:22.599599+00:00"
+  },
+  "stored": {
+    "companies_with_social": 75,
+    "distinct_accounts": 276,
+    "distinct_post_collection_links": 64,
+    "company_link_associations": 376
+  }
+}

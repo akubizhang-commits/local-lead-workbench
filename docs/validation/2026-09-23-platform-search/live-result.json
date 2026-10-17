@@ -1,0 +1,50 @@
+[
+  {
+    "stage": "platform_search",
+    "target": "facebook",
+    "state": "succeeded",
+    "result": {
+      "status": "succeeded",
+      "links": [
+        {
+          "url": "https://www.facebook.com/vocalapparelofficial/",
+          "source_url": "https://www.facebook.com/search/pages/?q=Vocal+Apparel",
+          "method": "platform_search",
+          "evidence": "平台站内搜索；查询：Vocal Apparel；结果：Vocal Apparel。名称匹配候选，城市、电话及归属待核实。"
+        },
+        {
+          "url": "https://www.facebook.com/profile.php?id=100081426903754",
+          "source_url": "https://www.facebook.com/search/pages/?q=Vocal+Apparel",
+          "method": "platform_search",
+          "evidence": "平台站内搜索；查询：Vocal Apparel；结果：Vocal apparel。名称匹配候选，城市、电话及归属待核实。"
+        },
+        {
+          "url": "https://www.facebook.com/profile.php?id=100069012450656",
+          "source_url": "https://www.facebook.com/search/pages/?q=Vocal+Apparel",
+          "method": "platform_search",
+          "evidence": "平台站内搜索；查询：Vocal Apparel；结果：Vocal apparel。名称匹配候选，城市、电话及归属待核实。"
+        },
+        {
+          "url": "https://www.facebook.com/localandvocalentreprenuerapparel/",
+          "source_url": "https://www.facebook.com/search/pages/?q=Vocal+Apparel",
+          "method": "platform_search",
+          "evidence": "平台站内搜索；查询：Vocal Apparel；结果：Local & Vocal Apparel + Podcast。名称匹配候选，城市、电话及归属待核实。"
+        }
+      ],
+      "query": "Vocal Apparel",
+      "source_url": "https://www.facebook.com/search/pages/?q=Vocal+Apparel",
+      "message": "已找到名称匹配候选，尚未确认归属；未自动抓取候选账号帖子",
+      "new_links": 3
+    }
+  },
+  {
+    "stage": "platform_search",
+    "target": "instagram",
+    "state": "blocked",
+    "result": {
+      "status": "auth_required",
+      "message": "当前采集会话显示登录页面，请在设置中打开专用浏览器登录后再试",
+      "new_links": 0
+    }
+  }
+]

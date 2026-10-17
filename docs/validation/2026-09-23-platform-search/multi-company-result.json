@@ -1,0 +1,329 @@
+{
+  "id": "3a18f60327a34a8aa0d62b5ebb484de0",
+  "status": "partial",
+  "created_at": "2026-09-23T09:24:01.630647+00:00",
+  "finished_at": "2026-09-23T09:25:40.506017+00:00",
+  "company_ids": [
+    "047b9807d3e743128ddf24588fe74dd4",
+    "0cd710bf7af4442ca4336ca257c9daf3",
+    "193ea042358f4b23b9f34fec6a33a89d"
+  ],
+  "sample": [],
+  "items": [
+    {
+      "id": "1af42381f33248469d9f740ee45db86f",
+      "run_id": "3a18f60327a34a8aa0d62b5ebb484de0",
+      "company_id": "0cd710bf7af4442ca4336ca257c9daf3",
+      "stage": "platform_search",
+      "target": "facebook",
+      "state": "blocked",
+      "result": {
+        "status": "blocked",
+        "reason": "search_unrecognized",
+        "query": "Naked Zebra Wholesale",
+        "source_url": "https://www.facebook.com/search/pages/?q=Naked+Zebra+Wholesale",
+        "links": [],
+        "message": "未识别到名称匹配的搜索结果；可能尚未加载或页面结构不支持，不能据此判断企业没有账号",
+        "new_links": 0
+      },
+      "created_at": "2026-09-23T09:24:01.630680+00:00",
+      "finished_at": "2026-09-23T09:24:14.421061+00:00",
+      "company_name": "Naked Zebra Wholesale"
+    },
+    {
+      "id": "8768a4eb6c11405ba392f1e7881ed486",
+      "run_id": "3a18f60327a34a8aa0d62b5ebb484de0",
+      "company_id": "0cd710bf7af4442ca4336ca257c9daf3",
+      "stage": "platform_search",
+      "target": "instagram",
+      "state": "succeeded",
+      "result": {
+        "status": "succeeded",
+        "links": [
+          {
+            "url": "https://www.instagram.com/nakedzebraoutletwholesale/",
+            "source_url": "https://www.instagram.com/explore/",
+            "method": "platform_search",
+            "evidence": "平台站内搜索；查询：Naked Zebra Wholesale；结果：。名称匹配候选，城市、电话及归属待核实。"
+          }
+        ],
+        "query": "Naked Zebra Wholesale",
+        "source_url": "https://www.instagram.com/explore/",
+        "message": "已找到名称匹配候选，尚未确认归属；未自动抓取候选账号帖子",
+        "new_links": 1
+      },
+      "created_at": "2026-09-23T09:24:01.630702+00:00",
+      "finished_at": "2026-09-23T09:24:24.486394+00:00",
+      "company_name": "Naked Zebra Wholesale"
+    },
+    {
+      "id": "783399b95c404783a9b6b6f8ad7adf16",
+      "run_id": "3a18f60327a34a8aa0d62b5ebb484de0",
+      "company_id": "0cd710bf7af4442ca4336ca257c9daf3",
+      "stage": "platform_search",
+      "target": "x",
+      "state": "blocked",
+      "result": {
+        "status": "blocked",
+        "reason": "search_unrecognized",
+        "query": "Naked Zebra Wholesale",
+        "source_url": "https://x.com/search?q=Naked+Zebra+Wholesale&f=user",
+        "links": [],
+        "message": "未识别到名称匹配的搜索结果；可能尚未加载或页面结构不支持，不能据此判断企业没有账号",
+        "new_links": 0
+      },
+      "created_at": "2026-09-23T09:24:01.630720+00:00",
+      "finished_at": "2026-09-23T09:24:36.850475+00:00",
+      "company_name": "Naked Zebra Wholesale"
+    },
+    {
+      "id": "f9bff224dd494d08a5a94563e34f7b74",
+      "run_id": "3a18f60327a34a8aa0d62b5ebb484de0",
+      "company_id": "193ea042358f4b23b9f34fec6a33a89d",
+      "stage": "platform_search",
+      "target": "facebook",
+      "state": "succeeded",
+      "result": {
+        "status": "succeeded",
+        "links": [
+          {
+            "url": "https://www.facebook.com/profile.php?id=61554998475619",
+            "source_url": "https://www.facebook.com/search/pages/?q=Ambiance+Apparel",
+            "method": "platform_search",
+            "evidence": "平台站内搜索；查询：Ambiance Apparel；结果：Ambiance Apparel。名称匹配候选，城市、电话及归属待核实。"
+          },
+          {
+            "url": "https://www.facebook.com/profile.php?id=61551751302111",
+            "source_url": "https://www.facebook.com/search/pages/?q=Ambiance+Apparel",
+            "method": "platform_search",
+            "evidence": "平台站内搜索；查询：Ambiance Apparel；结果：Ambiance Apparel。名称匹配候选，城市、电话及归属待核实。"
+          },
+          {
+            "url": "https://www.facebook.com/profile.php?id=100069696972235",
+            "source_url": "https://www.facebook.com/search/pages/?q=Ambiance+Apparel",
+            "method": "platform_search",
+            "evidence": "平台站内搜索；查询：Ambiance Apparel；结果：Ambiance Apparel。名称匹配候选，城市、电话及归属待核实。"
+          },
+          {
+            "url": "https://www.facebook.com/palmtrs/",
+            "source_url": "https://www.facebook.com/search/pages/?q=Ambiance+Apparel",
+            "method": "platform_search",
+            "evidence": "平台站内搜索；查询：Ambiance Apparel；结果：Ambiance Apparel.。名称匹配候选，城市、电话及归属待核实。"
+          },
+          {
+            "url": "https://www.facebook.com/profile.php?id=100067454602857",
+            "source_url": "https://www.facebook.com/search/pages/?q=Ambiance+Apparel",
+            "method": "platform_search",
+            "evidence": "平台站内搜索；查询：Ambiance Apparel；结果：Ambiance Apparel。名称匹配候选，城市、电话及归属待核实。"
+          },
+          {
+            "url": "https://www.facebook.com/profile.php?id=100071031642766",
+            "source_url": "https://www.facebook.com/search/pages/?q=Ambiance+Apparel",
+            "method": "platform_search",
+            "evidence": "平台站内搜索；查询：Ambiance Apparel；结果：Ambiance Women Apparel。名称匹配候选，城市、电话及归属待核实。"
+          }
+        ],
+        "query": "Ambiance Apparel",
+        "source_url": "https://www.facebook.com/search/pages/?q=Ambiance+Apparel",
+        "message": "已找到名称匹配候选，尚未确认归属；未自动抓取候选账号帖子",
+        "new_links": 6
+      },
+      "created_at": "2026-09-23T09:24:01.630725+00:00",
+      "finished_at": "2026-09-23T09:24:43.256826+00:00",
+      "company_name": "Ambiance Apparel"
+    },
+    {
+      "id": "6961d46a3a1644efbbbae4141cefc8e3",
+      "run_id": "3a18f60327a34a8aa0d62b5ebb484de0",
+      "company_id": "193ea042358f4b23b9f34fec6a33a89d",
+      "stage": "platform_search",
+      "target": "instagram",
+      "state": "succeeded",
+      "result": {
+        "status": "succeeded",
+        "links": [
+          {
+            "url": "https://www.instagram.com/ambianceapparel_wholesale/",
+            "source_url": "https://www.instagram.com/explore/",
+            "method": "platform_search",
+            "evidence": "平台站内搜索；查询：Ambiance Apparel；结果：。名称匹配候选，城市、电话及归属待核实。"
+          },
+          {
+            "url": "https://www.instagram.com/ambiance.apparel/",
+            "source_url": "https://www.instagram.com/explore/",
+            "method": "platform_search",
+            "evidence": "平台站内搜索；查询：Ambiance Apparel；结果：。名称匹配候选，城市、电话及归属待核实。"
+          },
+          {
+            "url": "https://www.instagram.com/ambiance_apparel/",
+            "source_url": "https://www.instagram.com/explore/",
+            "method": "platform_search",
+            "evidence": "平台站内搜索；查询：Ambiance Apparel；结果：。名称匹配候选，城市、电话及归属待核实。"
+          },
+          {
+            "url": "https://www.instagram.com/ambiance_apparel_inc/",
+            "source_url": "https://www.instagram.com/explore/",
+            "method": "platform_search",
+            "evidence": "平台站内搜索；查询：Ambiance Apparel；结果：。名称匹配候选，城市、电话及归属待核实。"
+          }
+        ],
+        "query": "Ambiance Apparel",
+        "source_url": "https://www.instagram.com/explore/",
+        "message": "已找到名称匹配候选，尚未确认归属；未自动抓取候选账号帖子",
+        "new_links": 4
+      },
+      "created_at": "2026-09-23T09:24:01.630732+00:00",
+      "finished_at": "2026-09-23T09:24:54.374803+00:00",
+      "company_name": "Ambiance Apparel"
+    },
+    {
+      "id": "a29bdd8c3b8540238973b4fe3644a7f8",
+      "run_id": "3a18f60327a34a8aa0d62b5ebb484de0",
+      "company_id": "193ea042358f4b23b9f34fec6a33a89d",
+      "stage": "platform_search",
+      "target": "x",
+      "state": "succeeded",
+      "result": {
+        "status": "succeeded",
+        "links": [
+          {
+            "url": "https://x.com/ambianceapparel",
+            "source_url": "https://x.com/search?q=Ambiance+Apparel&f=user",
+            "method": "platform_search",
+            "evidence": "平台站内搜索；查询：Ambiance Apparel；结果：@AmbianceApparel。名称匹配候选，城市、电话及归属待核实。"
+          },
+          {
+            "url": "https://x.com/ambiancecanada",
+            "source_url": "https://x.com/search?q=Ambiance+Apparel&f=user",
+            "method": "platform_search",
+            "evidence": "平台站内搜索；查询：Ambiance Apparel；结果：AmbianceApparel。名称匹配候选，城市、电话及归属待核实。"
+          }
+        ],
+        "query": "Ambiance Apparel",
+        "source_url": "https://x.com/search?q=Ambiance+Apparel&f=user",
+        "message": "已找到名称匹配候选，尚未确认归属；未自动抓取候选账号帖子",
+        "new_links": 2
+      },
+      "created_at": "2026-09-23T09:24:01.630736+00:00",
+      "finished_at": "2026-09-23T09:25:04.537409+00:00",
+      "company_name": "Ambiance Apparel"
+    },
+    {
+      "id": "c0fe057a188d41dfb685228d1a9d4134",
+      "run_id": "3a18f60327a34a8aa0d62b5ebb484de0",
+      "company_id": "047b9807d3e743128ddf24588fe74dd4",
+      "stage": "platform_search",
+      "target": "facebook",
+      "state": "succeeded",
+      "result": {
+        "status": "succeeded",
+        "links": [
+          {
+            "url": "https://www.facebook.com/twpclothing2018/",
+            "source_url": "https://www.facebook.com/search/pages/?q=TWP+Clothing",
+            "method": "platform_search",
+            "evidence": "平台站内搜索；查询：TWP Clothing；结果：TWP Clothing。名称匹配候选，城市、电话及归属待核实。"
+          },
+          {
+            "url": "https://www.facebook.com/profile.php?id=100082868425981",
+            "source_url": "https://www.facebook.com/search/pages/?q=TWP+Clothing",
+            "method": "platform_search",
+            "evidence": "平台站内搜索；查询：TWP Clothing；结果：TWP Clothing。名称匹配候选，城市、电话及归属待核实。"
+          },
+          {
+            "url": "https://www.facebook.com/twpclothingofficial/",
+            "source_url": "https://www.facebook.com/search/pages/?q=TWP+Clothing",
+            "method": "platform_search",
+            "evidence": "平台站内搜索；查询：TWP Clothing；结果：TWP Clothing。名称匹配候选，城市、电话及归属待核实。"
+          },
+          {
+            "url": "https://www.facebook.com/profile.php?id=100076525742405",
+            "source_url": "https://www.facebook.com/search/pages/?q=TWP+Clothing",
+            "method": "platform_search",
+            "evidence": "平台站内搜索；查询：TWP Clothing；结果：TWP Clothing。名称匹配候选，城市、电话及归属待核实。"
+          },
+          {
+            "url": "https://www.facebook.com/profile.php?id=100077401097679",
+            "source_url": "https://www.facebook.com/search/pages/?q=TWP+Clothing",
+            "method": "platform_search",
+            "evidence": "平台站内搜索；查询：TWP Clothing；结果：TWP Clothing1444。名称匹配候选，城市、电话及归属待核实。"
+          },
+          {
+            "url": "https://www.facebook.com/profile.php?id=100063910335332",
+            "source_url": "https://www.facebook.com/search/pages/?q=TWP+Clothing",
+            "method": "platform_search",
+            "evidence": "平台站内搜索；查询：TWP Clothing；结果：TWP Clothing brand。名称匹配候选，城市、电话及归属待核实。"
+          },
+          {
+            "url": "https://www.facebook.com/twpclothing/",
+            "source_url": "https://www.facebook.com/search/pages/?q=TWP+Clothing",
+            "method": "platform_search",
+            "evidence": "平台站内搜索；查询：TWP Clothing；结果：TWP - ေတာ္ဝင္ပန္း Fashion。名称匹配候选，城市、电话及归属待核实。"
+          },
+          {
+            "url": "https://www.facebook.com/profile.php?id=100066497686576",
+            "source_url": "https://www.facebook.com/search/pages/?q=TWP+Clothing",
+            "method": "platform_search",
+            "evidence": "平台站内搜索；查询：TWP Clothing；结果：Harrison twp / ST Clair shores sell your clothing。名称匹配候选，城市、电话及归属待核实。"
+          }
+        ],
+        "query": "TWP Clothing",
+        "source_url": "https://www.facebook.com/search/pages/?q=TWP+Clothing",
+        "message": "已找到名称匹配候选，尚未确认归属；未自动抓取候选账号帖子",
+        "new_links": 8
+      },
+      "created_at": "2026-09-23T09:24:01.630741+00:00",
+      "finished_at": "2026-09-23T09:25:11.358454+00:00",
+      "company_name": "TWP Clothing"
+    },
+    {
+      "id": "e24b79d033084818bc6faa10ad2782fb",
+      "run_id": "3a18f60327a34a8aa0d62b5ebb484de0",
+      "company_id": "047b9807d3e743128ddf24588fe74dd4",
+      "stage": "platform_search",
+      "target": "instagram",
+      "state": "blocked",
+      "result": {
+        "status": "blocked",
+        "reason": "search_unrecognized",
+        "message": "未找到可操作的 Instagram 搜索入口；需检查专用会话或页面结构",
+        "new_links": 0
+      },
+      "created_at": "2026-09-23T09:24:01.630745+00:00",
+      "finished_at": "2026-09-23T09:25:28.193272+00:00",
+      "company_name": "TWP Clothing"
+    },
+    {
+      "id": "a9d9e0d7ed9c43a5842618707709e07b",
+      "run_id": "3a18f60327a34a8aa0d62b5ebb484de0",
+      "company_id": "047b9807d3e743128ddf24588fe74dd4",
+      "stage": "platform_search",
+      "target": "x",
+      "state": "blocked",
+      "result": {
+        "status": "blocked",
+        "reason": "search_unrecognized",
+        "query": "TWP Clothing",
+        "source_url": "https://x.com/search?q=TWP+Clothing&f=user",
+        "links": [],
+        "message": "未识别到名称匹配的搜索结果；可能尚未加载或页面结构不支持，不能据此判断企业没有账号",
+        "new_links": 0
+      },
+      "created_at": "2026-09-23T09:24:01.630749+00:00",
+      "finished_at": "2026-09-23T09:25:40.505915+00:00",
+      "company_name": "TWP Clothing"
+    }
+  ],
+  "summary": {
+    "total": 9,
+    "pending": 0,
+    "running": 0,
+    "succeeded": 5,
+    "no_results": 0,
+    "blocked": 4,
+    "failed": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "new_links": 21
+  }
+}
