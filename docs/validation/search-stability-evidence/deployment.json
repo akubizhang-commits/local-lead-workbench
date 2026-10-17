@@ -1,5 +1,5 @@
 {
-  "backup": "/Users/zhangnu/outputs/local-lead-workbench/data/backups/backup-before-search-stability-deploy-20260926T014615Z.sqlite3",
+  "backup": "data/backups/backup-before-search-stability-deploy-20260926T014615Z.sqlite3",
   "before": {
     "companies": 195,
     "contacts": 2925,
@@ -12,7 +12,7 @@
     "instagram": true,
     "x": true
   },
-  "preliminary_backup": "/Users/zhangnu/outputs/local-lead-workbench/data/backups/backup-before-search-stability-20260926T013807Z.sqlite3",
+  "preliminary_backup": "data/backups/backup-before-search-stability-20260926T013807Z.sqlite3",
   "deployed_at": "2026-09-26T01:46:15.772820+00:00",
   "after": {
     "companies": 195,

@@ -4,9 +4,9 @@ No network, API app, browser, crawler, real database or worker service is starte
 """
 import sys
 sys.dont_write_bytecode = True
-sys.path.insert(0, '/Users/zhangnu/outputs/local-lead-workbench')
-import asyncio, io, json, tempfile
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+import asyncio, io, json, tempfile
 from openpyxl import load_workbook
 from leadworkbench.db import Store
 from leadworkbench.sources.maps import _record

@@ -4,18 +4,25 @@
 
 ## 启动
 
-当前开发环境已经创建 Python 虚拟环境。首次在其他机器使用：
+首次使用请按以下步骤安装并启动：
 
 ```bash
 cd /path/to/local-lead-workbench
 bash scripts/setup.sh
-bash scripts/install_maps.sh  # 需要 Go；下载开源源码及 Chromium
+bash scripts/install_maps.sh  # 需要 Go 1.27.1；下载开源源码及 Chromium
 bash scripts/start.sh
 ```
 
 然后在浏览器打开 `http://127.0.0.1:18765`。保持终端运行，Ctrl+C 同时停止 API 和 worker。
 
-要求 Python 3.11+、Node.js 22+；编译 Maps 程序还需要 Go（安装器会按上游 go.mod 下载适配工具链）。首轮开发平台 macOS。依赖首次安装需要联网，软件不需要付费服务。
+要求 Python 3.11+、Node.js 22.6+；编译 Maps 程序还需要 Go 1.27.1（上游 go.mod 要求）。建议直接安装 Go 1.27.1；如果本机是其他版本，安装器会尝试通过 GOTOOLCHAIN 自动下载 go1.27.1（需要联网），下载失败时会提示处理办法。首轮开发平台 macOS。依赖首次安装需要联网，软件不需要付费服务。
+
+### 体验须知 / 已知限制
+- 需要 Python 3.11+、Node.js 22.6+、Go 1.27.1；目前只在 macOS 上验证过。
+- Maps 结果会混入少量施工商和邻近城市的企业，需要人工筛选。
+- 官网扫描较慢，常以“部分完成”结束；已得到的证据会保留。
+- 社媒功能需另外运行 `bash scripts/install_social.sh` 安装，本轮体验未验证。
+- 恢复备份时，如果有排队或运行中的任务，恢复会被拒绝；请先等待任务完成或取消/暂停相关任务。
 
 可通过 `LEAD_DATA_DIR` 指定数据目录、`LEAD_PORT` 修改端口。默认数据保存在项目 `data/`，不会加入 Git。
 
@@ -76,6 +83,8 @@ npm ci
 npm test
 npm run build
 ```
+
+`tests/test_maps_stability_review.py` 中有 5 个补丁测试需要 `vendor/` 下的 Maps 源码 checkout；没有运行过 `bash scripts/install_maps.sh` 时它们会显示为 skipped（原因写明需先运行该脚本），安装后会正常执行。
 
 所有合成企业数据仅在临时测试数据库中使用。独立 M0 预检放 `data/m0/`；通过界面启动的真实查询及证据放 `data/runs/`，正常采集结果进入客户库。
 

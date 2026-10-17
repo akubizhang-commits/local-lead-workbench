@@ -256,6 +256,8 @@ def stability_patch(tmp_path, monkeypatch):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     source = root / "vendor" / f"google-maps-scraper-{module.PINNED_COMMIT}"
+    if not (source / ".git").exists():
+        pytest.skip(f"缺少 Maps 源码 checkout（{source.relative_to(root)}），需先运行 scripts/install_maps.sh")
     checkout = tmp_path / "vendor"
     checkout.mkdir()
     for name in ("gmaps/job.go", "gmaps/place.go", "gmaps/searchjob.go", "main.go", "go.mod"):

@@ -8,5 +8,5 @@
   "applied": true,
   "archived": 14,
   "channels_preserved": 3,
-  "backup": "/Users/zhangnu/outputs/local-lead-workbench/data/backups/contact-quality-20260922T074810299693Z.sqlite3"
+  "backup": "data/backups/contact-quality-20260922T074810299693Z.sqlite3"
 }

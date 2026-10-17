@@ -22,7 +22,11 @@ if [ "$MODE" = offline ] && [ ! -e "$SRC/.git" ]; then
 fi
 PYTHON=${PYTHON:-"$ROOT/.venv/bin/python"}
 [ -x "$PYTHON" ] || PYTHON=$(command -v python3)
-GO=${GO:-$(command -v go)}
+GO=${GO:-$(command -v go || true)}
+[ -n "$GO" ] && command -v "$GO" >/dev/null 2>&1 || {
+  echo '未找到 Go 命令。请先安装 Go 1.27.1（https://go.dev/dl/），确认 `go version` 可用后重新运行 scripts/install_maps.sh；也可用 GO=/path/to/go 指定编译器。' >&2
+  exit 2
+}
 export GOTOOLCHAIN=local
 export GOFLAGS=-mod=readonly GOMAXPROCS=2 DISABLE_TELEMETRY=1 PYTHONDONTWRITEBYTECODE=1
 if [ "$MODE" = offline ]; then
@@ -64,7 +68,7 @@ else
   [ "$MODE" = bootstrap ] || { echo 'Offline source missing' >&2; exit 2; }
   mkdir -p "$ROOT/vendor"
   BOOTSTRAP_DIR=$(mktemp -d "$ROOT/vendor/.maps-bootstrap.XXXXXX")
-  git -C "$BOOTSTRAP_DIR" init
+  git init -q "$BOOTSTRAP_DIR"
   git -C "$BOOTSTRAP_DIR" remote add origin https://github.com/gosom/google-maps-scraper.git
   git -C "$BOOTSTRAP_DIR" fetch --depth 1 origin "$PIN"
   git -C "$BOOTSTRAP_DIR" checkout --detach "$PIN"
@@ -86,17 +90,27 @@ case "$("$GO" version)" in
     if [ -x "$CACHED_GO" ]; then
       GO="$CACHED_GO"
     elif [ "$MODE" = bootstrap ]; then
-      TOOLCHAIN_ROOT=$(GOTOOLCHAIN="go$REQUIRED_GO" "$GO" env GOROOT)
-      GO="$TOOLCHAIN_ROOT/bin/go"
+      if TOOLCHAIN_ROOT=$(GOTOOLCHAIN="go$REQUIRED_GO" "$GO" env GOROOT) \
+         && [ -n "$TOOLCHAIN_ROOT" ] && [ -x "$TOOLCHAIN_ROOT/bin/go" ]; then
+        GO="$TOOLCHAIN_ROOT/bin/go"
+      else
+        echo "无法获取 go${REQUIRED_GO} 工具链（上游 go.mod 要求该版本）。处理办法：" >&2
+        echo "  1. 检查网络能否访问 https://proxy.golang.org 和 https://go.dev，然后重新运行 scripts/install_maps.sh；" >&2
+        echo "  2. 或直接从 https://go.dev/dl/ 安装 Go ${REQUIRED_GO}，确认 \`go version\` 显示 go${REQUIRED_GO} 后重新运行；" >&2
+        echo "  3. 或用 GO=/path/to/go${REQUIRED_GO}/bin/go bash scripts/install_maps.sh 指定已安装的编译器。" >&2
+        echo "Maps 程序未改动。" >&2
+        exit 2
+      fi
     else
       echo "Go $REQUIRED_GO is not cached; set GO to a locally installed matching compiler" >&2
+      echo "离线模式不会下载工具链：请先安装 Go ${REQUIRED_GO}（https://go.dev/dl/），或用 GO=/path/to/go 指定匹配的编译器。" >&2
       exit 2
     fi
     ;;
 esac
 case "$("$GO" version)" in
   *" go$REQUIRED_GO "*) ;;
-  *) echo 'Go compiler version mismatch' >&2; exit 2 ;;
+  *) echo "Go compiler version mismatch: 需要 go${REQUIRED_GO}，请从 https://go.dev/dl/ 安装该版本或用 GO=/path/to/go 指定" >&2; exit 2 ;;
 esac
 # go.mod replaces scrapemate with a patched copy (upstream Chromium flags crash on macOS).
 "$PYTHON" -B "$ROOT/scripts/patch_maps_stability.py" "$SRC" --prepare-scrapemate --go "$GO"

@@ -79,7 +79,7 @@ Requires Python standard library and curl. Run with working proxy environment; o
 
 ```bash
 cd ~
-python3 /Users/zhangnu/outputs/local-lead-workbench/scripts/import_za_geography.py
+python3 <项目目录>/scripts/import_za_geography.py
 ```
 
 Default snapshot directory is the system temporary directory plus `za-geography-2026`;

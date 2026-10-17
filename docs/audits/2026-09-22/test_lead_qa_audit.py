@@ -9,7 +9,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-ROOT = Path('/Users/zhangnu/outputs/local-lead-workbench')
+ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 import pytest
 from fastapi.testclient import TestClient
