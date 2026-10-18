@@ -5,6 +5,12 @@ import json
 import pytest
 from leadworkbench import market_plan as market
 
+
+@pytest.fixture(autouse=True)
+def no_catalogue_fallback(monkeypatch):
+    """These tests cover the geocoder path; the P0-5 catalogue fallback is tested in test_market_relocate.py."""
+    monkeypatch.setattr(market, "_catalogue_fallback", lambda *args, **kwargs: None)
+
 CONFIG = dict(city='Los Angeles', state='California', country='US',
               company_types=['wholesale'], keywords=['custom garments'])
 CITY = dict(lat='34.1', lon='-118.3', boundingbox=['33.7', '34.5', '-118.7', '-118.1'],

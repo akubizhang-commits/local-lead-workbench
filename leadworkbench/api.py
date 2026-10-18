@@ -472,6 +472,11 @@ def create_app(data_dir=None, *, allowed_hosts=None):
     def run(id: str):
         return store.run(id)
 
+    # Must stay registered before /api/runs/{id}/{action}, which would answer 422 for "relocate".
+    @app.post("/api/runs/{id}/relocate")
+    def relocate(id: str):
+        return store.relocate_market_run(id)
+
     @app.post("/api/runs/{id}/{action}")
     def control(id: str, action: Literal["pause", "resume", "cancel"]):
         return store.control(id, action)

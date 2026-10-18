@@ -32,6 +32,14 @@ MIN_CELL_KM = 0.5
 INTERNAL_JOB_LIMIT = 120
 JOB_TIMEOUT_SECONDS = 180
 ATTRIBUTION = '© OpenStreetMap contributors; city geocoding by Nominatim (ODbL)'
+# P0-5: a text-only plan is always reported as incomplete; the prefix identifies the reason.
+INCOMPLETE_PREFIX = '结果不完整：'
+INCOMPLETE_REASONS = {
+    'geocode_failed': '结果不完整：城市范围定位失败，本轮只按城市名称做了文字检索（单次检索通常只返回首批结果）。'
+                      '可点击“重试定位并补查”。',
+    'catalogue_no_bounds': '结果不完整：内置目录中该城市没有范围坐标，城市定位也未成功，本轮只按城市名称做了文字检索'
+                           '（单次检索通常只返回首批结果）。可点击“重试定位并补查”。',
+}
 TYPE_QUERIES = {
     'wholesale': ('clothing wholesaler', 'apparel wholesaler'),
     'retail': ('clothing retailer', 'clothing store'),
@@ -94,6 +102,10 @@ def _city_result(rows, country, city, state):
     if not s <= lat <= n or not w <= lon <= e:
         raise ValueError('City center is outside returned bounds')
     return {'geo': [lat, lon], 'bbox': bounds}
+
+
+class CatalogueNoBounds(ValueError):
+    """The selected catalogue place has no reference bounds."""
 
 
 class GeocoderCooldown(ValueError):
@@ -205,7 +217,52 @@ async def _reserve_request(lock):
     _save_reservation(lock, time.time())
 
 
-async def _geocode(city, state, country, data_dir):
+def _city_cache(city, state, country, data_dir):
+    endpoint = os.environ.get('NOMINATIM_ENDPOINT', 'https://nominatim.openstreetmap.org/search')
+    identity = [endpoint, city.casefold(), state.casefold(), country]
+    key = hashlib.sha256(json.dumps(identity, ensure_ascii=False).encode()).hexdigest()
+    return Path(data_dir) / 'geocoding' / f'{key}.json'
+
+
+def geocoder_retry_at(city, state, country, data_dir):
+    """Epoch seconds before which the geocoder will not be asked again (server or shared cooldown), or None."""
+    until = 0.0
+    try:
+        cached = json.loads(_city_cache(city, state, country.lower(), data_dir).read_text(encoding='utf-8'))
+        until = float(cached.get('retry_not_before') or 0)
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+    try:
+        saved = json.loads(RATE_LIMIT_FILE.read_text() or 'null')
+        if isinstance(saved, dict):
+            until = max(until, float(saved.get('not_before') or 0))
+    except (OSError, ValueError, TypeError):
+        pass
+    return until if math.isfinite(until) and until > time.time() else None
+
+
+def _catalogue_fallback(country, state, city, skip_place=None):
+    """Reference bounds of the uniquely named catalogue place, or None (local lookup, no network)."""
+    try:
+        from .regions import catalogue, country_config, index, unique_place_id
+        place_id = unique_place_id(country.upper(), state, city)
+        if not place_id or place_id == skip_place:
+            return None
+        place = index()[place_id]
+        if not place.get('bbox') or not place.get('geo'):
+            return None
+        bounds = _bbox(place['bbox'])
+        vintage = catalogue(country.upper())['metadata']['vintage']
+        if country == 'us':
+            attribution = f"U.S. Census Bureau TIGERweb · {vintage} · Place {place['geoid']}"
+        else:
+            attribution = f"{country_config(country.upper())['attribution']} · {vintage}"
+        return {'geo': place['geo'], 'bbox': bounds}, attribution, vintage
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+async def _geocode(city, state, country, data_dir, ignore_failure_cache=False):
     endpoint = os.environ.get('NOMINATIM_ENDPOINT', 'https://nominatim.openstreetmap.org/search')
     params = {'city': city, 'state': state, 'countrycodes': country,
               'featureType': 'city', 'format': 'jsonv2', 'addressdetails': '1',
@@ -233,7 +290,8 @@ async def _geocode(city, state, country, data_dir):
                 retry_at = float(cached.get('retry_not_before', 0))
                 if not math.isfinite(retry_at):
                     raise ValueError('Invalid failure cache retry timestamp')
-                if time.time() < max(failed_at + FAILURE_CACHE_TTL, retry_at):
+                # Relocation skips the 15-minute failure cache, never a server cooldown.
+                if time.time() < (retry_at if ignore_failure_cache else max(failed_at + FAILURE_CACHE_TTL, retry_at)):
                     warning = str(cached['warning'])
                     if warning.startswith('City geocoding unavailable:'):
                         # Old caches did not retain exception types. Do not
@@ -359,6 +417,7 @@ async def plan_market(config, data_dir: Path) -> dict:
     location = ', '.join(part for part in (city, state, country.upper()) if part)
     attribution = ATTRIBUTION
     place_id = (config.get("geography") or {}).get("place_id")
+    geometry, geo_warnings, source, catalogue_error = None, [], None, None
     try:
         if place_id:
             from .regions import index, catalogue, country_config
@@ -371,21 +430,50 @@ async def plan_market(config, data_dir: Path) -> dict:
                     place["name"].casefold(), place["official_name"].casefold()}:
                 raise ValueError("Reference place/name mismatch")
             if not place.get("bbox") or not place.get("geo"):
-                raise ValueError("所选地区目录未提供范围坐标；按自治市完整名称进行文字检索")
+                raise CatalogueNoBounds("所选地区目录未提供范围坐标；按自治市完整名称进行文字检索")
             bounds = _bbox(place["bbox"])
             if bounds[3]-bounds[2] > 180:
                 raise ValueError("Reference place crosses the antimeridian")
             geometry = {"geo": place["geo"], "bbox": bounds}
-            geo_warnings = []
+            source = 'catalogue'
             if country == "us":
                 attribution = f"U.S. Census Bureau TIGERweb · {catalogue()['metadata']['vintage']} · Place {place['geoid']}"
             else:
                 attribution = f"{country_config(country.upper())['attribution']} · {catalogue(country.upper())['metadata']['vintage']}"
-        else:
-            geometry, geo_warnings = await _geocode(city, state, country, data_dir)
+    except CatalogueNoBounds as exc:
+        catalogue_error = 'no_bounds'
+        geo_warnings.append(str(exc))
     except (OSError, ValueError) as exc:
-        detail = str(exc).strip() or type(exc).__name__
-        geometry, geo_warnings = None, [f'City cache unavailable: {detail}; root searches only']
+        catalogue_error = 'invalid'
+        geo_warnings.append(f'City cache unavailable: {str(exc).strip() or type(exc).__name__}; root searches only')
+    whole_municipality = (config.get('geography') or {}).get('scope') == 'whole_municipality'
+    # A municipality is not a geocoder "city": never look it up by name (keeps the ZA rule).
+    if geometry is None and not (catalogue_error and whole_municipality):
+        try:
+            relocate = {'ignore_failure_cache': True} if config.get('_relocate') else {}
+            geometry, warnings_found = await _geocode(city, state, country, data_dir, **relocate)
+            geo_warnings.extend(warnings_found)
+            if geometry:
+                source, attribution = 'geocoder', ATTRIBUTION
+        except (OSError, ValueError) as exc:
+            detail = str(exc).strip() or type(exc).__name__
+            geometry = None
+            geo_warnings.append(f'City cache unavailable: {detail}; root searches only')
+    if geometry is None and not whole_municipality:
+        fallback = _catalogue_fallback(country, state, city, place_id if catalogue_error == 'no_bounds' else None)
+        if fallback:
+            geometry, attribution, vintage = fallback
+            source = 'catalogue'
+            geo_warnings.append(f'已改用内置城市范围（{vintage}）')
+    unresolved, incomplete_reason, retry_at = [], None, None
+    if geometry is None:
+        incomplete_reason = 'catalogue_no_bounds' if catalogue_error == 'no_bounds' else 'geocode_failed'
+        reason = INCOMPLETE_REASONS[incomplete_reason]
+        retry_at = geocoder_retry_at(city, state, country, data_dir)
+        if retry_at:
+            stamp = datetime.fromtimestamp(retry_at, timezone.utc).isoformat()
+            reason += f'定位服务冷却中，请在 {stamp} 后重试。'
+        unresolved = [reason]
     # Geometry warnings describe the chosen fallback, not unfinished planning.
     incomplete = bool(warnings)
     warnings.extend(geo_warnings)
@@ -397,12 +485,18 @@ async def plan_market(config, data_dir: Path) -> dict:
         if geometry:
             jobs.extend(_grid(root, 4, 1))
     scope_label = '自治市' if (config.get('geography') or {}).get('scope') == 'whole_municipality' else '城市'
-    return dict(jobs=jobs, coverage={
+    plan = dict(jobs=jobs, coverage={
         'scope_label': f'{location} · {scope_label}参考范围分区检索' if geometry else
                        f'{location} · {scope_label}文字检索（范围定位未完成）',
         'bbox': geometry['bbox'] if geometry else None,
         'attribution': attribution if geometry else '',
         'query_basis': basis,
         'query_terms': sorted(terms)[:30],
+        'geometry_source': source,
     }, warnings=sorted(set(warnings)), mode='grid' if geometry else 'text_only',
-       status='partial' if incomplete else 'completed')
+       status='partial' if incomplete else 'completed', geometry_source=source)
+    if unresolved:
+        # status stays 'completed': "incomplete" travels only through unresolved (finalize -> partial).
+        plan.update(unresolved=unresolved, incomplete_reason=incomplete_reason,
+                    geocoder_retry_at=datetime.fromtimestamp(retry_at, timezone.utc).isoformat() if retry_at else None)
+    return plan

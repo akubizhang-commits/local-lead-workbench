@@ -575,6 +575,16 @@ class MarketStoreMixin:
             reasons += plan.get("warnings") or ["Market planning incomplete"]
         if row["incomplete"]:
             reasons = reasons + [f"{row['incomplete']} discovery jobs incomplete"]
+        from .market_plan import INCOMPLETE_PREFIX, INCOMPLETE_REASONS
+        incomplete_reason = None
+        if plan.get("mode") == "text_only":
+            # Every text-only round is incomplete, including rounds planned before P0-5 or
+            # whose reason was cleared by "继续".
+            incomplete_reason = plan.get("incomplete_reason") or "geocode_failed"
+            if not any(str(r).startswith(INCOMPLETE_PREFIX) for r in reasons):
+                reasons.insert(0, INCOMPLETE_REASONS.get(incomplete_reason, INCOMPLETE_REASONS["geocode_failed"]))
+        run = con.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
+        block = self._relocate_block(con, run, plan) if run else "记录不存在"
         coverage = dict(plan.get("coverage", {}))
         for key in ("attribution", "bbox", "reference_url"):
             if key not in coverage and key in plan:
@@ -583,8 +593,52 @@ class MarketStoreMixin:
                         planned=row["total"], done=row["done"] or 0,
                         capability_exhausted=bool(exhausted),
                         retryable=self.market_resume_allowed(con, run_id),
-                        unresolved=list(dict.fromkeys(str(reason) for reason in reasons)))
+                        unresolved=list(dict.fromkeys(str(reason) for reason in reasons)),
+                        incomplete=incomplete_reason is not None, incomplete_reason=incomplete_reason,
+                        geometry_source=plan.get("geometry_source") or coverage.get("geometry_source"),
+                        geocoder_retry_at=plan.get("geocoder_retry_at"),
+                        relocatable=block is None, relocate_block_reason=block)
         return coverage
+
+    def _relocate_block(self, con, run, plan):
+        """Why "重试定位并补查" is unavailable for this market round (design §7.4 rows 3–8), or None."""
+        latest = con.execute("""SELECT id FROM runs WHERE task_id=? AND kind='discovery'
+            ORDER BY created_at DESC,rowid DESC LIMIT 1""", (run["task_id"],)).fetchone()
+        if not latest or latest[0] != run["id"]:
+            return "只能对该市场最新一轮补查"
+        if con.execute("""SELECT 1 FROM runs WHERE task_id=? AND kind='discovery' AND id<>?
+                AND status IN ('queued','running','paused') LIMIT 1""", (run["task_id"], run["id"])).fetchone():
+            return "该市场有进行中的轮次，请先等待或暂停"
+        if plan.get("mode") != "text_only":
+            return "本轮已按城市范围检索，无需补查"
+        if run["status"] in {"queued", "running"}:
+            return "轮次正在执行，请等待结束或先暂停"
+        if run["status"] == "paused":
+            return "请先点继续，或取消后再补查"
+        if run["status"] == "cancelled":
+            return "已取消的轮次不能补查，请开始新一轮更新"
+        return None
+
+    def relocate_market_run(self, id):
+        """Retry city geometry for a text-only round and add the area searches (no Maps policy bypass)."""
+        from .db import Conflict
+        from .market_plan import INCOMPLETE_PREFIX
+        with self.connect() as con:
+            con.execute("BEGIN IMMEDIATE")
+            run = self.row(con.execute("SELECT * FROM runs WHERE id=?", (id,)).fetchone())
+            market = self._market_run(con, id)
+            if not market:
+                raise ValueError("仅市场检索轮次支持补查")
+            block = self._relocate_block(con, run, json.loads(market["plan"]))
+            if block:
+                raise Conflict(block)
+            reasons = [r for r in json.loads(market["unresolved"]) if not str(r).startswith(INCOMPLETE_PREFIX)]
+            con.execute("UPDATE market_runs SET unresolved=? WHERE run_id=?", (canonical(reasons), id))
+            con.execute("UPDATE work_items SET state='pending',result=? WHERE run_id=? AND stage='planning'",
+                        (canonical({"relocate": True}), id))
+            con.execute("""UPDATE runs SET status='queued',finished_at=NULL,error=NULL,message='重试城市定位并补查'
+                WHERE id=?""", (id,))
+        return self.run(id)
 
     def _market_task_details(self, con, task, tier_stats=None):
         if task["limit"] != 0:

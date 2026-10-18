@@ -134,8 +134,10 @@ def test_completed_fallback_is_not_an_unresolved_task_but_real_failures_remain(t
         con.execute("UPDATE work_items SET state='succeeded' WHERE run_id=?",(run['id'],))
         con.execute("UPDATE work_items SET result=? WHERE run_id=? AND stage='planning'",(json.dumps({'status':'completed','mode':'text_only','message':'地区范围不可用，暂用城市文字检索'}),run['id']))
     store.finalize(run['id'])
-    assert store.run(run['id'])['status']=='completed'
-    assert store.task(task['id'])['coverage']['unresolved']==[]
+    # P0-5: a text-only round is reported incomplete (one reason), yet planning itself succeeded.
+    assert store.run(run['id'])['status']=='partial'
+    [reason]=store.task(task['id'])['coverage']['unresolved']
+    assert reason.startswith('结果不完整：') and store.task(task['id'])['coverage']['relocatable'] is True
     stage=store.task_activity(task['id'])['workflow']['stages'][0]
     assert stage['succeeded']==1 and stage['partial']==0 and stage['mode']=='text_only'
     with store.connect() as con:

@@ -46,9 +46,11 @@ async def execute_run_item(store, run_id, *, discover=None, enrich, planner=None
             if planner is None:
                 from .market_plan import plan_market
                 planner = plan_market
-            plan = await planner(run["snapshot"], store.directory)
+            snapshot = {**run["snapshot"], "_relocate": True} if previous_result.get("relocate") else run["snapshot"]
+            plan = await planner(snapshot, store.directory)
             if store.run(run_id)["status"] not in {"queued", "running"}:
-                store.finish_item(item["id"], "pending", {"message": "市场规划已暂停"})
+                # Keep the relocate marker so "继续" re-plans the same way.
+                store.finish_item(item["id"], "pending", {**previous_result, "message": "市场规划已暂停"})
                 return True
             store.save_market_plan(run_id, plan)
             result = {"status": plan.get("status", "completed"), "warnings": plan.get("warnings", []),

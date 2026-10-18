@@ -18,6 +18,12 @@ from test_market_plan import CITY, CONFIG
 
 
 @pytest.fixture(autouse=True)
+def no_catalogue_fallback(monkeypatch):
+    """These tests cover the geocoder path; the P0-5 catalogue fallback is tested in test_market_relocate.py."""
+    monkeypatch.setattr(market_plan, "_catalogue_fallback", lambda *args, **kwargs: None)
+
+
+@pytest.fixture(autouse=True)
 def isolated_maps_binary(monkeypatch):
     monkeypatch.delenv("MAPS_SCRAPER_BIN", raising=False)
 

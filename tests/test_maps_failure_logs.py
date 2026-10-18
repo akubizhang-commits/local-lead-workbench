@@ -9,6 +9,12 @@ from test_maps import ROW, fake
 from test_market_plan import CONFIG
 
 
+@pytest.fixture(autouse=True)
+def no_catalogue_fallback(monkeypatch):
+    """These tests cover the geocoder path; the P0-5 catalogue fallback is tested in test_market_relocate.py."""
+    monkeypatch.setattr(market_plan, "_catalogue_fallback", lambda *args, **kwargs: None)
+
+
 @pytest.mark.parametrize("error,reason", [
     ("playwright: target closed: Target page, context or browser has been closed", "browser_closed"),
     ("inactivity timeout: 0001-01-01T00:00:00Z", "inactivity_timeout"),
