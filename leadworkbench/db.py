@@ -633,6 +633,8 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                                     (uid(), prior["id"], encode(dict(prior)), prior["observed_at"]))
                     con.execute("INSERT INTO contact_versions VALUES(?,?,?,?)",
                                 (uid(), prior["id"], encode(contact), contact.get("observed_at") or now()))
+                    if con.execute("SELECT 1 FROM manual_contacts WHERE contact_id=?", (prior["id"],)).fetchone():
+                        continue  # Manually entered: later collection keeps history only, never overwrites.
                     if conflict:
                         # The current contact stays as it is; the new values become a proposal.
                         self._propose_contact_change(con, id, run_id, prior, contact)
@@ -811,6 +813,54 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         self._record_adoption(con, r["company_id"], contact_id, "accepted")
         return {"ok": True, "auto_closed": 0}, False
 
+    def add_manual_contact(self, id, revision, name="", role="", email="", phone="", url="", procurement=False,
+                           note=""):
+        """Manually entered contact, guarded by the company revision (design §6.4)."""
+        from .contact_quality import is_procurement_role
+        name, role, email, phone, url, note = (str(v or "").strip() for v in (name, role, email, phone, url, note))
+        if not (email or phone or url):
+            raise ValueError("请至少填写邮箱、电话或联系页面中的一项")
+        if procurement:
+            kind = "procurement"
+            role_status = "explicit" if role or name else "department"
+        else:
+            kind = "procurement" if role and is_procurement_role(role) else "general"
+            role_status = "explicit" if role else "unknown"
+        association = "same_block" if name else "company_only"
+        fingerprint = hashlib.sha256(encode(["manual", id, email or phone or url, name]).encode()).hexdigest()
+        stamp = now()
+        with self.connect() as con:
+            con.execute("BEGIN IMMEDIATE")
+            company = self.row(con.execute("SELECT * FROM companies WHERE id=?", (id,)).fetchone())
+            if company["revision"] != revision:
+                raise Conflict("资料已更新，请刷新后重试")
+            if company["status"] == "do_not_contact":
+                raise Conflict("此企业已标记拒绝联系，不能新增联系人")
+            if email and con.execute("""SELECT 1 FROM contacts WHERE company_id=? AND lower(trim(email))=lower(trim(?))
+                    AND review_status NOT IN ('invalid','superseded')""", (id, email)).fetchone():
+                raise Conflict("该邮箱已在联系人中，请直接核对现有记录")
+            if con.execute("SELECT 1 FROM contacts WHERE fingerprint=?", (fingerprint,)).fetchone():
+                raise Conflict("该联系人已存在，请直接核对现有记录")
+            contact_id = uid()
+            row = dict(name=name, role=role, email=email, url=url, kind=kind, role_status=role_status,
+                       association_status=association, source_url="", evidence="人工录入：" + note, observed_at=stamp)
+            try:
+                con.execute("INSERT INTO contacts VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            (contact_id, id, *row.values(), "accept", fingerprint))
+            except sqlite3.IntegrityError as exc:
+                raise Conflict("该联系人已存在，请直接核对现有记录") from exc
+            con.execute("INSERT INTO manual_contacts VALUES(?,?,?,?)", (contact_id, phone, note, stamp))
+            con.execute("INSERT INTO contact_decisions VALUES(?,'accepted',?)", (contact_id, stamp))
+            con.execute("INSERT INTO contact_versions VALUES(?,?,?,?)",
+                        (uid(), contact_id, encode({**row, "phone": phone, "origin": "manual"}), stamp))
+            con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
+                        (uid(), id, "contact", None, encode({**row, "phone": phone}), stamp, "人工新增联系人"))
+            con.execute("UPDATE companies SET revision=revision+1 WHERE id=?", (id,))
+            con.execute("INSERT OR REPLACE INTO company_manual_checks VALUES(?,?)", (id, stamp))
+            if self._facets_enabled:
+                self._refresh_facets_locked(con)
+        return self.detail(id)
+
     def contact_count(self, con, company_id=None):
         """Distinct usable contact entries; callers refresh facets before opening `con`."""
         from .market_store import USABLE_FROM, usable_contact_sql
@@ -822,8 +872,12 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
     def contact_records(self, con, company_id):
         """Current identities with source snapshots; attribution history stays separate."""
         records = []
-        for row in con.execute("SELECT * FROM contacts WHERE company_id=?", (company_id,)).fetchall():
+        for row in con.execute("""SELECT ct.*,mc.phone manual_phone,mc.contact_id IS NOT NULL manual FROM contacts ct
+                LEFT JOIN manual_contacts mc ON mc.contact_id=ct.id WHERE ct.company_id=?""", (company_id,)).fetchall():
             current = dict(row)
+            manual, phone = current.pop("manual"), current.pop("manual_phone")
+            if manual:
+                current.update(origin="manual", phone=phone or "")
             decision = con.execute("SELECT adoption_status FROM contact_decisions WHERE contact_id=?", (current["id"],)).fetchone()
             current["adoption_status"] = decision[0] if decision else ("excluded" if current["review_status"] == "reject" else "automatic")
             records.append(current)

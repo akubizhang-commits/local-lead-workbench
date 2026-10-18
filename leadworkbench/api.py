@@ -252,6 +252,59 @@ class ExclusionRuleInput(Input):
         return self
 
 
+class ManualContactInput(Input):
+    revision: int = Field(ge=1)
+    name: str = Field(default="", max_length=120)
+    role: str = Field(default="", max_length=120)
+    email: str = Field(default="", max_length=254)
+    phone: str = Field(default="", max_length=40)
+    url: str = Field(default="", max_length=2048)
+    procurement: bool = False
+    note: str = Field(default="", max_length=1000)
+
+    @field_validator("name", "role", "note")
+    @classmethod
+    def stripped(cls, value):
+        return value.strip()
+
+    @field_validator("email")
+    @classmethod
+    def email_valid(cls, value):
+        from .contact_quality import invalid_email_reason
+        from .sources.website import EMAIL
+        value = value.strip()
+        if value and (not EMAIL.fullmatch(value) or invalid_email_reason(value)):
+            raise ValueError("邮箱格式无效")
+        return value
+
+    @field_validator("phone")
+    @classmethod
+    def phone_valid(cls, value):
+        import re
+        value = value.strip()
+        digits = re.sub(r"\D", "", value)
+        if value and (re.search(r"[^0-9+\s().-]", value) or not 7 <= len(digits) <= 15):
+            raise ValueError("电话格式无效")
+        return value
+
+    @field_validator("url")
+    @classmethod
+    def url_valid(cls, value):
+        value = value.strip()
+        if not value:
+            return value
+        try:
+            return normalize_url(value)
+        except Exception as exc:
+            raise ValueError(str(exc)) from exc
+
+    @model_validator(mode="after")
+    def channel_required(self):
+        if not (self.email or self.phone or self.url):
+            raise ValueError("请至少填写邮箱、电话或联系页面中的一项")
+        return self
+
+
 # Repeatable ?category= filter: up to 20 values of 1–120 characters, OR semantics.
 CategoryFilter = Annotated[list[Annotated[str, Field(min_length=1, max_length=120)]], Query(max_length=20)]
 Excluded = Literal["hide", "only", "include"]
@@ -472,6 +525,10 @@ def create_app(data_dir=None, *, allowed_hosts=None):
     @app.patch("/api/companies/{id}")
     def update_company(id: str, body: CompanyPatch):
         return store.update_company(id, **body.model_dump())
+
+    @app.post("/api/companies/{id}/contacts")
+    def add_manual_contact(id: str, body: ManualContactInput):
+        return store.add_manual_contact(id, **body.model_dump())
 
     @app.post("/api/companies/{id}/refresh")
     def refresh(id: str):

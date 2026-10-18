@@ -36,9 +36,12 @@ def _source(url, website):
 
 def contact_fields(contact, website=""):
     source_url = contact.get("source_url") or ""
-    provenance = dict(source_url=source_url, source_label=_source(source_url, website),
+    manual = contact.get("origin") == "manual"
+    provenance = dict(source_url=source_url, source_label="人工录入" if manual else _source(source_url, website),
                       observed_at=contact.get("observed_at") or "")
     values = {}
+    if manual and contact.get("phone"):
+        values["phone"] = contact["phone"]
     if contact.get("email") and not invalid_email_reason(contact["email"]):
         values["email"] = contact["email"]
     if contact.get("role"):
