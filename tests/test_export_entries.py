@@ -33,10 +33,11 @@ def setup(tmp_path):
                                     company_types=["wholesale"], auto_enrich=False))
     run = store.start_task(task["id"])
 
-    def add(n, name, address, phone="", website="https://alpha.example", category="Roofing supply store", market=task):
+    def add(n, name, address, phone="", website="https://alpha.example", category="Roofing supply store", market=task,
+            seen="2026-10-01T00:00:00+00:00"):
         record = _record(dict(title=name, link=f"https://www.google.com/maps/search/?api=1&query_place_id=P{n}",
                               place_id=f"P{n}", address=address, phone=phone, web_site=website, category=category),
-                         "2026-10-01T00:00:00+00:00")
+                         seen)
         market_run = run if market is task else store.start_task(market["id"])
         return store.ingest_market(record, market_run["id"], "roofing", market["id"])["id"]
     return store, task, run, add
@@ -75,7 +76,7 @@ def test_city_fallback_and_target_market_without_market_filter(setup):
     other = store.create_market(dict(country="US", state="California", city="San Jose", keywords=["metal"],
                                      company_types=[], auto_enrich=False))
     company = add(2, "Beta", "somewhere unparsable", phone="+1 408-555-0102")
-    add(2, "Beta", "somewhere unparsable", phone="+1 408-555-0102", market=other)
+    add(2, "Beta", "somewhere unparsable", phone="+1 408-555-0102", market=other, seen="2026-10-02T00:00:00+00:00")
     [entry], _ = rows(export_data(store, "csv", "entries"))
     assert (entry["实际城市"], entry["城市依据"]) == ("San Jose", "目标市场（地址未解析）")
     assert entry["目标市场"] == f"{task['name']}、{other['name']}"
