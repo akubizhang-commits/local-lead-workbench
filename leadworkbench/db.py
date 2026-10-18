@@ -46,6 +46,19 @@ class Conflict(ValueError):
     pass
 
 
+# Contact change proposals (P0-2, design §3.3).
+MATERIAL_KEYS = ("name", "role", "kind", "role_status", "association_status", "evidence")
+IDENTITY_KEYS = ("name", "role", "kind", "role_status", "association_status")
+RESTORE_COLUMNS = ("name", "role", "kind", "role_status", "association_status", "evidence", "source_url",
+                   "observed_at", "review_status")
+STALE_PROPOSAL = "当前值已变化，本条建议已失效，请查看最新联系人"
+
+
+def proposal_key(values):
+    return hashlib.sha256(json.dumps({k: values.get(k) or "" for k in IDENTITY_KEYS}, ensure_ascii=False,
+                                     sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
 def calendar_next(anchor: datetime, after: datetime, months: int, zone: str):
     """First calendar occurrence after `after`, preserving the original day."""
     from dateutil.tz import resolve_imaginary
@@ -595,8 +608,9 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                         (id, contact["email"], contact["source_url"])).fetchone()
                 if prior:
                     if prior["review_status"] == "reject":
+                        # Only a rejected *new contact* review leaves the row in 'reject'.
                         con.execute("INSERT OR IGNORE INTO contact_decisions VALUES(?, 'excluded', ?)", (prior["id"], now()))
-                    material = ("name", "role", "kind", "role_status", "association_status", "evidence")
+                    material = MATERIAL_KEYS
                     contact = {**contact, **{k: contact.get(k) or prior[k] or "" for k in material}}
                     conflict = any(prior[k] and contact[k] != prior[k] for k in material if k != "evidence")
                     if conflict or contact["source_url"] != prior["source_url"] or contact["evidence"] != prior["evidence"]:
@@ -604,6 +618,10 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                                     (uid(), prior["id"], encode(dict(prior)), prior["observed_at"]))
                     con.execute("INSERT INTO contact_versions VALUES(?,?,?,?)",
                                 (uid(), prior["id"], encode(contact), contact.get("observed_at") or now()))
+                    if conflict:
+                        # The current contact stays as it is; the new values become a proposal.
+                        self._propose_contact_change(con, id, run_id, prior, contact)
+                        continue
                     if any((prior[k] or "") != (contact.get(k) or "") for k in material if k != "evidence"):
                         self._mark_market_changed(con, run_id, id)
                     if any((prior[k] or "") != (contact.get(k) or "") for k in material):
@@ -611,14 +629,13 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                         new = encode({k: contact.get(k) or "" for k in material})
                         assignments = ",".join(f"{k}=?" for k in material)
                         con.execute(f"UPDATE contacts SET {assignments},review_status=? WHERE id=?",
-                                    tuple(contact.get(k) or "" for k in material) + ("pending" if conflict else prior["review_status"], prior["id"]))
-                        if conflict:
-                            con.execute("UPDATE reviews SET status='superseded' WHERE kind='contact' AND new_value=? AND status='pending'",
-                                        (prior["id"],))
-                            self._review(con, id, "contact", "contact", old, prior["id"], contact["source_url"],
-                                         contact["evidence"], revision=uid())
+                                    tuple(contact.get(k) or "" for k in material) + (prior["review_status"], prior["id"]))
+                        # A pending proposal is compared against the row as it is now.
+                        con.execute("""UPDATE reviews SET old_value=? WHERE id IN (SELECT p.review_id
+                            FROM contact_change_proposals p JOIN reviews r ON r.id=p.review_id AND r.status='pending'
+                            WHERE p.contact_id=? AND p.status='pending')""", (new, prior["id"]))
                         con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
-                                    (uid(), id, "contact", old, new, now(), "联系人资料变化，需审核" if conflict else "自动补全联系人资料或更新来源证据"))
+                                    (uid(), id, "contact", old, new, now(), "自动补全联系人资料或更新来源证据"))
                     con.execute("UPDATE contacts SET observed_at=?,source_url=? WHERE id=?",
                                 (contact.get("observed_at") or now(), contact["source_url"], prior["id"]))
                     continue
@@ -642,6 +659,131 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             if self._facets_enabled:
                 self._refresh_facets_locked(con)
         self.reclassify_contacts(id)
+
+    def _propose_contact_change(self, con, company_id, run_id, prior, contact):
+        """Conflict branch of apply_enrichment (design §3.4): never rewrites the contact row."""
+        contact_id = prior["id"]
+        legacy = con.execute("""SELECT 1 FROM reviews r WHERE r.kind='contact' AND r.status='pending' AND r.new_value=?
+            AND COALESCE(r.old_value,'') NOT IN ('','{}')
+            AND NOT EXISTS(SELECT 1 FROM contact_change_proposals p WHERE p.review_id=r.id)""", (contact_id,)).fetchone()
+        if legacy:
+            return  # Wait for the user to decide the legacy conflict first (§3.5).
+        if con.execute("""SELECT 1 FROM contact_decisions WHERE contact_id=? AND adoption_status='excluded'""",
+                       (contact_id,)).fetchone():
+            return  # The user excluded this contact; a proposal must not quietly undo that.
+        key = proposal_key(contact)
+        if con.execute("""SELECT 1 FROM contact_change_proposals WHERE contact_id=? AND proposal_key=?
+                          AND status='rejected'""", (contact_id, key)).fetchone():
+            return  # Already declined: the same new value does not ask again.
+        self._mark_market_changed(con, run_id, company_id)
+        source_url, evidence = contact.get("source_url") or "", (contact.get("evidence") or "")[:4000]
+        pending = con.execute("""SELECT p.review_id FROM contact_change_proposals p
+            JOIN reviews r ON r.id=p.review_id AND r.status='pending'
+            WHERE p.contact_id=? AND p.proposal_key=? AND p.status='pending'""", (contact_id, key)).fetchone()
+        if pending:
+            fingerprint = hashlib.sha256(encode(["contact_proposal", pending[0], source_url, evidence]).encode()).hexdigest()
+            con.execute("INSERT OR IGNORE INTO review_evidence VALUES(?,?,?,?,?)",
+                        (pending[0], fingerprint, source_url, evidence, now()))
+            return
+        for other in con.execute("""SELECT review_id FROM contact_change_proposals
+                                    WHERE contact_id=? AND status='pending'""", (contact_id,)).fetchall():
+            con.execute("UPDATE contact_change_proposals SET status='superseded',decided_at=? WHERE review_id=?",
+                        (now(), other[0]))
+            con.execute("UPDATE reviews SET status='superseded' WHERE id=? AND status='pending'", (other[0],))
+        review_id = uid()
+        review_fp = hashlib.sha256(encode(["contact_proposal", review_id]).encode()).hexdigest()
+        evidence_fp = hashlib.sha256(encode(["contact_proposal", review_id, source_url, evidence]).encode()).hexdigest()
+        old = encode({k: prior[k] for k in MATERIAL_KEYS})
+        con.execute("INSERT INTO reviews VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                    (review_id, company_id, "contact", "contact", old, contact_id, source_url, evidence,
+                     "pending", now(), review_fp))
+        con.execute("INSERT OR IGNORE INTO review_evidence VALUES(?,?,?,?,?)",
+                    (review_id, evidence_fp, source_url, evidence, now()))
+        proposal = {k: contact.get(k) or "" for k in MATERIAL_KEYS}
+        proposal.update(source_url=source_url, observed_at=contact.get("observed_at") or now())
+        con.execute("INSERT INTO contact_change_proposals VALUES(?,?,?,?,?,?,?,?)",
+                    (review_id, contact_id, encode(proposal), key, "pending", "proposal", now(), None))
+        con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
+                    (uid(), company_id, "contact", old, encode({k: proposal[k] for k in MATERIAL_KEYS}), now(),
+                     "联系人资料变化，需审核（原记录保持可用）"))
+
+    def _pre_proposal_snapshot(self, con, review, current):
+        """Contact values before a legacy conflict overwrote them (design §3.3)."""
+        previous = json.loads(review["old_value"] or "{}")
+        for version in con.execute("""SELECT payload FROM contact_versions WHERE contact_id=?
+                ORDER BY observed_at DESC,rowid DESC""", (current["id"],)):
+            payload = json.loads(version[0])
+            if "review_status" in payload and all((payload.get(k) or "") == (previous.get(k) or "") for k in MATERIAL_KEYS):
+                return {k: payload.get(k) or "" for k in RESTORE_COLUMNS}
+        decision = con.execute("SELECT adoption_status FROM contact_decisions WHERE contact_id=?", (current["id"],)).fetchone()
+        snapshot = {k: previous.get(k) or "" for k in MATERIAL_KEYS}
+        snapshot.update(source_url=current["source_url"] or "", observed_at=current["observed_at"] or "",
+                        review_status="accept" if decision and decision[0] == "accepted" else "auto_recorded")
+        return snapshot
+
+    def _restore_contact(self, con, contact_id, snapshot):
+        assignments = ",".join(f"{k}=?" for k in RESTORE_COLUMNS)
+        con.execute(f"UPDATE contacts SET {assignments} WHERE id=?",
+                    tuple(snapshot.get(k) or "" for k in RESTORE_COLUMNS) + (contact_id,))
+
+    def _record_adoption(self, con, company_id, contact_id, adoption):
+        prior = con.execute("SELECT adoption_status FROM contact_decisions WHERE contact_id=?", (contact_id,)).fetchone()
+        con.execute("INSERT OR REPLACE INTO contact_decisions VALUES(?,?,?)", (contact_id, adoption, now()))
+        con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
+                    (uid(), company_id, "contact_adoption", prior[0] if prior else "automatic",
+                     encode({"contact_id": contact_id, "adoption_status": adoption}), now(), "人工联系人采用决定"))
+
+    def _decide_contact_change(self, con, r, decision):
+        """Contact review with a proposal or a legacy overwrite. Returns (result, stale)."""
+        contact_id = r["new_value"]
+        current = con.execute("SELECT * FROM contacts WHERE id=?", (contact_id,)).fetchone()
+        proposal = con.execute("SELECT * FROM contact_change_proposals WHERE review_id=?", (r["id"],)).fetchone()
+        stamp = now()
+        if proposal:
+            if decision == "accept":
+                previous = json.loads(r["old_value"] or "{}")
+                if (not current or current["review_status"] in {"invalid", "superseded"} or proposal["status"] != "pending"
+                        or any((current[k] or "") != (previous.get(k) or "") for k in IDENTITY_KEYS)):
+                    con.execute("UPDATE contact_change_proposals SET status='superseded',decided_at=? WHERE review_id=?",
+                                (stamp, r["id"]))
+                    con.execute("UPDATE reviews SET status='superseded' WHERE id=?", (r["id"],))
+                    return None, True
+                values = json.loads(proposal["proposal"])
+                columns = [k for k in RESTORE_COLUMNS if k != "review_status"]
+                con.execute(f"UPDATE contacts SET {','.join(f'{k}=?' for k in columns)},review_status='accept' WHERE id=?",
+                            tuple(values.get(k) or "" for k in columns) + (contact_id,))
+                con.execute("UPDATE contact_change_proposals SET status='accepted',decided_at=? WHERE review_id=?",
+                            (stamp, r["id"]))
+                self._record_adoption(con, r["company_id"], contact_id, "accepted")
+                con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
+                            (uid(), r["company_id"], "contact", r["old_value"],
+                             encode({k: values.get(k) or "" for k in MATERIAL_KEYS}), stamp, "人工接受联系人变化"))
+                return {"ok": True, "auto_closed": 0}, False
+            con.execute("UPDATE contact_change_proposals SET status='rejected',decided_at=? WHERE review_id=?",
+                        (stamp, r["id"]))
+            con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
+                        (uid(), r["company_id"], "contact", proposal["proposal"], r["old_value"], stamp,
+                         "不采用本次联系人变化，保留此前记录"))
+            return {"ok": True, "auto_closed": 0, "kept_previous": True}, False
+        # Legacy conflict: the row already holds the new values (old code overwrote it).
+        if not current or current["review_status"] != "pending":
+            raise Conflict("当前值已变化，请重新核对")
+        rejected = {k: current[k] or "" for k in MATERIAL_KEYS}
+        rejected.update(source_url=current["source_url"] or "", observed_at=current["observed_at"] or "")
+        key = proposal_key(rejected)
+        if decision == "reject":
+            self._restore_contact(con, contact_id, self._pre_proposal_snapshot(con, r, current))
+            con.execute("INSERT INTO contact_change_proposals VALUES(?,?,?,?,?,?,?,?)",
+                        (r["id"], contact_id, encode(rejected), key, "rejected", "legacy", stamp, stamp))
+            con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
+                        (uid(), r["company_id"], "contact", encode({k: rejected[k] for k in MATERIAL_KEYS}),
+                         r["old_value"], stamp, "不采用本次联系人变化，原记录已恢复"))
+            return {"ok": True, "auto_closed": 0, "kept_previous": True}, False
+        con.execute("UPDATE contacts SET review_status='accept' WHERE id=?", (contact_id,))
+        con.execute("INSERT INTO contact_change_proposals VALUES(?,?,?,?,?,?,?,?)",
+                    (r["id"], contact_id, encode(rejected), key, "accepted", "legacy", stamp, stamp))
+        self._record_adoption(con, r["company_id"], contact_id, "accepted")
+        return {"ok": True, "auto_closed": 0}, False
 
     def contact_count(self, con, company_id=None):
         """Distinct usable contact entries; callers refresh facets before opening `con`."""
@@ -698,6 +840,8 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                     channels_preserved += result.rowcount
                 con.execute("UPDATE contacts SET review_status='invalid' WHERE id=?", (row['id'],))
                 con.execute("UPDATE reviews SET status='superseded' WHERE kind='contact' AND new_value=? AND status='pending'", (row['id'],))
+                con.execute("UPDATE contact_change_proposals SET status='superseded',decided_at=? WHERE contact_id=? AND status='pending'",
+                            (now(), row['id']))
                 con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
                             (uid(), row['company_id'], 'contact', encode(dict(row)),
                              encode({'id':row['id'], 'review_status':'invalid'}), now(),
@@ -735,10 +879,18 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                        ORDER BY observed_at DESC,rowid DESC LIMIT 5""", (review["id"],))]
                 if review["kind"] == "contact":
                     row = con.execute("SELECT * FROM contacts WHERE id=? AND company_id=?", (review["new_value"],review["company_id"])).fetchone()
-                    review["contact"] = dict(row) if row else None
+                    proposal = con.execute("SELECT proposal FROM contact_change_proposals WHERE review_id=?",
+                                           (review["id"],)).fetchone()
+                    if proposal:
+                        review["contact_change"] = "proposal"
+                    elif (review["old_value"] or "") not in ("", "{}"):
+                        review["contact_change"] = "legacy"
+                    else:
+                        review["contact_change"] = "new"
+                    review["contact"] = {**dict(row), **json.loads(proposal[0])} if row and proposal else dict(row) if row else None
                     if row:
                         website = con.execute("SELECT website FROM companies WHERE id=?", (review["company_id"],)).fetchone()[0]
-                        review["contact"]["fields"] = contact_fields(dict(row),website)
+                        review["contact"]["fields"] = contact_fields(review["contact"],website)
                     try:
                         previous = json.loads(review["old_value"] or "{}")
                     except ValueError:
@@ -756,6 +908,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
     def review_decision(self, id, decision):
         if decision not in {"accept", "reject"}:
             raise ValueError("无效审核决定")
+        stale = False
         with self.connect() as con:
             con.execute("BEGIN IMMEDIATE")
             r = self.row(con.execute("SELECT * FROM reviews WHERE id=?", (id,)).fetchone())
@@ -763,29 +916,38 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                 raise Conflict("此记录已审核")
             if r["kind"] == "duplicate_candidate" and decision == "accept":
                 raise ValueError("此项需保留为独立记录；不支持将一条企业资料覆盖另一条")
-            if r["kind"] == "contact":
-                con.execute("UPDATE contacts SET review_status=? WHERE id=?", (decision, r["new_value"]))
-                prior = con.execute("SELECT adoption_status FROM contact_decisions WHERE contact_id=?", (r["new_value"],)).fetchone()
-                adoption = "accepted" if decision == "accept" else "excluded"
-                con.execute("INSERT OR REPLACE INTO contact_decisions VALUES(?,?,?)", (r["new_value"], adoption, now()))
-                con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
-                            (uid(), r["company_id"], "contact_adoption", prior[0] if prior else "automatic",
-                             encode({"contact_id":r["new_value"],"adoption_status":adoption}), now(), "人工联系人采用决定"))
-            elif decision == "accept":
-                field = r["field"]
-                if field not in {"name", "phone", "website", "address", "business_types"}:
-                    raise ValueError("不支持的字段")
-                current = con.execute(f"SELECT {field} FROM companies WHERE id=?", (r["company_id"],)).fetchone()[0]
-                if current != r["old_value"]:
-                    raise Conflict("当前值已变化，请重新核对")
-                con.execute(f"UPDATE companies SET {field}=?,revision=revision+1 WHERE id=?", (r["new_value"], r["company_id"]))
-                overrides = json.loads(con.execute("SELECT overrides FROM companies WHERE id=?", (r["company_id"],)).fetchone()[0])
-                con.execute("UPDATE companies SET overrides=? WHERE id=?", (encode(sorted(set(overrides) | {field})), r["company_id"]))
-                con.execute("INSERT OR REPLACE INTO company_manual_checks VALUES(?,?)", (r["company_id"], now()))
-                con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
-                            (uid(), r["company_id"], field, current, r["new_value"], now(), "人工接受来源变更"))
-            con.execute("UPDATE reviews SET status=? WHERE id=?", (decision, id))
-            return self._close_same_value_reviews(con, r, decision) if r["kind"] == "field_update" else 0
+            if r["kind"] == "contact" and (
+                    (r["old_value"] or "") not in ("", "{}")
+                    or con.execute("SELECT 1 FROM contact_change_proposals WHERE review_id=?", (id,)).fetchone()):
+                result, stale = self._decide_contact_change(con, r, decision)
+                if not stale:
+                    con.execute("UPDATE reviews SET status=? WHERE id=?", (decision, id))
+                    if self._facets_enabled:
+                        self._refresh_facets_locked(con)
+            else:
+                if r["kind"] == "contact":
+                    con.execute("UPDATE contacts SET review_status=? WHERE id=?", (decision, r["new_value"]))
+                    self._record_adoption(con, r["company_id"], r["new_value"],
+                                          "accepted" if decision == "accept" else "excluded")
+                elif decision == "accept":
+                    field = r["field"]
+                    if field not in {"name", "phone", "website", "address", "business_types"}:
+                        raise ValueError("不支持的字段")
+                    current = con.execute(f"SELECT {field} FROM companies WHERE id=?", (r["company_id"],)).fetchone()[0]
+                    if current != r["old_value"]:
+                        raise Conflict("当前值已变化，请重新核对")
+                    con.execute(f"UPDATE companies SET {field}=?,revision=revision+1 WHERE id=?", (r["new_value"], r["company_id"]))
+                    overrides = json.loads(con.execute("SELECT overrides FROM companies WHERE id=?", (r["company_id"],)).fetchone()[0])
+                    con.execute("UPDATE companies SET overrides=? WHERE id=?", (encode(sorted(set(overrides) | {field})), r["company_id"]))
+                    con.execute("INSERT OR REPLACE INTO company_manual_checks VALUES(?,?)", (r["company_id"], now()))
+                    con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
+                                (uid(), r["company_id"], field, current, r["new_value"], now(), "人工接受来源变更"))
+                con.execute("UPDATE reviews SET status=? WHERE id=?", (decision, id))
+                result = self._close_same_value_reviews(con, r, decision) if r["kind"] == "field_update" else 0
+        if stale:
+            # The invalidation was committed with the block above; report it only now.
+            raise Conflict(STALE_PROPOSAL)
+        return result
 
     def changes(self, company_id=None):
         with self.connect() as con:

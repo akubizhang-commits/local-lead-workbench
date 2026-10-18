@@ -1,6 +1,6 @@
 import { api } from "../api";
 import { useResource } from "../hooks";
-import { ReviewList } from "../ReviewList";
+import { ReviewList, isContactChange } from "../ReviewList";
 import type { Review } from "../types";
 import { Empty } from "../ui";
 
@@ -43,7 +43,11 @@ export function ReviewsPage({
               decisionNotice(
                 r.kind === "duplicate_candidate"
                   ? "已保留两条独立记录，双方资料未覆盖"
-                  : r.kind === "contact"
+                  : isContactChange(r)
+                    ? decision === "reject"
+                      ? "已保留此前记录，本次新信息不会再提醒"
+                      : "已采用新的联系人信息"
+                    : r.kind === "contact"
                     ? decision === "reject"
                       ? "已标记该联系信息为不采用"
                       : "已确认联系信息"

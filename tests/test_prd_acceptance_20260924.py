@@ -128,12 +128,13 @@ def test_prd07_empty_contact_fill_conflict_and_export_adoption(store):
     review = store.reviews()[0]
     assert review["previous_contact"]["role"] == "Buyer"
     assert review["contact"]["role"] == "Sales Manager"
+    # P0-2: the previous Buyer stays usable and exported while the change is pending and after rejection.
     book = load_workbook(io.BytesIO(export_data(store, "xlsx")))
-    assert sheet_rows(book, "Contacts") == []
+    assert [row["role"] for row in sheet_rows(book, "Contacts")] == ["Buyer"]
     store.review_decision(review["id"], "reject")
     apply(store, cid, contacts=[contact(evidence="New page with the same public mailbox")])
-    assert store.detail(cid)["contacts"][0]["adoption_status"] == "excluded"
-    assert sheet_rows(load_workbook(io.BytesIO(export_data(store, "xlsx"))), "Contacts") == []
+    assert store.detail(cid)["contacts"][0]["adoption_status"] == "automatic"
+    assert [row["role"] for row in sheet_rows(load_workbook(io.BytesIO(export_data(store, "xlsx"))), "Contacts")] == ["Buyer"]
 
 
 @pytest.mark.parametrize("source_status,item_status", [
@@ -239,7 +240,8 @@ def test_prd11_backup_restore_preserves_provenance_and_human_decisions(client):
     assert client.post("/api/backups/restore", json={"name": backup["name"]}).status_code == 200
     assert store.detail(cid) == before
     assert store.social_detail(cid) == social_before
-    assert sheet_rows(load_workbook(io.BytesIO(export_data(store, "xlsx"))), "Contacts") == []
+    # The rejected change did not remove the original contact (P0-2).
+    assert len(sheet_rows(load_workbook(io.BytesIO(export_data(store, "xlsx"))), "Contacts")) == 1
     with store.connect() as con:
         assert con.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert con.execute("PRAGMA foreign_key_check").fetchall() == []

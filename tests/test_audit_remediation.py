@@ -22,11 +22,19 @@ def test_exclusion_survives_new_evidence(store):
     p=person(); apply(store,c['id'],p)
     p.update(role='Purchasing Manager'); apply(store,c['id'],p)
     store.review_decision(store.reviews()[0]['id'],'reject')
+    # P0-2: rejecting the change keeps Alex (Buyer) usable.
+    contact=store.detail(c['id'])['contacts'][0]
+    assert (contact['role'],contact['adoption_status'])==('Buyer','automatic')
+    assert store.company(c['id'])['contact_count']==1
+    # An explicitly excluded contact stays excluded when new evidence arrives.
+    with store.connect() as con:
+        con.execute("INSERT OR REPLACE INTO contact_decisions VALUES(?,'excluded','2026')",(contact['id'],))
     p.update(role='Procurement Director'); apply(store,c['id'],p)
     contact=store.detail(c['id'])['contacts'][0]
     assert contact['adoption_status']=='excluded'
     assert store.company(c['id'])['contact_count']==0
     assert store.company_page(contact='procurement')['total']==0
+    assert not store.reviews()
 
 def test_email_name_change_is_version_not_second_person(store):
     c=store.manual_company('Example','https://example.com')
@@ -37,7 +45,8 @@ def test_email_name_change_is_version_not_second_person(store):
     r=store.reviews()[0]
     assert r['previous_contact']['name']=='Alex Chen'
     assert r['contact']['name']=='Bob Chen'
-    assert store.company_page(contact='procurement')['total']==0
+    # P0-2: Alex stays usable while the change waits for review.
+    assert store.company_page(contact='procurement')['total']==1
     store.review_decision(r['id'],'accept')
     assert store.company_page(contact='procurement')['total']==1
 

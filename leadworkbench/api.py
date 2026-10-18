@@ -519,8 +519,10 @@ def create_app(data_dir=None, *, allowed_hosts=None):
 
     @app.post("/api/reviews/{id}/decision")
     def decision(id: str, body: Decision):
-        closed = store.review_decision(id, body.decision)
-        return {"ok": True, "auto_closed": closed or 0}
+        result = store.review_decision(id, body.decision)
+        if isinstance(result, dict):
+            return result  # contact change: may carry kept_previous
+        return {"ok": True, "auto_closed": result or 0}
 
     @app.get("/api/changes")
     def changes():

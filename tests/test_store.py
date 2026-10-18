@@ -126,9 +126,12 @@ def test_changed_contact_role_requires_revalidation(store):
     assert not store.reviews()
     c.update(role="Former Buyer", role_status="historical", evidence="Alex Former Buyer")
     store.apply_enrichment(a["id"], {"status": "completed", "contacts": [c]})
+    # P0-2: the current contact is unchanged; the new role waits as a proposal.
     contact = store.detail(a["id"])["contacts"][0]
-    assert contact["review_status"] == "pending"
-    assert contact["role_status"] == "historical"
+    assert (contact["review_status"], contact["role_status"]) == ("auto_recorded", "explicit")
+    review = store.reviews()[0]
+    assert review["contact_change"] == "proposal"
+    assert review["contact"]["role_status"] == "historical"
 
 
 def test_competing_new_phone_values_require_review(store):

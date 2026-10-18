@@ -97,6 +97,28 @@ def _facets_fill(store, con):
         raise Pending()
 
 
+PROPOSALS_SCHEMA = [
+    """CREATE TABLE IF NOT EXISTS contact_change_proposals(
+        review_id TEXT PRIMARY KEY REFERENCES reviews(id),
+        contact_id TEXT NOT NULL REFERENCES contacts(id),
+        proposal TEXT NOT NULL, proposal_key TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('pending','accepted','rejected','superseded')),
+        origin TEXT NOT NULL DEFAULT 'proposal' CHECK(origin IN ('proposal','legacy','repair')),
+        created_at TEXT NOT NULL, decided_at TEXT)""",
+    "CREATE INDEX IF NOT EXISTS contact_proposals_contact ON contact_change_proposals(contact_id, proposal_key, status)",
+]
+
+
+def _contact_proposals(store, con):
+    # Table only: legacy pending conflicts are converted when the user decides (design §3.5).
+    for statement in PROPOSALS_SCHEMA:
+        con.execute(statement)
+    legacy = con.execute("""SELECT count(*) FROM reviews WHERE kind='contact' AND status='pending'
+        AND COALESCE(old_value,'') NOT IN ('','{}')""").fetchone()[0]
+    if legacy:
+        log.info("P0：%d 条旧版待审核联系人冲突保持原样，等待用户在审核页处理", legacy)
+
+
 def _registry():
     from .contact_tiers import FACET_VERSION
     return [
@@ -104,6 +126,7 @@ def _registry():
         ("p0_20261018_facets_schema", _facets_schema),
         (f"contact_facets_v{FACET_VERSION}_mark", _facets_mark),
         (f"contact_facets_v{FACET_VERSION}", _facets_fill),
+        ("p0_20261018_contact_proposals", _contact_proposals),
     ]
 
 
