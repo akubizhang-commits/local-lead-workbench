@@ -32,3 +32,17 @@ test('market summary reports companies hidden by exclusion rules',async()=>{
   assert.doesNotMatch(document.body.textContent!,/排除规则/);
  } finally {await h.cleanup();}
 });
+test('market summary counts companies by best entry tier and links to the list',async()=>{
+ const h=await setupDOM();
+ try {
+  const {MarketSummary}=await import('../src/MarketSummary.tsx');
+  const picked:string[]=[];
+  const tier_stats={named_procurement:2,named_role:1,named_unknown:0,department_email:3,general_email:4,form_phone:0,company_phone:5,none:1};
+  await h.act(async()=>h.root.render(createElement(MarketSummary,{market:{...base,coverage,tier_stats},onTier:(t:string)=>picked.push(t)})));
+  const text=document.body.textContent!;
+  assert.match(text,/联系入口等级（按每家最佳入口计）：具名采购 2 家 · 具名岗位 1 · 具名·岗位未明确 0 · 部门邮箱 3 · 通用邮箱 4 · 表单 \/ 联系页面 \/ 电话 0 · 仅企业电话 5 · 无可用入口 1/);
+  const button=[...document.querySelectorAll('.market-tiers button')].find(b=>b.textContent!.startsWith('仅企业电话'))!;
+  await h.act(async()=>{(button as HTMLButtonElement).click();});
+  assert.deepEqual(picked,['company_phone']);
+ } finally {await h.cleanup();}
+});

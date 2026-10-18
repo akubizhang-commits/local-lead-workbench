@@ -81,11 +81,11 @@ export default function App() {
   function updateFilters(patch: Partial<Filters>) {
     navigate(updateListFilters(route, patch));
   }
-  function openMarket(id: string) {
+  function openMarket(id: string, extra: Partial<Filters> = {}) {
     navigate({
       view: "companies",
       selected: null,
-      filters: { ...defaultFilters(), market_id: id },
+      filters: { ...defaultFilters(), market_id: id, ...extra },
       page: 1,
     });
   }

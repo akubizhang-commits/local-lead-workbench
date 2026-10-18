@@ -1,4 +1,4 @@
-export type Filters = {q:string; status:string; type:string; market_id?:string; run_id?:string; segment?:string; contact?:''|'email'|'procurement'; sort?:'newest'|'procurement'|'email'|'updated'; category?:string[]; excluded?:''|'only'|'include'};
+export type Filters = {q:string; status:string; type:string; market_id?:string; run_id?:string; segment?:string; contact?:''|'email'|'procurement'; sort?:'newest'|'procurement'|'email'|'updated'|'tier'; category?:string[]; excluded?:''|'only'|'include'; best_tier?:string};
 /** Query string for list/export URLs; array filters (category) repeat their key, empty values are dropped. */
 export function filtersQuery(filters:Filters,page?:number) { const query = new URLSearchParams(); for(const [key,value] of Object.entries(filters)) {for(const item of Array.isArray(value)?value:[value]) if(typeof item === 'string' && item.trim() !== '') query.append(key,item);} if(page !== undefined) {query.set('page',String(page));query.set('page_size','50');}return query.toString(); }
 export function safeUrl(value?:string|null) { try {const url = new URL(value || ''); return ['http:','https:'].includes(url.protocol) ? url.href : undefined;} catch {return undefined;} }
@@ -20,6 +20,12 @@ export const label = (value?:string|null) => value ? labels[value] || value : '�
 export const date = (value?:string|null) => value ? new Date(value).toLocaleString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}) : '尚未记录';
 export const display = (value:unknown):string => value == null || value === '' ? '未记录' : typeof value === 'object' ? JSON.stringify(value) : String(value);
 
+/** Entry tiers, best first (design §6.1); labels match the backend tier_label. */
+export const TIERS:[string,string][]=[['named_procurement','具名采购'],['named_role','具名岗位'],['named_unknown','具名·岗位未明确'],['department_email','部门邮箱'],['general_email','通用邮箱'],['form_phone','表单 / 联系页面 / 电话'],['company_phone','仅企业电话'],['none','无可用入口']];
+export const tierRank=(code?:string|null)=>{const index=TIERS.findIndex(([key])=>key===code);return index<0?null:index+1;};
+export const tierLabel=(code?:string|null)=>TIERS.find(([key])=>key===code)?.[1]||'未记录';
+/** Colour group by rank: 1–2 green, 3–4 blue, 5–6 grey, 7–8 light grey (label text always carries the meaning). */
+export const tierClass=(rank?:number|null)=>`tier tier-${!rank?'none':rank<=2?'top':rank<=4?'mid':rank<=6?'low':'none'}`;
 /** Business type from the market definition, not yet verified. */
 export const hintLabel = (type:string) => `${label(type)} · 待核实`;
 Object.assign(labels,{social:'社媒补充',manual_checked_at:'人工确认时间',last_checked_at:'官网采集时间',excluded:'不采用',automatic:'自动收录',accepted:'已采用'});

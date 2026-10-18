@@ -18,3 +18,9 @@ test('a navigation-only contact page is supplementary, real channels remain',()=
  assert.deepEqual(result.active.map(c=>c.id),['a']);assert.deepEqual(result.supplementary.map(c=>c.id),['url']);
  assert.equal(contactChannels(page),'官网联系页面');
 });
+test('relation shows the backend tier; a name-style mailbox is not a generic company entry',async()=>{
+ const {contactRelation}=await import('../src/contactList.ts');
+ const named={...c,email:'christian.arredondo@example.com',association_status:'company_only',tier:'named_unknown',tier_label:'具名·岗位未明确'} as Contact;
+ assert.equal(contactRelation(named),'具名·岗位未明确');
+ assert.notEqual(contactRelation(named),'企业通用入口');
+});

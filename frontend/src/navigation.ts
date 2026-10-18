@@ -1,7 +1,7 @@
 import {filtersQuery,type Filters} from './helpers.ts';
 export type View='tasks'|'companies'|'detail'|'reviews'|'changes'|'settings';
 export interface Route {view:View;selected:string|null;filters:Filters;page:number;account?:string;task?:string;run?:string;item?:string;activityStatus?:string;listRun?:string}
-export const defaultFilters=():Filters=>({q:'',status:'',type:'',market_id:'',run_id:'',segment:'',contact:'',sort:'newest',category:[],excluded:''});
+export const defaultFilters=():Filters=>({q:'',status:'',type:'',market_id:'',run_id:'',segment:'',contact:'',sort:'newest',category:[],excluded:'',best_tier:''});
 export function parseRoute(value:string):Route {
  const params=new URL(value,'http://local.invalid').searchParams;
  const views:View[]=['tasks','companies','detail','reviews','changes','settings'];
@@ -13,7 +13,8 @@ export function parseRoute(value:string):Route {
  const contact=params.get('contact');if(contact==='email'||contact==='procurement')filters.contact=contact;
  filters.category=params.getAll('category').filter(Boolean).slice(0,20);
  const excluded=params.get('excluded');if(excluded==='only'||excluded==='include')filters.excluded=excluded;
- const sort=params.get('sort');if(sort==='newest'||sort==='procurement'||sort==='email'||sort==='updated')filters.sort=sort;
+ const sort=params.get('sort');if(sort==='newest'||sort==='procurement'||sort==='email'||sort==='updated'||sort==='tier')filters.sort=sort;
+ filters.best_tier=params.get('best_tier')||'';
  const page=Number(params.get('page')||1);
  const activity = view==='tasks' ? Object.fromEntries(['task','run','item','activityStatus','listRun'].filter(key=>params.get(key)).map(key=>[key,params.get(key)!])) : {};
  if(!activity.run)delete activity.item;

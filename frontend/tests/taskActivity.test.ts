@@ -34,3 +34,14 @@ test('refresh detail is main content, not a header action or duplicate market li
   assert.match(document.querySelector('h1')!.textContent!,/资料复核详情/);
  }finally{globalThis.fetch=oldFetch;await h.cleanup();}
 });
+test('refresh rows report deduplicated new entries, raw extraction labelled as such',async()=>{
+ const h=await setupDOM();
+ try {
+  const {RefreshTable}=await import('../src/pages/TaskActivityPage.tsx');
+  const row={id:'i',run_id:'r',company_id:'c',company_name:'Supplier',state:'succeeded',run_status:'completed',task_id:'t',created_at:'2026-09-24T00:00:00Z',finished_at:null,message:'',source:'market'};
+  await h.act(async()=>h.root.render(createElement(RefreshTable,{items:[{...row,summary:{pages_checked:6,contacts_found:30,entries_added:2}}],onOpen:()=>{}})));
+  assert.match(document.body.textContent!,/新增联系入口 2 个（去重后）/);
+  await h.act(async()=>h.root.render(createElement(RefreshTable,{items:[{...row,summary:{pages_checked:6,contacts_found:30}}],onOpen:()=>{}})));
+  assert.match(document.body.textContent!,/原始提取 30 条（未去重）/);
+ } finally {await h.cleanup();}
+});

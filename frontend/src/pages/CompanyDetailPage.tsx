@@ -1,4 +1,7 @@
+import { useState } from "react";
 import { CompanyStatus } from "../CompanyStatus";
+import { ContactEntrySummary } from "../ContactEntrySummary";
+import { ManualContactForm } from "../ManualContactForm";
 import { date, display, label } from "../helpers";
 import { type View } from "../navigation";
 import { RelatedLocations } from "../RelatedLocations";
@@ -34,6 +37,7 @@ export function CompanyDetailPage({
   openAccount: (id: string) => void;
   setView: (view: View) => void;
 }) {
+  const [adding, setAdding] = useState(false);
   return selected ? (
     <Resource {...detail} retry={refresh}>
       {detail.data &&
@@ -67,6 +71,26 @@ export function CompanyDetailPage({
                 onChange={quickStatus}
               />
             </div>
+            <ContactEntrySummary
+              company={detail.data.company}
+              contacts={detail.data.contacts}
+              adding={adding}
+              onAdd={() => setAdding((v) => !v)}
+            />
+            {adding && (
+              <section className="panel">
+                <ManualContactForm
+                  companyId={detail.data.company.id}
+                  revision={detail.data.company.revision}
+                  onSaved={() => {
+                    setAdding(false);
+                    refresh();
+                  }}
+                  onCancel={() => setAdding(false)}
+                  onRefresh={refresh}
+                />
+              </section>
+            )}
             <div className="detail-grid">
               <section className="panel">
                 <div className="section-title">

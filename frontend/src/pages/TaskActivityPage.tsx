@@ -5,6 +5,7 @@ import { useResource } from '../hooks';
 import { date, label, safeUrl } from '../helpers';
 import type { Overview, Run, Task } from '../types';
 import {backFromRefreshDetail,openRefreshDetail,type Route} from '../navigation';
+import type {Filters} from '../helpers';
 import { Resource } from '../Resource';
 import { Badge, Modal } from '../ui';
 import { Schedules } from '../Schedules';
@@ -18,7 +19,7 @@ import type { Action } from './pageTypes';
 export interface RefreshItem {
  id:string;run_id:string;company_id:string;company_name:string|null;state:string;run_status:string;
  task_id:string|null;created_at:string;finished_at:string|null;message:string;source:string;website?:string;
- summary:{pages_checked?:number;contacts_found?:number;remaining?:number;files_unparsed?:number};
+ summary:{pages_checked?:number;contacts_found?:number;entries_added?:number;remaining?:number;files_unparsed?:number};
 }
 interface Activity {items:RefreshItem[];total:number;page:number;page_size:number;rounds?:Run[];workflow?:Workflow|null}
 interface RefreshDetail extends RefreshItem {run:Run;logs:{url:string;status:string;reason?:string;final_url?:string}[];warnings:string[];files_unparsed:{url:string}[]}
@@ -28,12 +29,12 @@ export function RefreshTable({items,onOpen}:{items:RefreshItem[];onOpen:(item:Re
  return <div className="table-wrap activity-table-wrap" tabIndex={0} role="region" aria-label="企业资料复核任务"><table className="activity-table"><thead><tr><th>企业 / 任务来源</th><th>复核状态</th><th>网页 / 联系记录</th><th>轮次开始时间</th><th className="table-action">操作</th></tr></thead>
  <tbody>{items.map(item=><tr key={item.id}><td><button className="text-button" onClick={()=>onOpen(item)}>{item.company_name||'关联企业信息缺失'}</button><small className="muted row-secondary">{item.source==='market'?'该市场检索自动补全':'企业单独复核'}</small></td>
  <td>{itemStatus(item)}</td>
- <td>读取 {item.summary.pages_checked??'—'} 页<small className="row-secondary">联系记录 {item.summary.contacts_found??'—'} 条</small></td><td>{date(item.created_at)}</td>
+ <td>读取 {item.summary.pages_checked??'—'} 页<small className="row-secondary">{item.summary.entries_added!=null?`新增联系入口 ${item.summary.entries_added} 个（去重后）`:`原始提取 ${item.summary.contacts_found??'—'} 条（未去重）`}</small></td><td>{date(item.created_at)}</td>
  <td className="table-action"><button className="text-button" onClick={()=>onOpen(item)}>查看详情</button></td></tr>)}</tbody></table>{!items.length&&<p className="muted">暂无符合条件的资料复核任务。</p>}</div>;
 }
 export function TaskActivityPage({route,navigate,tasks,version,worker,busy,act,refresh,openCompany,openMarket}: {
  route:Route;navigate:(route:Route)=>void;tasks:Task[];version:number;worker:Overview['worker'];busy:boolean;act:Action;refresh:()=>void;
- openCompany:(id:string)=>void;openMarket:(id:string)=>void;
+ openCompany:(id:string)=>void;openMarket:(id:string,filters?:Partial<Filters>)=>void;
 }) {
  const [roundId,setRoundId]=useState<string|null>(null);
  const task=tasks.find(t=>t.id===route.task);
@@ -44,7 +45,7 @@ export function TaskActivityPage({route,navigate,tasks,version,worker,busy,act,r
  const change=(patch:Partial<Route>)=>navigate({...route,...patch});
  if(route.item) return <Resource {...detail} retry={refresh}>{detail.data&&<>
    <section className="panel"><div className="panel-heading"><h2>{detail.data.company_name||'关联企业信息缺失'}</h2><button onClick={()=>openCompany(detail.data!.company_id)}>查看企业资料</button></div><p>复核状态：{itemStatus(detail.data)}</p>
-   <p>读取 {detail.data.summary.pages_checked??'—'} 页 · 提取 {detail.data.summary.contacts_found??'—'} 条联系记录 · 待扫描 {detail.data.summary.remaining??'—'} 个链接</p>
+   <p>读取 {detail.data.summary.pages_checked??'—'} 页{detail.data.summary.entries_added!=null&&` · 新增联系入口 ${detail.data.summary.entries_added} 个（去重后）`} · 原始提取 {detail.data.summary.contacts_found??'—'} 条（未去重） · 待扫描 {detail.data.summary.remaining??'—'} 个链接</p>
    <p>{detail.data.message||(detail.data.state==='succeeded'?'本次复核已完成，已取得的资料已保存。':'暂无复核说明')}</p>
    {safeUrl(detail.data.website)&&<a href={safeUrl(detail.data.website)} target="_blank" rel="noreferrer">企业官网 ↗</a>}
    {!!detail.data.warnings.length&&<RunWarnings error={detail.data.warnings.join('；')}/>}
@@ -54,7 +55,7 @@ export function TaskActivityPage({route,navigate,tasks,version,worker,busy,act,r
    <RunCard run={detail.data.run} worker={worker} busy={busy} act={act} openCompany={openCompany}/>
  </>}</Resource>;
  return <>
-  <section className="panel activity-overview"><div className="panel-heading"><h2>{standalone?'企业单独复核':task?.name||'市场检索任务'}</h2>{task&&<button onClick={()=>openMarket(task.id)}>查看市场企业</button>}</div>{task&&<><p>{[task.country,task.state,task.county,task.city].filter(Boolean).join(' / ')}{task.keywords.length?` · ${task.keywords.join('、')}`:''}</p>{(task.geography?.county_ids.length||0)>1&&<p className="muted">跨县城市 / 居民点：关联 {task.geography?.county_ids.length} 个县或同级地区，市场检索范围仍为完整城市 / 居民点。</p>}<MarketSummary market={task}/><details className="market-exclusions"><summary>本市场排除规则</summary><ExclusionRules marketId={task.id} version={version} busy={busy} act={act}/></details>
+  <section className="panel activity-overview"><div className="panel-heading"><h2>{standalone?'企业单独复核':task?.name||'市场检索任务'}</h2>{task&&<button onClick={()=>openMarket(task.id)}>查看市场企业</button>}</div>{task&&<><p>{[task.country,task.state,task.county,task.city].filter(Boolean).join(' / ')}{task.keywords.length?` · ${task.keywords.join('、')}`:''}</p>{(task.geography?.county_ids.length||0)>1&&<p className="muted">跨县城市 / 居民点：关联 {task.geography?.county_ids.length} 个县或同级地区，市场检索范围仍为完整城市 / 居民点。</p>}<MarketSummary market={task} onTier={tier=>openMarket(task.id,{best_tier:tier})}/><details className="market-exclusions"><summary>本市场排除规则</summary><ExclusionRules marketId={task.id} version={version} busy={busy} act={act}/></details>
    <MarketSocialSettings key={task.id} task={task} busy={busy} onChange={refresh} onRun={run=>change({run:run.id,item:undefined,listRun:undefined,activityStatus:undefined,page:1})}/>
    <details><summary>市场设置与定时计划</summary><p>官网自动补全：{task.auto_enrich?'已开启':'已关闭'}</p><Schedules taskId={task.id} version={version}/></details></>}</section>
   <Resource {...list} retry={refresh}>

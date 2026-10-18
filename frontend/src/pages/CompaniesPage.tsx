@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, download } from "../api";
 import { batchStatusPayload } from "../companyEdits";
 import { CompanyStatus, StatusOptions } from "../CompanyStatus";
-import { date, filtersQuery, hintLabel, type Filters } from "../helpers";
+import { date, filtersQuery, hintLabel, tierClass, TIERS, type Filters } from "../helpers";
 import { CategoryFilter } from "../CategoryFilter";
 import { ExclusionRules } from "../ExclusionRules";
 import { useResource } from "../hooks";
@@ -46,6 +46,20 @@ export function ExcludedNotice({
       <button className="text-button" onClick={() => onChange("only")}>查看已排除</button>{" "}/{" "}
       <button className="text-button" onClick={() => onChange("include")}>全部显示</button>
     </div>
+  );
+}
+/** 联系入口 column: best tier, deduplicated entry count, gap reason; legacy counts stay in the tooltip. */
+export function EntryCell({ company: c }: { company: Company }) {
+  return (
+    <>
+      <span className={tierClass(c.best_tier_rank)}>{c.best_tier_label || "—"}</span>
+      <div
+        title={`采购 ${c.procurement_count ?? "—"}（有明确采购岗位证据，按邮箱去重）· 其他邮箱 ${c.email_count ?? "—"} · 其他社媒 ${c.social_count ?? "—"}`}
+      >
+        联系入口 {c.contact_count} 个（已去重）
+      </div>
+      {c.gap && <small className="muted gap-reason">{c.gap.reason}</small>}
+    </>
   );
 }
 export function CompaniesPage({
@@ -182,6 +196,16 @@ export function CompaniesPage({
           <option value="email">有其他公开邮箱</option>
         </select>
         <select
+          aria-label="最佳入口等级筛选"
+          value={filters.best_tier || ""}
+          onChange={(e) => updateFilters({ best_tier: e.target.value })}
+        >
+          <option value="">全部入口等级</option>
+          {TIERS.map(([code, title]) => (
+            <option key={code} value={code}>{title}</option>
+          ))}
+        </select>
+        <select
           aria-label="企业排序"
           value={filters.sort || "newest"}
           onChange={(e) =>
@@ -192,6 +216,7 @@ export function CompaniesPage({
           <option value="procurement">采购联系人优先</option>
           <option value="email">其他邮箱优先</option>
           <option value="updated">最近更新优先</option>
+          <option value="tier">入口等级优先</option>
         </select>
         <CategoryFilter
           marketId={filters.market_id}
@@ -414,16 +439,8 @@ export function CompaniesPage({
                           <Badge value={c.operating_status} />
                         )}
                     </td>
-                    <td>
-                      <div title="有明确采购岗位证据的联系方式；已按邮箱去重">
-                        采购 {c.procurement_count ?? "—"}
-                      </div>
-                      <div title="去重后的社媒账号，含待确认账号，不重复计入已知采购入口">
-                        其他社媒 {c.social_count ?? "—"}
-                      </div>
-                      <small title="去重后排除采购、招聘和人力资源用途的邮箱；用途不明的保留">
-                        其他邮箱 {c.email_count ?? "—"}
-                      </small>
+                    <td className="entry-cell">
+                      <EntryCell company={c} />
                     </td>
                     {filters.market_id && (
                       <td className="market-dates">

@@ -1,6 +1,6 @@
 import type {Contact} from './types';
 import {Badge, External} from './ui';
-import {date,label} from './helpers';
+import {date,label,tierClass,tierRank} from './helpers';
 import {adoptionStatus, isHiddenContact} from './groupContacts';
 
 export function ContactCard({contact: c}: {contact: Contact}) {
@@ -15,7 +15,7 @@ export function ContactCard({contact: c}: {contact: Contact}) {
       return true;
     });
   return <article className="contact-card">
-    <div className="row between"><h3>{c.name?.trim() || '企业 / 部门联系方式'}</h3><div className="tags"><Badge value={adoptionStatus(c)}/><span className="badge" title="采集证据审核状态">证据：{label(c.review_status)}</span></div></div>
+    <div className="row between"><h3>{c.name?.trim() || '企业 / 部门联系方式'}</h3><div className="tags">{c.tier_label&&<span className={tierClass(tierRank(c.tier))}>{c.tier_label}</span>}{c.origin==='manual'&&<span className="badge badge-manual">人工录入</span>}<Badge value={adoptionStatus(c)}/><span className="badge" title="采集证据审核状态">证据：{label(c.review_status)}</span></div></div>
     <div className="contact-fields" aria-label={`${c.name || '企业'}的联系方式`}>
       {(c.fields || []).map(field => <div className="contact-field" key={JSON.stringify([field.key, field.value, field.source_url])}>
         <span className="contact-field-label">{field.label}：</span>
