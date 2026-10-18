@@ -1,12 +1,12 @@
 {
   "documentation_date": "2026-09-26",
   "scope": "Offline source, links, OpenAPI route set and in-memory DDL; no live DB, network or service changes",
-  "source_files": 119,
+  "source_files": 129,
   "local_links_checked": 106,
-  "api_business_operations": 52,
-  "openapi_operations_including_spa": 53,
-  "schema_tables": 38,
-  "explicit_indexes": 8,
+  "api_business_operations": 58,
+  "openapi_operations_including_spa": 59,
+  "schema_tables": 47,
+  "explicit_indexes": 27,
   "schema_integrity": "ok",
   "foreign_key_errors": [],
   "diagram_count": 22,
@@ -93,7 +93,7 @@
       "file": "module-design.md",
       "number": 5,
       "kind": "sequenceDiagram",
-      "line": 406
+      "line": 407
     },
     {
       "file": "outreach-planned.md",

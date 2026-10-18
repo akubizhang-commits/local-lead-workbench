@@ -575,6 +575,43 @@
         }
       }
     },
+    "/api/runs/{id}/relocate": {
+      "post": {
+        "summary": "Relocate",
+        "operationId": "relocate_api_runs__id__relocate_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/runs/{id}/{action}": {
       "post": {
         "summary": "Control",
@@ -659,6 +696,37 @@
               "type": "string",
               "default": "",
               "title": "Type"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "maxItems": 20,
+              "default": [],
+              "title": "Category"
+            }
+          },
+          {
+            "name": "excluded",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "hide",
+                "only",
+                "include"
+              ],
+              "type": "string",
+              "default": "hide",
+              "title": "Excluded"
             }
           }
         ],
@@ -814,7 +882,8 @@
                 "newest",
                 "procurement",
                 "email",
-                "updated"
+                "updated",
+                "tier"
               ],
               "type": "string",
               "default": "newest",
@@ -843,6 +912,58 @@
               "default": 50,
               "title": "Page Size"
             }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "maxItems": 20,
+              "default": [],
+              "title": "Category"
+            }
+          },
+          {
+            "name": "excluded",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "hide",
+                "only",
+                "include"
+              ],
+              "type": "string",
+              "default": "hide",
+              "title": "Excluded"
+            }
+          },
+          {
+            "name": "best_tier",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "",
+                "named_procurement",
+                "named_role",
+                "named_unknown",
+                "department_email",
+                "general_email",
+                "form_phone",
+                "company_phone",
+                "none"
+              ],
+              "type": "string",
+              "default": "",
+              "title": "Best Tier"
+            }
           }
         ],
         "responses": {
@@ -853,6 +974,163 @@
                 "schema": {}
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/company-categories": {
+      "get": {
+        "summary": "Company Categories",
+        "operationId": "company_categories_api_company_categories_get",
+        "parameters": [
+          {
+            "name": "market_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Market Id"
+            }
+          },
+          {
+            "name": "excluded",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "hide",
+                "only",
+                "include"
+              ],
+              "type": "string",
+              "default": "hide",
+              "title": "Excluded"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exclusion-rules": {
+      "get": {
+        "summary": "Exclusion Rules",
+        "operationId": "exclusion_rules_api_exclusion_rules_get",
+        "parameters": [
+          {
+            "name": "market_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Market Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create Exclusion Rule",
+        "operationId": "create_exclusion_rule_api_exclusion_rules_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExclusionRuleInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exclusion-rules/{id}": {
+      "delete": {
+        "summary": "Delete Exclusion Rule",
+        "operationId": "delete_exclusion_rule_api_exclusion_rules__id__delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -959,6 +1237,53 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CompanyPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/companies/{id}/contacts": {
+      "post": {
+        "summary": "Add Manual Contact",
+        "operationId": "add_manual_contact_api_companies__id__contacts_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualContactInput"
               }
             }
           }
@@ -1954,6 +2279,20 @@
             }
           },
           {
+            "name": "layout",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "companies",
+                "entries"
+              ],
+              "type": "string",
+              "default": "companies",
+              "title": "Layout"
+            }
+          },
+          {
             "name": "q",
             "in": "query",
             "required": false,
@@ -2027,7 +2366,8 @@
                 "newest",
                 "procurement",
                 "email",
-                "updated"
+                "updated",
+                "tier"
               ],
               "type": "string",
               "default": "newest",
@@ -2049,6 +2389,58 @@
               "type": "string",
               "default": "",
               "title": "Segment"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "maxItems": 20,
+              "default": [],
+              "title": "Category"
+            }
+          },
+          {
+            "name": "excluded",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "hide",
+                "only",
+                "include"
+              ],
+              "type": "string",
+              "default": "hide",
+              "title": "Excluded"
+            }
+          },
+          {
+            "name": "best_tier",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "",
+                "named_procurement",
+                "named_role",
+                "named_unknown",
+                "department_email",
+                "general_email",
+                "form_phone",
+                "company_phone",
+                "none"
+              ],
+              "type": "string",
+              "default": "",
+              "title": "Best Tier"
             }
           }
         ],
@@ -2285,6 +2677,53 @@
         ],
         "title": "Decision"
       },
+      "ExclusionRuleInput": {
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "global",
+              "market"
+            ],
+            "title": "Scope"
+          },
+          "market_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "category",
+              "keyword"
+            ],
+            "title": "Kind"
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Value"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "scope",
+          "kind",
+          "value"
+        ],
+        "title": "ExclusionRuleInput"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -2297,6 +2736,62 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "ManualContactInput": {
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Name",
+            "default": ""
+          },
+          "role": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Role",
+            "default": ""
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "title": "Email",
+            "default": ""
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 40,
+            "title": "Phone",
+            "default": ""
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 2048,
+            "title": "Url",
+            "default": ""
+          },
+          "procurement": {
+            "type": "boolean",
+            "title": "Procurement",
+            "default": false
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Note",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "revision"
+        ],
+        "title": "ManualContactInput"
       },
       "MarketSocialRunInput": {
         "properties": {

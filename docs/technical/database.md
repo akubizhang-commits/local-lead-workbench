@@ -12,7 +12,7 @@
 - 初始化设置`journal_mode=WAL`。附件仅记录DDL和user_version，**没有把WAL、连接超时或文件权限固化到DDL**。
 - 当前`PRAGMA user_version=2`。版本2之后仍有幂等扩展迁移及数据修复，所以“user_version相同”不保证表组完整或应用版本一致。
 - 2026-09-25 临时 Store 启动结构为 **37 张表**；`market_exhausted_items` 仍按需创建，完整附件为 **38 张表**、8 个显式索引、45 个自动索引。数量以同批次 DDL 与 `validation.json` 为证，自动索引不单独导出 SQL。
-- 当前没有view、trigger、虚拟表、STRICT表或WITHOUT ROWID表。DDL中的TEXT/INTEGER/REAL按实际列声明保存；业务状态多数没有CHECK约束。
+- 当前没有view、虚拟表、STRICT表或WITHOUT ROWID表；P0 修复后有 5 个触发器（见文末“2026-10-18：P0 修复”）。DDL中的TEXT/INTEGER/REAL按实际列声明保存；业务状态多数没有CHECK约束。
 
 源码入口：`db.py:56–184`；`market_store.py:74–148,458–464`；`social_store.py:19–46`；`social_discovery_store.py:17–33`。
 
@@ -358,3 +358,60 @@ PY
 ## 地区选择扩展（2026-09-24）
 
 `task_geography(task_id PRIMARY KEY REFERENCES tasks(id), payload TEXT NOT NULL)` 保存任务所选州、县、Place编码、Place的多县关联、版本及whole_place范围，幂等启动迁移创建。参考地区目录为随程序分发的JSON.gz静态数据，不在企业业务表中。详见 [美国地区目录设计](us-geography-design.md)。
+
+## 2026-10-18：P0 修复
+
+### 迁移台账与顺序
+
+`leadworkbench/p0_migrations.py` 的 `migrate_p0(store, con)` 在 `Store.__init__`（`_migrate_market_social` 之后、`resolve_*` 之前）和 `Store.restore()` 中执行。`schema_migrations(id PK, applied_at)` 记录已完成项。每项固定为 `BEGIN IMMEDIATE → 查台账（已存在则回滚跳过）→ 执行 → 写台账 → COMMIT`，所以两个进程同时启动不会重复执行；分批项每批一个事务，最后一批完成才写台账。启动末尾 `PRAGMA optimize`。`user_version` 仍为 2（新表都是旁表，旧表不加列）。
+
+| # | id | 内容 | 改写旧表已有行 |
+|---|---|---|---|
+| 1 | `p0_20261018_indexes` | 13 个索引 + `ANALYZE` | 否 |
+| 2 | `p0_20261018_facets_schema` | `contact_facets`、`contact_facets_dirty`、`manual_contacts` 与 5 个触发器 | 否 |
+| 3 | `contact_facets_v1_mark` | 全部联系人标脏 | 否 |
+| 4 | `contact_facets_v1` | 每批 5 000 行计算分面，脏表空时写台账 | 否（只写派生表） |
+| 5 | `p0_20261018_categories` | `company_categories`、`company_type_hints`、`exclusion_rules`；从 Maps category 观察回填类别，从市场 company_types 回填提示 | 否（只新增行） |
+| 6 | `p0_20261018_contact_proposals` | `contact_change_proposals`（只建表；旧版待审核冲突留到用户决定时转换） | 否 |
+| 7 | `p0_20261018_repair_rejected` | 修复旧版“标记为不采用”误排除的原联系人（用户已同意，D2=A） | 是：仅候选联系人行与其采用决定 |
+
+失败处理：任一项异常回滚、`log.exception`、启动失败，下次重试；分面回填已提交的批次保留；第 7 项备份失败时 `log.warning` 跳过该项、不写台账，其余照常。`FACET_VERSION` 加 1 时会新增 `contact_facets_v{N}_mark` / `contact_facets_v{N}` 两项。
+
+### 新表（8 张）
+
+| 表 | 主键 / 约束 | 内容 |
+|---|---|---|
+| schema_migrations | PK id | P0 台账 |
+| contact_facets | PK contact_id；索引 (company_id,category,tier_rank)、(company_id,email_key) | 只依赖联系人行内容的派生结论：channel_ok、category、tier、tier_rank、identity_key、email_key、version |
+| contact_facets_dirty | PK contact_id | 待刷新的联系人 |
+| manual_contacts | PK contact_id → contacts | 人工联系人的电话、备注 |
+| contact_change_proposals | PK review_id → reviews；contact_id → contacts；索引 (contact_id,proposal_key,status) | 联系人变化提议：status pending/accepted/rejected/superseded，origin proposal/legacy/repair |
+| company_categories | PK (company_id,category_key)；索引 (category_key,company_id) | Maps 来源类别原文、首末次时间 |
+| company_type_hints | PK (company_id,business_type,market_id) | 市场定义的初始业务类型（待核实） |
+| exclusion_rules | PK id；唯一 (scope,COALESCE(market_id,''),kind,value_key)；CHECK 作用域 | 排除规则 |
+
+### 触发器（5 个）
+
+`contacts_facets_insert`、`contacts_facets_update`（company_id/name/role/email/url/kind/role_status/association_status/evidence 变化）、`contacts_facets_delete`、`manual_contacts_facets_insert`、`manual_contacts_facets_update`。只写 `contact_facets_dirty`/删除分面，纯 SQL、不调用 UDF，旧版代码写联系人也会标脏。写路径在事务末尾调用 `_refresh_facets_locked(con)`；读入口在打开读连接前调用 `_refresh_facets()`（独立短连接，每 2 000 行一个 `BEGIN IMMEDIATE`）。`Store.connect()` 维护线程本地连接深度，在已打开连接时调用 `_refresh_facets()` 会抛 `RuntimeError`。
+
+### 索引（第 1 项）
+
+`contacts_company(company_id)`、`contacts_company_email(company_id,lower(trim(email)))`、`contact_versions_contact(contact_id,observed_at)`、`reviews_status(status,created_at)`、`reviews_company_field(company_id,kind,field,status)`、`reviews_contact(kind,new_value,status)`、`locations_company(company_id)`、`changes_company(company_id,created_at)`、`observations_company_field(company_id,field,observed_at)`、`companies_newest(created_at DESC,id)`、`companies_status(status)`、`listings_company(company_id)`、`work_items_target(target,stage)`。`tests/test_query_plans.py` 断言热点查询不做全表扫描。
+
+### `_migrate_audit` 回填保护
+
+`_migrate_audit` 的第一条回填（最新一条联系人审核 → contact_decisions）在 `contact_change_proposals` 存在时，外层和 `max(rowid)` 子查询都排除带提议行的审核，所以拒绝提议不会在重启时变成 excluded。新语义下的所有联系人审核决定（提议、旧版转换、修复）都写提议行。
+
+### 提议、旧版冲突转换与修复
+
+- 冲突采集不改联系人行，新值存为提议；accept 写入 name/role/kind/role_status/association_status/evidence/source_url/observed_at 并设 accept/accepted；reject 只把提议置为 rejected。
+- 旧版待审核冲突在用户决定时转换：reject 恢复“提议前快照”（最新一条 6 个资料键与审核 old_value 一致且含 review_status 的 contact_versions），accept 保留新值；都写 `origin=legacy` 提议行。
+- 第 7 项修复：候选为“最新一条联系人审核是 reject、old_value 非空、无提议行、联系人 review_status=reject”。先 `store.backup()`，再恢复快照；采用决定按 changes 中最近一条 `contact_adoption → excluded` 的旧值恢复（automatic 删除决定行，accepted 恢复 accepted）；写 `origin=repair` 的 rejected 提议和 changes“数据修复：…（修复前备份 {name}）”。
+
+### 降级限制
+
+不支持用旧版本打开升级后的库后继续使用：旧版 `_migrate_audit` 没有上述保护，会把被拒绝的提议（包括修复记录）重新写成 excluded。旧版本打开和写入不报错（`tests/test_contact_repairs.py` 有子进程用例），回到新版本后分面会补齐。
+
+### 结构附件
+
+`schema.current.sql` 于 2026-10-18 用临时 Store 重新生成（SHA256 清单加入 `p0_migrations.py`），数量见 `validation.json`。

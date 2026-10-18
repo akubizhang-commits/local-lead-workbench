@@ -63,23 +63,29 @@ X-Local-Token: <当前实例token>
 | POST | `/api/tasks/{id}/social` | `MarketSocialRunInput` | 市场父 `Run`；附加活动轮次或创建仅社媒轮次，保留历史 |
 | GET | `/api/runs` | 无 | `Run[]`，最新200条 |
 | GET | `/api/runs/{id}` | 无 | `Run`；市场轮次带coverage，无work_items数组 |
+| POST | `/api/runs/{id}/relocate` | 无 | `Run`；仅市场检索轮次的 text_only 计划可“重试定位并补查”，规则见下文“2026-10-18：P0 修复”；路由注册在 `{action}` 之前 |
 | POST | `/api/runs/{id}/{action}` | path action=`pause/resume/cancel` | `Run`；不允许的状态转换409 |
 
 ### 3.2 企业库、审核、变更与导出
 
 | 方法 | 路径 | 输入 | HTTP 200 返回 / 注意 |
 |---|---|---|---|
-| GET | `/api/companies` | `q/status/type`，默认空串 | `Company[]`；不分页、无数量上限，只暴露这三个筛选 |
-| GET | `/api/company-page` | 见§4分页协议 | `{items,total,page,page_size}` |
+| GET | `/api/companies` | `q/status/type/category/excluded`，默认空串/hide | `Company[]`；不分页、无数量上限 |
+| GET | `/api/company-page` | 见§4分页协议 | `{items,total,page,page_size,excluded_total}` |
+| GET | `/api/company-categories` | `market_id?`、`excluded=hide/only/include` | `[{category,category_key,count}]`，按 count 降序，≤200 |
+| GET | `/api/exclusion-rules` | `market_id?` | 规则数组（带 `matched`）；传市场时为全局+该市场规则 |
+| POST | `/api/exclusion-rules` | `ExclusionRuleInput` | 新建 201；同作用域同值返回已有规则 200 且 `reused:true` |
+| DELETE | `/api/exclusion-rules/{id}` | 无 | 204；不存在 404 |
+| POST | `/api/companies/{id}/contacts` | `ManualContactInput` | 最新 `detail`；revision 不符/拒绝联系/同邮箱/同指纹 409 |
 | POST | `/api/companies` | `CompanyInput` | `Company`；每次人工新增，不去重 |
 | GET | `/api/companies/{id}` | 无 | `{company,contacts,observations,changes,social_links,related_locations}` |
 | PATCH | `/api/companies/{id}` | `CompanyPatch` | 更新后`Company`；必须revision |
 | POST | `/api/companies/batch-status` | `BatchStatus` | `{updated: N}`；整批原子校验revision |
 | POST | `/api/companies/{id}/refresh` | 无 | `Run`；无官网400、拒绝联系409 |
 | GET | `/api/reviews` | 无 | 待审核`Review[]`，按创建时间倒序；无分页。同企业同字段同值的观察合并为一条审核，每条含 `evidence_count`（来源数）与 `evidence_items`（最近≤5条 `{source_url,evidence,observed_at}`） |
-| POST | `/api/reviews/{id}/decision` | `{decision:"accept"或"reject"}` | `{ok:true,auto_closed:N}`（N 为同时自动关闭的同值待审核数）；已处理409；重复企业候选不允许accept覆盖另一企业 |
+| POST | `/api/reviews/{id}/decision` | `{decision:"accept"或"reject"}` | `{ok:true,auto_closed:N}`；联系人变化 reject 另返回 `kept_previous:true`，accept 时当前值已变返回 409 并作废该建议（N 为同时自动关闭的同值待审核数）；已处理409；重复企业候选不允许accept覆盖另一企业 |
 | GET | `/api/changes` | 无 | 变更数组，最新500条，含`company_name` |
-| GET | `/api/exports` | `format=csv/xlsx`及§4筛选；无page | 文件二进制；默认csv、排除拒绝联系企业，详见§8 |
+| GET | `/api/exports` | `format=csv/xlsx`、`layout=companies/entries`及§4筛选；无page | 文件二进制；默认csv+companies，`leads.*` / `contact-entries.*`，详见§8与 P0 节 |
 
 ### 3.3 社媒配置、浏览器与任务
 
@@ -446,3 +452,62 @@ GET /api/tasks/{id}/activity 新增只读 workflow 投影，详见 [任务流程
 Run.progress 增加 `social_total/social_done/social_accounts`；仅社媒父轮次的通用 total/done 同时使用社媒企业数。Task.latest_run 为 social 时，Task.coverage 和 market_stats 仍保留最近 discovery 的发现口径，不用社媒轮次的空地图工作项覆盖。部分有效预览可在 pending 重试期间保留；最终聚合同时检查项 state 与 result.partial，部分成功不冒充全部成功。
 
 滚动/帖子读取中迟到的登录、验证、HTTP 或网络异常保留结构化 reason，已有预览与帖子保留；市场平台仍进入相应登录等待或冷却。账号在 profile/read 期间被标为“不采用”时，在途来源协作取消，结果提交再次检查关联状态；迟到结果不新增观察、帖子或后续工作。以上修复不新增端点、请求字段或数据库结构。
+
+## 2026-10-18：P0 修复
+
+本节同步正文第 3–9 节在 P0 修复后的变化；与上文冲突时以本节为准。
+
+### 企业分页与列表（第 4、5 节）
+
+- 新参数：`category`（可重复，≤20 个，每个 1–120 字符，OR，按 NFKC+casefold+压缩空白后的 `category_key` 匹配）、`excluded=hide|only|include`（默认 hide）、`best_tier`（`named_procurement/named_role/named_unknown/department_email/general_email/form_phone/company_phone/none`）、`sort=tier`。非法值 422。
+- `type` 也命中“待核实”类型提示：企业 `business_types` 为空时，按所属市场的 `company_types`（wholesale→wholesaler 等）匹配。
+- 企业对象新增：`categories: string[]`（last_seen 降序）、`type_hints: [{business_type,market_id,market_name}]`（仅在 `business_types` 为空时返回）、`exclusion: {rule_id,kind,value,scope}|null`、`best_tier/best_tier_label/best_tier_rank`、`gap: {code,reason,next_step}|null`。`contact_count` 为去重后的联系入口数。分页顶层新增 `excluded_total`（其他筛选不变时被规则隐藏的家数）。
+- 列表为两段查询：先按纯 SQL 条件取一页 id，再对这一页批量补充计数、等级、类别、提示、排除命中、营业状态和缺口原因。
+
+### 联系人与详情
+
+- 联系人新增 `tier/tier_label`；人工联系人 `origin:"manual"`、`phone`，字段来源标签“人工录入”。
+- 详情 `company` 同样带 `categories/type_hints/best_tier*/gap`。
+
+### 排除规则（`ExclusionRuleInput`，extra=forbid）
+
+| 字段 / 条件 | 规则 | 失败 |
+|---|---|---|
+| `scope` | global / market | 422 |
+| `market_id` | market 必填且存在；global 不得提供 | 不存在 404“市场不存在”；其余 422 |
+| `kind` | category / keyword | 422 |
+| `value` | 去首尾空白后 1–120 字符，无控制字符 | 422 |
+| 关键词 | 规范化后 ≥2 字符 | 400“排除关键词至少 2 个字符” |
+| 总数 | ≤200 条 | 409“排除规则已达上限 200 条，请先删除不用的规则” |
+
+作用范围：按市场查看时用全局+本市场规则；不按市场查看时用全局+企业所属任一市场的规则。命中企业在列表、total、导出、类别计数、`tier_stats`、市场统计中默认隐藏；不删数据、不改状态，删规则即恢复。多条命中时类别规则优先，同类取最早创建的规则。关键词按包含匹配（企业名或任一类别）。
+
+### 人工新增联系人（`ManualContactInput`，extra=forbid）
+
+`revision` 必填且须等于企业当前修订号（否则 409“资料已更新，请刷新后重试”）；`name/role` ≤120；`email` ≤254 且格式有效（422“邮箱格式无效”）；`phone` ≤40，仅 `+ 数字 空格 ( ) - .`，数字 7–15 位（422“电话格式无效”）；`url` 公网 http(s)；`note` ≤1000；email/phone/url 至少一项（422）。
+`procurement=true` 时 `kind=procurement`，有姓名或岗位 `role_status=explicit`，否则 `department`；不勾选时 `kind=general`（岗位满足采购岗位规则时为 procurement），有岗位 explicit，否则 unknown。成功后 revision+1，来源“人工录入”，审核状态 accept、采用 accepted；之后自动采集到同一邮箱只记版本，不覆盖。其他 409：拒绝联系企业、同企业已有同邮箱联系人、同指纹（同名同电话/同 URL）。
+
+### 审核（第 7 节）
+
+- 联系人变化（同一邮箱再次采到不同姓名/岗位）改为“提议”：联系人行不变，新值存入 `contact_change_proposals`；待审核期间原联系人照常计数、导出。`reviews()` 返回 `contact_change: proposal|legacy|new`，`contact` 为“当前行+提议”。
+- accept：只比较 5 个身份键（name/role/kind/role_status/association_status）；当前值已变或联系人已归档时，提议与审核同时作废（superseded，已提交），再返回 409“当前值已变化，本条建议已失效，请查看最新联系人”。非冲突采集改写资料时同步 re-base 待审核提议的 `old_value`。
+- reject：只丢弃提议，联系人行与采用状态不变，返回 `kept_previous:true`；同一新值再次出现不再生成审核。已被用户排除的联系人再遇冲突值不生成提议。
+- 旧版待审核冲突（行已被旧代码覆盖、无提议行）在用户决定时转换：reject 恢复提议前快照，accept 保留新值，均写 `origin=legacy` 提议行。
+
+### 市场（任务）与轮次
+
+- `task()/tasks()` 新增 `tier_stats`（八个等级的家数，市场成员、未合并、按排除规则 hide）和 `market_stats.excluded`。
+- `coverage` 新增 `incomplete`、`incomplete_reason`（`geocode_failed` / `catalogue_no_bounds`）、`geometry_source`（geocoder / catalogue / null）、`geocoder_retry_at`、`relocatable`、`relocate_block_reason`、`run_id`。凡 text_only 计划都视为不完整，`unresolved` 恰有一条以“结果不完整：”开头的原因（历史轮次在读取时补齐），轮次结束为 partial；planning 工作项仍为 succeeded，`retryable` 不因此为 true。
+- 规划顺序：place_id 目录范围 → Nominatim → 目录唯一同名地点的范围（“已改用内置城市范围（{vintage}）”）→ text_only。南非自治市（whole_municipality）目录无范围时不调用地理编码。
+- `POST /api/runs/{id}/relocate` 矩阵：不存在 404；非市场轮次 400“仅市场检索轮次支持补查”；不是该市场最新一轮检索 409“只能对该市场最新一轮补查”；同市场另有 queued/running/paused 的检索轮次 409“该市场有进行中的轮次，请先等待或暂停”；计划不是 text_only 409“本轮已按城市范围检索，无需补查”；queued/running 409“轮次正在执行，请等待结束或先暂停”；paused 409“请先点继续，或取消后再补查”；cancelled 409“已取消的轮次不能补查，请开始新一轮更新”；completed/partial/failed/blocked 成功：去掉“结果不完整：”原因，planning 置 pending（`{"relocate":true}`），轮次 queued、`finished_at=null`、消息“重试城市定位并补查”。社媒轮次不参与比较。重新规划只忽略 15 分钟失败缓存，不忽略 429/503 冷却与 15 秒间隔；不调用 Maps 访问保护的 resume。
+- 官网复核工作项 `summary.entries_added` 为去重后新增联系入口数；结束消息为“本次官网扫描读取 N 页，新增联系入口 M 个（去重后）”。
+
+### 导出（第 8 节）
+
+- `layout=companies`（默认）：列与表名不变；XLSX 的 Contacts/Locations/Sources 末尾追加 `company_name`。
+- `layout=entries`：CSV 仅“联系入口”；XLSX 为“联系入口”“企业”“地点”“来源证据”，每张表第一列“企业名称”。联系入口列：企业名称、企业编号、实际城市、城市依据、目标市场、来源类别、业务类型、客户匹配状态、入口等级、渠道、联系方式、其他联系方式、联系人、岗位、来源、来源链接、采集时间、审核状态、企业官网。一行一个入口（与详情相同的分组：同邮箱合并、来源合并）；企业电话另起一行“仅企业电话”。“目标市场”按市场筛选时为该市场名，否则为所属全部市场（按 first_seen，用“、”连接）。实际城市从地址解析（US 州+邮编前一段，ZA 4 位邮编前一段），失败时用目标城市并注明“目标市场（地址未解析）”。
+- 两种布局都排除拒绝联系企业、不可用/不采用联系人、非客户开发用途联系人和按规则隐藏的企业；沿用公式注入保护（含电话前加 `'`）。导出仍为同步请求。
+
+### 新增错误文案（第 9 节）
+
+见上文各表；另有 400“仅市场检索轮次支持补查”、400“无效导出布局”（直接调用 Store 时）。

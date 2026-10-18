@@ -1,15 +1,15 @@
--- Generated 2026-09-26 from a temporary Store; no production DB opened.
--- Startup migrations plus source-extracted lazy market_exhausted_items DDL; no business fixtures.
--- Not an upgrade migration; schema only, no data.
--- SHA256 leadworkbench/api.py: 9a2b57d67a21fdc25b5b25e6183d586a88818b1d324e0d591b7449394e8dc99b
--- SHA256 leadworkbench/db.py: 8cd6ada61768a423937a1b1d989bb4a344b4916a450d1de530af01c3039efba8
--- SHA256 leadworkbench/market_store.py: 670f0c446adb9259b82b003f99b5074a32470c6345a76fc3f9a2014fa27c5c42
+-- Generated 2026-10-18 from a temporary Store; no production DB opened.
+-- Startup migrations (incl. P0 ledger items) plus lazy market_exhausted_items DDL; schema only, no data.
+-- Not an upgrade migration; use only to inspect/reconstruct an empty schema.
+-- SHA256 leadworkbench/api.py: 4d74fcef9d2b621357fc1c73b2769e7ecccc182bdc70ef6db9bac3c94710cb24
+-- SHA256 leadworkbench/db.py: 8cb1ed567aa68b162445808550408aa7a01890d51cf649b464f610d059978f9b
+-- SHA256 leadworkbench/market_store.py: f3425f35d0296e3955b85efc662b4e43a05e557d2c2cd334fee3d7a10c05e0dd
 -- SHA256 leadworkbench/social_store.py: 239b934cfc0981905fc296fcbe102844263219ae0f134e505c4d09857066b883
 -- SHA256 leadworkbench/social_discovery_store.py: 68ff3844a4eb744f6c48049758987001bea22e95c750e2a34778c469d7418a65
--- SHA256 leadworkbench/maps_policy.py: cf01759b27f08cb3b879cd34acb93fe09ee8a087846e5349169650b99ad25a02
+-- SHA256 leadworkbench/maps_policy.py: 1d55f9b1561c7f231b57d5261345025b1f2f6f9a3415c73f0c5b3fa82a00741c
 -- SHA256 leadworkbench/market_social.py: 456f33281748c403eb58977071fd54ee98ab29c3bf5ae9598f74cf2967b9a510
 -- SHA256 leadworkbench/social_policy.py: e9e7e023a31702bf067f99d6d56def2dba7b10e12f74b9a393ba4a9ccf56f00b
--- SHA256 leadworkbench/website_policy.py: dab383da6e97df47b5e2d36eec71a0a68b6434798bb35cc081d4ff2af64d3698
+-- SHA256 leadworkbench/p0_migrations.py: 94f0fb37982064b10e620bee336bfdd3253edc7142292cade429db2fff4a2c21
 PRAGMA foreign_keys=ON;
 BEGIN TRANSACTION;
 CREATE TABLE companies(
@@ -101,6 +101,10 @@ CREATE TABLE maps_access_policy(
  manual_required INTEGER NOT NULL DEFAULT 0, failures INTEGER NOT NULL DEFAULT 0,
  reason TEXT NOT NULL DEFAULT '');
 
+CREATE TABLE website_host_gates(
+ host TEXT PRIMARY KEY, gate TEXT NOT NULL DEFAULT '{}',
+ last_request REAL NOT NULL DEFAULT 0, min_interval REAL NOT NULL DEFAULT 2);
+
 CREATE TABLE listing_aliases(
             alias TEXT PRIMARY KEY,source_key TEXT NOT NULL REFERENCES listings(source_key));
 
@@ -122,6 +126,11 @@ CREATE TABLE contact_versions(
 
 CREATE TABLE company_manual_checks(
                 company_id TEXT PRIMARY KEY REFERENCES companies(id),checked_at TEXT NOT NULL);
+
+CREATE TABLE review_evidence(
+                review_id TEXT NOT NULL REFERENCES reviews(id),
+                fingerprint TEXT NOT NULL UNIQUE,
+                source_url TEXT,evidence TEXT,observed_at TEXT NOT NULL);
 
 CREATE TABLE social_entities(
             id TEXT PRIMARY KEY, platform TEXT NOT NULL, kind TEXT NOT NULL, url TEXT NOT NULL UNIQUE,
@@ -172,12 +181,44 @@ CREATE TABLE market_social_runs(
             market_run_id TEXT PRIMARY KEY REFERENCES runs(id),
             social_run_id TEXT NOT NULL UNIQUE REFERENCES social_runs(id));
 
--- Website policy added by startup audit migration.
-CREATE TABLE website_host_gates(
- host TEXT PRIMARY KEY, gate TEXT NOT NULL DEFAULT '{}',
- last_request REAL NOT NULL DEFAULT 0, min_interval REAL NOT NULL DEFAULT 2);
+CREATE TABLE schema_migrations(id TEXT PRIMARY KEY, applied_at TEXT NOT NULL);
 
--- Lazy runtime table, DDL extracted from record_market_exhausted.
+CREATE TABLE contact_facets(
+        contact_id TEXT PRIMARY KEY, company_id TEXT NOT NULL, channel_ok INTEGER NOT NULL,
+        category TEXT NOT NULL, tier TEXT NOT NULL, tier_rank INTEGER NOT NULL,
+        identity_key TEXT NOT NULL, email_key TEXT NOT NULL DEFAULT '', version INTEGER NOT NULL);
+
+CREATE TABLE contact_facets_dirty(contact_id TEXT PRIMARY KEY);
+
+CREATE TABLE manual_contacts(
+        contact_id TEXT PRIMARY KEY REFERENCES contacts(id),
+        phone TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL);
+
+CREATE TABLE company_categories(
+        company_id TEXT NOT NULL REFERENCES companies(id), category_key TEXT NOT NULL, category TEXT NOT NULL,
+        source_url TEXT NOT NULL DEFAULT '', first_seen TEXT NOT NULL, last_seen TEXT NOT NULL,
+        PRIMARY KEY(company_id, category_key));
+
+CREATE TABLE company_type_hints(
+        company_id TEXT NOT NULL REFERENCES companies(id), business_type TEXT NOT NULL,
+        market_id TEXT NOT NULL REFERENCES tasks(id), created_at TEXT NOT NULL,
+        PRIMARY KEY(company_id, business_type, market_id));
+
+CREATE TABLE exclusion_rules(
+        id TEXT PRIMARY KEY, scope TEXT NOT NULL CHECK(scope IN ('global','market')),
+        market_id TEXT REFERENCES tasks(id), kind TEXT NOT NULL CHECK(kind IN ('category','keyword')),
+        value TEXT NOT NULL, value_key TEXT NOT NULL, created_at TEXT NOT NULL,
+        CHECK((scope='global' AND market_id IS NULL) OR (scope='market' AND market_id IS NOT NULL)));
+
+CREATE TABLE contact_change_proposals(
+        review_id TEXT PRIMARY KEY REFERENCES reviews(id),
+        contact_id TEXT NOT NULL REFERENCES contacts(id),
+        proposal TEXT NOT NULL, proposal_key TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('pending','accepted','rejected','superseded')),
+        origin TEXT NOT NULL DEFAULT 'proposal' CHECK(origin IN ('proposal','legacy','repair')),
+        created_at TEXT NOT NULL, decided_at TEXT);
+
+-- Lazy runtime table; absent from a fresh Store until exhaustion is recorded.
 CREATE TABLE market_exhausted_items(
                 item_id TEXT PRIMARY KEY REFERENCES work_items(id),reason TEXT NOT NULL);
 
@@ -193,8 +234,64 @@ CREATE INDEX market_runs_market ON market_runs(market_id,run_id);
 
 CREATE INDEX listing_alias_source ON listing_aliases(source_key);
 
+CREATE INDEX review_evidence_review ON review_evidence(review_id);
+
 CREATE INDEX social_evidence_company ON social_evidence(company_id,entity_id);
 
 CREATE INDEX social_work_state ON social_work(state,run_id);
+
+CREATE INDEX contacts_company ON contacts(company_id);
+
+CREATE INDEX contacts_company_email ON contacts(company_id, lower(trim(email)));
+
+CREATE INDEX contact_versions_contact ON contact_versions(contact_id, observed_at);
+
+CREATE INDEX reviews_status ON reviews(status, created_at);
+
+CREATE INDEX reviews_company_field ON reviews(company_id, kind, field, status);
+
+CREATE INDEX reviews_contact ON reviews(kind, new_value, status);
+
+CREATE INDEX locations_company ON locations(company_id);
+
+CREATE INDEX changes_company ON changes(company_id, created_at);
+
+CREATE INDEX observations_company_field ON observations(company_id, field, observed_at);
+
+CREATE INDEX companies_newest ON companies(created_at DESC, id);
+
+CREATE INDEX companies_status ON companies(status);
+
+CREATE INDEX listings_company ON listings(company_id);
+
+CREATE INDEX work_items_target ON work_items(target, stage);
+
+CREATE INDEX contact_facets_company ON contact_facets(company_id, category, tier_rank);
+
+CREATE INDEX contact_facets_company_email ON contact_facets(company_id, email_key);
+
+CREATE INDEX company_categories_key ON company_categories(category_key, company_id);
+
+CREATE UNIQUE INDEX exclusion_rules_unique
+        ON exclusion_rules(scope, COALESCE(market_id,''), kind, value_key);
+
+CREATE INDEX contact_proposals_contact ON contact_change_proposals(contact_id, proposal_key, status);
+
+CREATE TRIGGER contacts_facets_insert AFTER INSERT ON contacts
+        BEGIN INSERT OR IGNORE INTO contact_facets_dirty VALUES(new.id); END;
+
+CREATE TRIGGER contacts_facets_update
+        AFTER UPDATE OF company_id,name,role,email,url,kind,role_status,association_status,evidence ON contacts
+        BEGIN INSERT OR IGNORE INTO contact_facets_dirty VALUES(new.id); END;
+
+CREATE TRIGGER contacts_facets_delete AFTER DELETE ON contacts
+        BEGIN DELETE FROM contact_facets WHERE contact_id=old.id;
+              DELETE FROM contact_facets_dirty WHERE contact_id=old.id; END;
+
+CREATE TRIGGER manual_contacts_facets_insert AFTER INSERT ON manual_contacts
+        BEGIN INSERT OR IGNORE INTO contact_facets_dirty VALUES(new.contact_id); END;
+
+CREATE TRIGGER manual_contacts_facets_update AFTER UPDATE ON manual_contacts
+        BEGIN INSERT OR IGNORE INTO contact_facets_dirty VALUES(new.contact_id); END;
 PRAGMA user_version=2;
 COMMIT;
