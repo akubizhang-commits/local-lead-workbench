@@ -1,6 +1,7 @@
 import { api } from "../api";
 import { date, label, runActions } from "../helpers";
 import { RunWarnings } from "../RunWarnings";
+import { RelocateNotice } from "../MarketSummary";
 import type { Overview, Run } from "../types";
 import { Badge } from "../ui";
 import { queueReason } from "../workerStatus";
@@ -47,6 +48,9 @@ export function RunCard({
         <small className="muted">{date(run.created_at)}</small>
       </div>
       <p>{run.message || "等待运行状态更新"}</p>
+      {run.kind === "discovery" && (
+        <RelocateNotice coverage={run.coverage} runId={run.id} busy={busy} act={act} />
+      )}
       {run.coverage?.capability_exhausted &&
         run.coverage.retryable === false && (
           <p className="queue-reason coverage-exhausted">

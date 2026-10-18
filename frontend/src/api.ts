@@ -9,4 +9,6 @@ async function token() {return tokenPromise ??= reach('/api/session',{credential
 export function resetSession() {tokenPromise=undefined;}
 export async function request(path:string,init:RequestInit={}) {const headers = new Headers(init.headers);headers.set('X-Local-Token',await token());if(init.body) headers.set('Content-Type','application/json');const response=await reach(`/api${path}`,{...init,headers,credentials:'same-origin',cache:'no-store'});if(response.status === 401 || response.status === 403) resetSession();return checked(response);}
 export async function api<T>(path:string,method='GET',body?:unknown):Promise<T> {const response=await request(path,{method,body:body === undefined ? undefined : JSON.stringify(body)});return response.json();}
+/** POST /runs/{id}/relocate: retry city geometry and add the area searches of a text-only round. */
+export async function relocateRun(id:string) {return api(`/runs/${encodeURIComponent(id)}/relocate`,'POST');}
 export async function download(path:string,filename:string) {const response=await request(path);const blob=await response.blob();const url=URL.createObjectURL(blob);const anchor=document.createElement('a');anchor.href=url;anchor.download=filename;document.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}

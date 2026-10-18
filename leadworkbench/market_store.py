@@ -597,7 +597,7 @@ class MarketStoreMixin:
                         incomplete=incomplete_reason is not None, incomplete_reason=incomplete_reason,
                         geometry_source=plan.get("geometry_source") or coverage.get("geometry_source"),
                         geocoder_retry_at=plan.get("geocoder_retry_at"),
-                        relocatable=block is None, relocate_block_reason=block)
+                        relocatable=block is None, relocate_block_reason=block, run_id=run_id)
         return coverage
 
     def _relocate_block(self, con, run, plan):

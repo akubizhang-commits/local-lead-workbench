@@ -1,3 +1,5 @@
+import {setupDOM} from './support/dom.ts';
+import {createElement} from 'react';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {warningSummary} from '../src/warningSummary.ts';
@@ -27,4 +29,31 @@ test('maps warnings separate scraper faults, real empty results, time limits and
   assert.deepEqual(paused.map(item => item.reason), ['已按用户操作暂停']);
   assert.ok(paused.every(item => !item.reason.includes('采集程序异常') && item.reason !== '读取未完成'));
   assert.deepEqual(reasons('采集程序异常：单次查询达到 180 秒时间上限后停止，结果不完整'), ['读取超时或时间预算耗尽']);
+});
+test('incomplete text-only round offers relocation with confirmation, or explains why not',async()=>{
+ const h=await setupDOM();
+ try {
+  const {RelocateNotice,relocateConfirm}=await import('../src/MarketSummary.tsx');
+  assert.equal(relocateConfirm(2),'将重新定位城市范围，成功后按范围补查，预计新增约 34 次地图检索（按访问保护逐个执行，可随时暂停）。继续吗？');
+  const calls:string[]=[];
+  let confirmed=false;
+  window.confirm=(text?:string)=>{calls.push(String(text));return confirmed;};
+  const acted:string[]=[];
+  const act=async(_work:()=>Promise<unknown>,message:unknown)=>{acted.push(String(message));};
+  const coverage={incomplete:true,relocatable:true,query_terms:['metal roofing supply'],geocoder_retry_at:'2026-10-18T10:00:00+00:00'};
+  await h.act(async()=>h.root.render(createElement(RelocateNotice,{coverage,runId:'r',busy:false,act} as never)));
+  assert.match(document.body.textContent!,/结果不完整：城市范围定位失败，本轮只取得首批结果。/);
+  assert.match(document.body.textContent!,/定位服务冷却中，请在 .+ 后重试。/);
+  const button=document.querySelector('button')!;
+  await h.act(async()=>{button.click();});
+  assert.deepEqual(calls,[relocateConfirm(1)]);assert.deepEqual(acted,[]);
+  confirmed=true;
+  await h.act(async()=>{button.click();});
+  assert.equal(acted.length,1);
+  await h.act(async()=>h.root.render(createElement(RelocateNotice,{coverage:{...coverage,relocatable:false,relocate_block_reason:'请先点继续，或取消后再补查'},runId:'r',busy:false,act} as never)));
+  assert.equal(document.querySelector('button')!.disabled,true);
+  assert.match(document.body.textContent!,/请先点继续，或取消后再补查/);
+  await h.act(async()=>h.root.render(createElement(RelocateNotice,{coverage:{incomplete:false},runId:'r',act} as never)));
+  assert.equal(document.body.textContent,'');
+ } finally {await h.cleanup();}
 });
