@@ -10,12 +10,11 @@ def test_legacy_fixture_loads_as_v2_and_opens(tmp_path):
     path = load_legacy(tmp_path)
     with closing(sqlite3.connect(path)) as con:
         assert con.execute("PRAGMA user_version").fetchone()[0] == 2
-    store = Store(tmp_path)
-    with store.connect() as con:
-        bob = con.execute("""SELECT c.*,d.adoption_status FROM contacts c JOIN contact_decisions d ON d.contact_id=c.id
-            WHERE c.email='bob@alpha.example'""").fetchone()
+        bob = con.execute("""SELECT c.review_status,d.adoption_status FROM contacts c
+            JOIN contact_decisions d ON d.contact_id=c.id WHERE c.email='bob@alpha.example'""").fetchone()
     # QA-F1 as produced by the old code: the row holds the rejected value and is excluded.
-    assert bob["adoption_status"] == "excluded" and bob["review_status"] == "reject"
+    assert bob == ("reject", "excluded")
+    assert Store(tmp_path).company_page()["total"] == 5
 
 
 def test_export_source_fixture_has_no_pending_contact_conflicts(tmp_path):
