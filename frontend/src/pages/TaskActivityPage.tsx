@@ -9,6 +9,7 @@ import { Resource } from '../Resource';
 import { Badge, Modal } from '../ui';
 import { Schedules } from '../Schedules';
 import { MarketSummary } from '../MarketSummary';
+import { ExclusionRules } from '../ExclusionRules';
 import { MarketSocialSettings } from '../MarketSocialSettings';
 import { RunCard } from './RunCard';
 import { RunWarnings } from '../RunWarnings';
@@ -53,7 +54,7 @@ export function TaskActivityPage({route,navigate,tasks,version,worker,busy,act,r
    <RunCard run={detail.data.run} worker={worker} busy={busy} act={act} openCompany={openCompany}/>
  </>}</Resource>;
  return <>
-  <section className="panel activity-overview"><div className="panel-heading"><h2>{standalone?'企业单独复核':task?.name||'市场检索任务'}</h2>{task&&<button onClick={()=>openMarket(task.id)}>查看市场企业</button>}</div>{task&&<><p>{[task.country,task.state,task.county,task.city].filter(Boolean).join(' / ')}{task.keywords.length?` · ${task.keywords.join('、')}`:''}</p>{(task.geography?.county_ids.length||0)>1&&<p className="muted">跨县城市 / 居民点：关联 {task.geography?.county_ids.length} 个县或同级地区，市场检索范围仍为完整城市 / 居民点。</p>}<MarketSummary market={task}/>
+  <section className="panel activity-overview"><div className="panel-heading"><h2>{standalone?'企业单独复核':task?.name||'市场检索任务'}</h2>{task&&<button onClick={()=>openMarket(task.id)}>查看市场企业</button>}</div>{task&&<><p>{[task.country,task.state,task.county,task.city].filter(Boolean).join(' / ')}{task.keywords.length?` · ${task.keywords.join('、')}`:''}</p>{(task.geography?.county_ids.length||0)>1&&<p className="muted">跨县城市 / 居民点：关联 {task.geography?.county_ids.length} 个县或同级地区，市场检索范围仍为完整城市 / 居民点。</p>}<MarketSummary market={task}/><details className="market-exclusions"><summary>本市场排除规则</summary><ExclusionRules marketId={task.id} version={version} busy={busy} act={act}/></details>
    <MarketSocialSettings key={task.id} task={task} busy={busy} onChange={refresh} onRun={run=>change({run:run.id,item:undefined,listRun:undefined,activityStatus:undefined,page:1})}/>
    <details><summary>市场设置与定时计划</summary><p>官网自动补全：{task.auto_enrich?'已开启':'已关闭'}</p><Schedules taskId={task.id} version={version}/></details></>}</section>
   <Resource {...list} retry={refresh}>

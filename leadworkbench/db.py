@@ -408,6 +408,14 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         company["operating_status"] = row["value"] if row else "unknown"
         company["operating_source_url"] = row["source_url"] if row else ""
         company["operating_observed_at"] = row["observed_at"] if row else ""
+        company["categories"] = [r[0] for r in con.execute(
+            "SELECT category FROM company_categories WHERE company_id=? ORDER BY last_seen DESC,category", (company["id"],))]
+        names = {r[0]: r[1] for r in con.execute("SELECT id,name FROM tasks")}
+        types = json.loads(company["business_types"]) if isinstance(company["business_types"], str) else company["business_types"]
+        company["type_hints"] = [] if types else [
+            dict(business_type=r[0], market_id=r[1], market_name=names.get(r[1], "")) for r in con.execute(
+                "SELECT business_type,market_id FROM company_type_hints WHERE company_id=? ORDER BY created_at,market_id",
+                (company["id"],))]
         return company
 
     def company(self, id):

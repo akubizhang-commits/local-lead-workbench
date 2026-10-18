@@ -34,3 +34,9 @@ test('capability-exhausted runs never offer ineffective resume; retryable runs s
  assert.deepEqual(runActions('partial',{...exhausted,retryable:true}),['resume']);
  assert.deepEqual(runActions('partial',{capability_exhausted:false,retryable:false}),['resume']);
 });
+test('array filters repeat their key and empty arrays disappear', () => {
+ const query = new URLSearchParams(filtersQuery({q:'',status:'',type:'',category:['Roofing supply store','Metal supplier'],excluded:'only'},1));
+ assert.deepEqual(query.getAll('category'), ['Roofing supply store','Metal supplier']);
+ assert.equal(query.get('excluded'), 'only');
+ assert.equal(filtersQuery({q:'',status:'',type:'',category:[],excluded:''}), '');
+});

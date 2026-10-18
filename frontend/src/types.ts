@@ -13,8 +13,12 @@ export interface TaskGeography {
 }
 export type SocialPlatform = 'facebook'|'instagram'|'x';
 export interface TaskSocialSettings {auto_social:boolean;social_platforms:SocialPlatform[];social_read_posts:boolean}
-export interface Task extends Partial<TaskSocialSettings> {id:string;name:string;created_by_user_id?:string|null;country:string;state:string;city:string;county?:string;geography?:TaskGeography;keywords:string[];company_types:string[];mode?:'market';market_stats?:{total:number;new:number;existing:number;changed:number;not_seen:number};coverage?:{scope_label:string;bbox?:number[]|null;planned:number;done:number;unresolved:string[];attribution?:string;query_basis?:'keywords'|'company_types';query_terms?:string[]};auto_enrich:boolean;created_at:string;latest_run:Run|null}
-export interface Company {operating_status?:string;operating_source_url?:string;operating_observed_at?:string;id:string;name:string;address:string;phone:string;website:string;city:string;country:string;business_types:string[];status:string;notes:string;revision:number;created_at:string;last_checked_at:string|null;manual_checked_at?:string|null;procurement_count?:number;email_count?:number;social_count?:number;contact_count:number;market_segment?:string;market_changed?:boolean;first_seen?:string;last_seen?:string}
+export interface Task extends Partial<TaskSocialSettings> {id:string;name:string;created_by_user_id?:string|null;country:string;state:string;city:string;county?:string;geography?:TaskGeography;keywords:string[];company_types:string[];mode?:'market';market_stats?:{total:number;new:number;existing:number;changed:number;not_seen:number;excluded?:number};coverage?:{scope_label:string;bbox?:number[]|null;planned:number;done:number;unresolved:string[];attribution?:string;query_basis?:'keywords'|'company_types';query_terms?:string[]};auto_enrich:boolean;created_at:string;latest_run:Run|null}
+export interface TypeHint {business_type:string;market_id:string;market_name:string}
+export interface Exclusion {rule_id:string;kind:'category'|'keyword';value:string;scope:'global'|'market'}
+export interface ExclusionRule {id:string;scope:'global'|'market';market_id:string|null;kind:'category'|'keyword';value:string;value_key:string;created_at:string;matched:number;reused?:boolean}
+export interface CategoryCount {category:string;category_key:string;count:number}
+export interface Company {categories?:string[];type_hints?:TypeHint[];exclusion?:Exclusion|null;operating_status?:string;operating_source_url?:string;operating_observed_at?:string;id:string;name:string;address:string;phone:string;website:string;city:string;country:string;business_types:string[];status:string;notes:string;revision:number;created_at:string;last_checked_at:string|null;manual_checked_at?:string|null;procurement_count?:number;email_count?:number;social_count?:number;contact_count:number;market_segment?:string;market_changed?:boolean;first_seen?:string;last_seen?:string}
 export interface ContactField {key:string;label:string;value:string;source_url:string;source_label:string;observed_at:string}
 export interface ContactSource {source_url:string;evidence:string;observed_at:string}
 export interface Contact {outreach_category?:string;id:string;name:string;role:string;email:string;url:string;kind:string;role_status:string;association_status:string;source_url:string;evidence:string;observed_at:string;review_status:string;adoption_status?:'excluded'|'accepted'|'automatic';fields:ContactField[];sources?:ContactSource[];record_ids?:string[]}
@@ -41,4 +45,4 @@ export interface Overview {maps_policy?:{manual_required:boolean;retry_after_sec
 export interface Settings {data_dir:string;version:string;network_mode:string;paid_services:boolean;ai_enabled:boolean}
 export interface Backup {name:string;created_at:string}
 
-export interface CompanyPage {items:Company[];total:number;page:number;page_size:number}
+export interface CompanyPage {items:Company[];total:number;page:number;page_size:number;excluded_total?:number}

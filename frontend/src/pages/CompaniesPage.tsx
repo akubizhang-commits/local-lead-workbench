@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { api, download } from "../api";
 import { batchStatusPayload } from "../companyEdits";
 import { CompanyStatus, StatusOptions } from "../CompanyStatus";
-import { date, filtersQuery, type Filters } from "../helpers";
+import { date, filtersQuery, hintLabel, type Filters } from "../helpers";
+import { CategoryFilter } from "../CategoryFilter";
+import { ExclusionRules } from "../ExclusionRules";
 import { useResource } from "../hooks";
 import { defaultFilters } from "../navigation";
 import type { Company, CompanyPage, Task } from "../types";
@@ -10,6 +12,42 @@ import { Alert, Badge, Empty, Icon } from "../ui";
 
 import { Resource } from "../Resource";
 import type { Action } from "./pageTypes";
+export function CategoryTags({ categories }: { categories: string[] }) {
+  if (!categories.length) return <span className="muted">—</span>;
+  return (
+    <div className="tags" title={categories.join("、")}>
+      {categories.slice(0, 2).map((category) => (
+        <span key={category} className="badge">{category}</span>
+      ))}
+      {categories.length > 2 && <span className="badge">+{categories.length - 2}</span>}
+    </div>
+  );
+}
+export function ExcludedNotice({
+  hidden,
+  mode,
+  onChange,
+}: {
+  hidden: number;
+  mode: "" | "only" | "include";
+  onChange: (mode: "" | "only" | "include") => void;
+}) {
+  if (mode)
+    return (
+      <div className="alert excluded-notice" role="status">
+        {mode === "only" ? "当前只显示按排除规则隐藏的企业" : "当前显示全部企业，含按排除规则隐藏的企业"} ·{" "}
+        <button className="text-button" onClick={() => onChange("")}>恢复默认隐藏</button>
+      </div>
+    );
+  if (!hidden) return null;
+  return (
+    <div className="alert excluded-notice" role="status">
+      已按排除规则隐藏 {hidden} 家 ·{" "}
+      <button className="text-button" onClick={() => onChange("only")}>查看已排除</button>{" "}/{" "}
+      <button className="text-button" onClick={() => onChange("include")}>全部显示</button>
+    </div>
+  );
+}
 export function CompaniesPage({
   version,
   filters,
@@ -44,6 +82,7 @@ export function CompaniesPage({
     Record<string, { id: string; revision: number }>
   >({});
   const [batchStatus, setBatchStatus] = useState("candidate");
+  const [showRules, setShowRules] = useState(false);
   useEffect(() => {
     setDraftQuery(filters.q);
     setSelection({});
@@ -154,6 +193,15 @@ export function CompaniesPage({
           <option value="email">其他邮箱优先</option>
           <option value="updated">最近更新优先</option>
         </select>
+        <CategoryFilter
+          marketId={filters.market_id}
+          selected={filters.category || []}
+          version={version}
+          onChange={(category) => updateFilters({ category })}
+        />
+        <button aria-expanded={showRules} onClick={() => setShowRules((v) => !v)}>
+          排除规则
+        </button>
         <button
           onClick={() => {
             setDraftQuery("");
@@ -163,6 +211,12 @@ export function CompaniesPage({
           重置
         </button>
       </div>
+      {showRules && <ExclusionRules version={version} busy={busy} act={act} />}
+      <ExcludedNotice
+        hidden={companies.data?.excluded_total ?? 0}
+        mode={filters.excluded || ""}
+        onChange={(excluded) => updateFilters({ excluded })}
+      />
       {tasks.error && (
         <Alert>
           市场列表暂不可用：{tasks.error}{" "}
@@ -268,6 +322,7 @@ export function CompaniesPage({
                   </th>
                   <th>企业 / 地区</th>
                   <th>业务类型</th>
+                  <th>来源类别</th>
                   {filters.market_id && <th>市场分类</th>}
                   <th>客户匹配状态</th>
                   <th>联系入口</th>
@@ -310,6 +365,11 @@ export function CompaniesPage({
                             {[c.city, c.country].filter(Boolean).join(" / ") ||
                               "地区未记录"}
                           </small>
+                          {c.exclusion && (
+                            <small className="badge badge-excluded">
+                              已排除：{c.exclusion.kind === "category" ? "类别" : "关键词"} {c.exclusion.value}
+                            </small>
+                          )}
                         </span>
                       </button>
                     </td>
@@ -318,7 +378,15 @@ export function CompaniesPage({
                         {c.business_types.map((t) => (
                           <Badge key={t} value={t} />
                         ))}
+                        {[...new Set((c.type_hints || []).map((h) => h.business_type))].map((t) => (
+                          <span key={t} className="badge badge-hint" title="来自市场定义的企业类型，尚未核实">
+                            {hintLabel(t)}
+                          </span>
+                        ))}
                       </div>
+                    </td>
+                    <td>
+                      <CategoryTags categories={c.categories || []} />
                     </td>
                     {filters.market_id && (
                       <td>

@@ -21,3 +21,14 @@ test('coverage shows which search terms the round used, and nothing for legacy r
   assert.doesNotMatch(document.body.textContent!,/检索词/);
  } finally {await h.cleanup();}
 });
+test('market summary reports companies hidden by exclusion rules',async()=>{
+ const h=await setupDOM();
+ try {
+  const {MarketSummary}=await import('../src/MarketSummary.tsx');
+  const stats={total:10,new:1,existing:9,changed:0,not_seen:0};
+  await h.act(async()=>h.root.render(createElement(MarketSummary,{market:{...base,coverage,market_stats:{...stats,excluded:3}}})));
+  assert.match(document.body.textContent!,/已按排除规则隐藏 3 家/);
+  await h.act(async()=>h.root.render(createElement(MarketSummary,{market:{...base,coverage,market_stats:{...stats,excluded:0}}})));
+  assert.doesNotMatch(document.body.textContent!,/排除规则/);
+ } finally {await h.cleanup();}
+});

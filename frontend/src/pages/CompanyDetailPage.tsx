@@ -106,8 +106,12 @@ export function CompanyDetailPage({
                   <dt>业务类型</dt>
                   <dd>
                     {detail.data.company.business_types.map(label).join("、") ||
+                      [...new Set((detail.data.company.type_hints || []).map((h) => h.business_type))]
+                        .map((t) => `${label(t)}（来自市场定义，待核实）`).join("、") ||
                       "待核实"}
                   </dd>
+                  <dt>来源类别</dt>
+                  <dd>{(detail.data.company.categories || []).join("、") || "—"}</dd>
                   <dt>官网采集时间</dt>
                   <dd>{date(detail.data.company.last_checked_at)}</dd>
                   <dt>人工确认时间</dt>
