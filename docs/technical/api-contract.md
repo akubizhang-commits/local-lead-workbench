@@ -500,13 +500,15 @@ Run.progress 增加 `social_total/social_done/social_accounts`；仅社媒父轮
 - `coverage` 新增 `incomplete`、`incomplete_reason`（`geocode_failed` / `catalogue_no_bounds`）、`geometry_source`（geocoder / catalogue / null）、`geocoder_retry_at`、`relocatable`、`relocate_block_reason`、`run_id`。凡 text_only 计划都视为不完整，`unresolved` 恰有一条以“结果不完整：”开头的原因（历史轮次在读取时补齐），轮次结束为 partial；planning 工作项仍为 succeeded，`retryable` 不因此为 true。
 - 规划顺序：place_id 目录范围 → Nominatim → 目录唯一同名地点的范围（“已改用内置城市范围（{vintage}）”）→ text_only。南非自治市（whole_municipality）目录无范围时不调用地理编码。
 - `POST /api/runs/{id}/relocate` 矩阵：不存在 404；非市场轮次 400“仅市场检索轮次支持补查”；不是该市场最新一轮检索 409“只能对该市场最新一轮补查”；同市场另有 queued/running/paused 的检索轮次 409“该市场有进行中的轮次，请先等待或暂停”；计划不是 text_only 409“本轮已按城市范围检索，无需补查”；queued/running 409“轮次正在执行，请等待结束或先暂停”；paused 409“请先点继续，或取消后再补查”；cancelled 409“已取消的轮次不能补查，请开始新一轮更新”；completed/partial/failed/blocked 成功：去掉“结果不完整：”原因，planning 置 pending（`{"relocate":true}`），轮次 queued、`finished_at=null`、消息“重试城市定位并补查”。社媒轮次不参与比较。重新规划只忽略 15 分钟失败缓存，不忽略 429/503 冷却与 15 秒间隔；不调用 Maps 访问保护的 resume。
+- 官网表单入口：只有联系 / 询价 / 报价 / 供应商合作 / 经销申请类页面（按 URL 最后一段与页面标题判断；blog、news、privacy、terms、careers、products 等栏目下的页面一律不算）上的 `<form>` 计为入口，每个企业官网一次扫描最多 1 个表单入口；没有联系类页面带表单时，扫描结束时保留最早发现的 1 个其他页面表单。已入库的旧表单入口不删除，下次扫描按新规则生成。“Contact us”等链接入口不受影响。
 - 官网复核工作项 `summary.entries_added` 为去重后新增联系入口数；结束消息为“本次官网扫描读取 N 页，新增联系入口 M 个（去重后）”。
 
 ### 导出（第 8 节）
 
 - `layout=companies`（默认）：列与表名不变；XLSX 的 Contacts/Locations/Sources 末尾追加 `company_name`。
 - `layout=entries`：CSV 仅“联系入口”；XLSX 为“联系入口”“企业”“地点”“来源证据”，每张表第一列“企业名称”。联系入口列：企业名称、企业编号、实际城市、城市依据、目标市场、来源类别、业务类型、客户匹配状态、入口等级、渠道、联系方式、其他联系方式、联系人、岗位、来源、来源链接、采集时间、审核状态、企业官网。一行一个入口（与详情相同的分组：同邮箱合并、来源合并）；企业电话另起一行“仅企业电话”。“目标市场”按市场筛选时为该市场名，否则为所属全部市场（按 first_seen，用“、”连接）。实际城市从地址解析（US 州+邮编前一段，ZA 4 位邮编前一段），失败时用目标城市并注明“目标市场（地址未解析）”。
-- 两种布局都排除拒绝联系企业、不可用/不采用联系人、非客户开发用途联系人和按规则隐藏的企业；沿用公式注入保护（含电话前加 `'`）。导出仍为同步请求。
+- 两种布局都排除拒绝联系企业、不可用/不采用联系人、非客户开发用途联系人和按规则隐藏的企业。导出仍为同步请求。
+- 公式注入保护：以 `=`、`+`、`-`、`@`、制表符或回车开头的值，CSV 前加 `'`（含电话）；XLSX 不加撇号，这些单元格显式写成文本类型（`data_type='s'`，数字格式 `@`），Excel 打开时原样显示、不会作为公式执行。
 
 ### 新增错误文案（第 9 节）
 
