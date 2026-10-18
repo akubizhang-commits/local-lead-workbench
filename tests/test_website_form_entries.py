@@ -134,3 +134,27 @@ async def test_partial_stop_keeps_fallback_pending_until_a_resume_finishes(conta
                           ROOT + "contact": page("Contact | Acme", contact_body)},
                          checkpoint=resumed(first["checkpoint"], website_clock))
     assert [c["url"] for c in forms(second)] == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("dead", [Response(status=404), Response(status=410)])
+async def test_permanent_dead_link_does_not_hold_back_the_fallback(dead, website_clock):
+    routes = {ROOT + "robots.txt": Response(status=404),
+              ROOT: page("Acme", form("/", "Leave us a message") + '<a href="/team-x">Team</a>'),
+              ROOT + "team-x": dead}
+    first = await crawl(routes)
+    assert first["status"] == "partial"
+    assert [(c["url"], c["source_url"]) for c in forms(first)] == [(ROOT, ROOT)]
+    # A resume that hits the same dead link again keeps exactly that one entry.
+    second = await crawl(routes, checkpoint=resumed(first["checkpoint"], website_clock))
+    assert forms(second) == [] and second["checkpoint"]["form_entry"]["kept"]
+    assert second["summary"]["contacts_found"] == first["summary"]["contacts_found"]
+
+
+@pytest.mark.asyncio
+async def test_robots_disallowed_page_does_not_hold_back_the_fallback():
+    routes = {ROOT + "robots.txt": Response("User-agent: *\nDisallow: /team-x\n"),
+              ROOT: page("Acme", form("/", "Leave us a message") + '<a href="/team-x">Team</a>')}
+    result = await crawl(routes)
+    assert result["summary"]["failed"] == 1
+    assert [c["url"] for c in forms(result)] == [ROOT]

@@ -1013,6 +1013,9 @@ async def enrich_website(url: str, *, max_pages: int = WEBSITE_BATCH_SIZE,
     result["pages_skipped"] = len(skipped)
     documents = {item["url"]: item for item in checkpoint.get("files_unparsed", [])}
     failures = dict(checkpoint.get("failures", {}))
+    # Failures a retry may still turn into a page (429, 5xx, network errors).
+    # Only these hold back the fallback form entry; a resume clears failures.
+    retryable = {target for target in checkpoint.get("retryable_failures", []) if target in failures}
     failure_warnings = dict(checkpoint.get("failure_warnings", {}))
     logs = list(checkpoint.get("logs", []))
     previous = checkpoint.get("summary", {})
@@ -1305,6 +1308,7 @@ async def enrich_website(url: str, *, max_pages: int = WEBSITE_BATCH_SIZE,
                     except (UnsafeURL, RobotsDenied, PageChallenge) as exc:
                         interrupted = None
                         failures[target] = list(position)
+                        retryable.discard(target)
                         logs.append({"url": target, "status": "blocked", "reason": str(exc)})
                         blocked = True
                         failure_warnings[target] = f"{target}: {exc}"
@@ -1317,6 +1321,11 @@ async def enrich_website(url: str, *, max_pages: int = WEBSITE_BATCH_SIZE,
                     except (FetchError, aiohttp.ClientError, OSError, TimeoutError) as exc:
                         interrupted = None
                         failures[target] = list(position)
+                        if (isinstance(exc, (aiohttp.ClientError, OSError, TimeoutError))
+                                or isinstance(exc, HTTPError) and (exc.status == 429 or exc.status >= 500)):
+                            retryable.add(target)
+                        else:
+                            retryable.discard(target)
                         reason = str(exc).strip() or type(exc).__name__
                         logs.append({"url": target, "status": "failed", "reason": reason})
                         if (isinstance(exc, (aiohttp.ClientError, OSError, TimeoutError))
@@ -1397,12 +1406,14 @@ async def enrich_website(url: str, *, max_pages: int = WEBSITE_BATCH_SIZE,
     has_more = bool(queue) and batch_progress > 0 and not host_paused
     if budget_yield and queue and not has_more and not host_paused:
         warn(budget_reason)
-    exhausted = not queue and not failures and not host_paused
+    exhausted = not queue and not retryable and not host_paused
     if exhausted and not form_entry["kept"] and form_entry["fallback"]:
         # No contact-type page had a form: keep the earliest form found so the
         # company still shows that it publishes one. A resumable partial stop
-        # (failed page, host pause, zero-progress batch) keeps the candidate in
-        # the checkpoint, since a retried contact page may still have a form.
+        # (retryable page failure, host pause, zero-progress batch) keeps the
+        # candidate in the checkpoint, since a retried contact page may still
+        # have a form. Permanent failures (404/410, unsafe URL, robots
+        # disallow) do not hold it back.
         add_site_contact(form_entry["fallback"])
         form_entry.update(kept=True, fallback=None)
     summary = {"pages_checked": previous.get("pages_checked", 0) + result["pages_checked"],
@@ -1420,7 +1431,7 @@ async def enrich_website(url: str, *, max_pages: int = WEBSITE_BATCH_SIZE,
         "fetched": sorted(fetched), "skipped": sorted(skipped), "discovery_order": discovery_order,
         "observation_keys": sorted(observation_keys), "contact_keys": sorted(contact_keys),
         "form_entry": form_entry, "social_seen": sorted(social_seen), "warnings": result["warnings"], "failures": failures,
-        "failure_warnings": failure_warnings, "last_request": last_request, "request_delays": request_delays,
+        "retryable_failures": sorted(retryable), "failure_warnings": failure_warnings, "last_request": last_request, "request_delays": request_delays,
         "host_gates": host_gates,
         "logs": logs, "summary": summary, "budget_warning": budget_reason if budget_yield and queue and not has_more and not host_paused else None,
         "batches": checkpoint.get("batches", 0) + 1})
