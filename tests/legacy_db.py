@@ -22,6 +22,8 @@ def load_legacy(directory, sql="legacy_v2_9423c53.sql"):
         con.executescript(dump)
         con.execute("PRAGMA user_version=2")
         con.commit()
+        # Databases created by 9423c53 are persistently in WAL mode.
+        con.execute("PRAGMA journal_mode=WAL")
     return path
 
 
