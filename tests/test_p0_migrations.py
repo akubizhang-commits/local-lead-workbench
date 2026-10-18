@@ -46,18 +46,31 @@ def changed_rows(before, after):
     return diff
 
 
-ALLOWED_CHANGES = {}  # legacy rows a migration may rewrite, per fixture (repair item only)
+REPAIRED_EMAILS = ("bob@alpha.example", "dana@gamma.example")
+
+
+def repair_rows(path):
+    """Legacy rows the D2=A repair item may rewrite: the wrongly excluded contacts and their decisions."""
+    with closing(sqlite3.connect(path)) as con:
+        marks = ",".join("?" for _ in REPAIRED_EMAILS)
+        contacts = [r[0] for r in con.execute(f"SELECT rowid FROM contacts WHERE email IN ({marks}) ORDER BY rowid",
+                                              REPAIRED_EMAILS)]
+        decisions = [r[0] for r in con.execute(f"""SELECT d.rowid FROM contact_decisions d JOIN contacts c
+            ON c.id=d.contact_id WHERE c.email IN ({marks}) ORDER BY d.rowid""", REPAIRED_EMAILS)]
+    return {"contacts": contacts, "contact_decisions": decisions} if contacts else {}
 
 
 @pytest.mark.parametrize("fixture", FIXTURES)
 def test_upgrade_keeps_legacy_rows_and_records_ledger(tmp_path, fixture):
     path = load_legacy(tmp_path, fixture)
     before = snapshot(path)
+    allowed = repair_rows(path)
     store = Store(tmp_path)
     after = snapshot(path, list(before))
     for table, rows in before.items():
-        assert len(after[table]) >= len(rows), table
-    assert changed_rows(before, after) == ALLOWED_CHANGES.get(fixture, {})
+        if table != "contact_decisions":  # repair deletes the decision rows that wrongly excluded
+            assert len(after[table]) >= len(rows), table
+    assert changed_rows(before, after) == allowed
     assert ledger(store) == [id for id, _ in MIGRATIONS]
     with store.connect() as con:
         names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='index'")}

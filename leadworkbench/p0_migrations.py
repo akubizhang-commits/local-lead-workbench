@@ -119,6 +119,53 @@ def _contact_proposals(store, con):
         log.info("P0：%d 条旧版待审核联系人冲突保持原样，等待用户在审核页处理", legacy)
 
 
+REPAIR_CANDIDATES = """SELECT r.*,c.review_status contact_status FROM reviews r JOIN contacts c ON c.id=r.new_value
+    WHERE r.kind='contact' AND r.status='reject' AND COALESCE(r.old_value,'') NOT IN ('','{}')
+    AND c.review_status='reject'
+    AND NOT EXISTS(SELECT 1 FROM contact_change_proposals p WHERE p.review_id=r.id)
+    AND r.rowid=(SELECT max(r2.rowid) FROM reviews r2 WHERE r2.kind='contact' AND r2.new_value=r.new_value)
+    ORDER BY r.created_at,r.rowid"""
+
+
+def _repair_rejected(store, con):
+    """D2=A: restore contacts that the old "标记为不采用" excluded together with a rejected change (§3.6)."""
+    from .db import MATERIAL_KEYS, encode, proposal_key, uid
+    candidates = con.execute(REPAIR_CANDIDATES).fetchall()
+    if not candidates:
+        return
+    try:
+        backup = store.backup()["name"]
+    except Exception as exc:
+        raise SkipMigration(f"修复前备份失败：{exc}") from exc
+    stamp = now()
+    for review in candidates:
+        contact_id = review["new_value"]
+        current = con.execute("SELECT * FROM contacts WHERE id=?", (contact_id,)).fetchone()
+        store._restore_contact(con, contact_id, store._pre_proposal_snapshot(con, review, current))
+        before = con.execute("""SELECT old_value FROM changes WHERE field='contact_adoption' AND company_id=?
+            AND json_extract(new_value,'$.contact_id')=? AND json_extract(new_value,'$.adoption_status')='excluded'
+            ORDER BY created_at DESC,rowid DESC LIMIT 1""", (review["company_id"], contact_id)).fetchone()
+        prior = before[0] if before else "automatic"
+        if prior == "accepted":
+            con.execute("INSERT OR REPLACE INTO contact_decisions VALUES(?,'accepted',?)", (contact_id, stamp))
+        elif prior != "excluded":
+            con.execute("DELETE FROM contact_decisions WHERE contact_id=?", (contact_id,))
+        rejected = {k: current[k] or "" for k in MATERIAL_KEYS}
+        rejected.update(source_url=current["source_url"] or "", observed_at=current["observed_at"] or "")
+        con.execute("INSERT INTO contact_change_proposals VALUES(?,?,?,?,?,?,?,?)",
+                    (review["id"], contact_id, encode(rejected), proposal_key(rejected), "rejected", "repair",
+                     stamp, stamp))
+        con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
+                    (uid(), review["company_id"], "contact", encode({k: rejected[k] for k in MATERIAL_KEYS}),
+                     review["old_value"], stamp,
+                     f"数据修复：恢复因‘标记为不采用’被误排除的原联系人（修复前备份 {backup}）"))
+    if store._facets_enabled or con.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='contact_facets'").fetchone():
+        store._refresh_facets_locked(con)
+    log.warning("restored %d contacts wrongly excluded by rejected change reviews; backup %s",
+                len(candidates), backup)
+
+
 def _registry():
     from .contact_tiers import FACET_VERSION
     return [
@@ -127,6 +174,7 @@ def _registry():
         (f"contact_facets_v{FACET_VERSION}_mark", _facets_mark),
         (f"contact_facets_v{FACET_VERSION}", _facets_fill),
         ("p0_20261018_contact_proposals", _contact_proposals),
+        ("p0_20261018_repair_rejected", _repair_rejected),
     ]
 
 
