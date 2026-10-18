@@ -139,6 +139,8 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             self._migrate_audit(con)
             self._migrate_social(con)
             self._migrate_market_social(con)
+            from .p0_migrations import migrate_p0
+            migrate_p0(self, con)
         self.path.chmod(0o600)
         self.resolve_branch_reviews()
         self.resolve_empty_reviews()
@@ -173,12 +175,19 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             CREATE INDEX IF NOT EXISTS review_evidence_review ON review_evidence(review_id);
         """)
         # Backfill decisions, including exclusions superseded by later observations.
-        con.execute("""INSERT OR IGNORE INTO contact_decisions
+        # Decisions on contact change proposals never exclude the contact (P0-2):
+        # once the proposals table exists, those reviews are not legacy decisions.
+        proposals = con.execute("""SELECT 1 FROM sqlite_master WHERE type='table'
+            AND name='contact_change_proposals'""").fetchone()
+        def guard(alias):
+            return (f"AND NOT EXISTS(SELECT 1 FROM contact_change_proposals p WHERE p.review_id={alias}.id)"
+                    if proposals else "")
+        con.execute(f"""INSERT OR IGNORE INTO contact_decisions
             SELECT c.id,CASE r.status WHEN 'reject' THEN 'excluded' ELSE 'accepted' END,r.created_at
             FROM contacts c JOIN reviews r ON r.new_value=c.id AND r.kind='contact'
-            WHERE r.status IN ('accept','reject') AND r.rowid=(
+            WHERE r.status IN ('accept','reject') {guard('r')} AND r.rowid=(
                 SELECT max(r2.rowid) FROM reviews r2 WHERE r2.new_value=c.id
-                AND r2.kind='contact' AND r2.status IN ('accept','reject'))""")
+                AND r2.kind='contact' AND r2.status IN ('accept','reject') {guard('r2')})""")
         con.execute("""INSERT OR IGNORE INTO contact_decisions
             SELECT id,CASE review_status WHEN 'reject' THEN 'excluded' ELSE 'accepted' END,observed_at
             FROM contacts WHERE review_status IN ('accept','reject')""")
@@ -1167,6 +1176,8 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                     self._migrate_audit(dest)
                     self._migrate_social(dest)
                     self._migrate_market_social(dest)
+                    from .p0_migrations import migrate_p0
+                    migrate_p0(self, dest)
         finally:
             _remove_database_files(tmp)
         self.recover()
