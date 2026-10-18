@@ -1397,9 +1397,12 @@ async def enrich_website(url: str, *, max_pages: int = WEBSITE_BATCH_SIZE,
     has_more = bool(queue) and batch_progress > 0 and not host_paused
     if budget_yield and queue and not has_more and not host_paused:
         warn(budget_reason)
-    if not has_more and not form_entry["kept"] and form_entry["fallback"]:
+    exhausted = not queue and not failures and not host_paused
+    if exhausted and not form_entry["kept"] and form_entry["fallback"]:
         # No contact-type page had a form: keep the earliest form found so the
-        # company still shows that it publishes one.
+        # company still shows that it publishes one. A resumable partial stop
+        # (failed page, host pause, zero-progress batch) keeps the candidate in
+        # the checkpoint, since a retried contact page may still have a form.
         add_site_contact(form_entry["fallback"])
         form_entry.update(kept=True, fallback=None)
     summary = {"pages_checked": previous.get("pages_checked", 0) + result["pages_checked"],

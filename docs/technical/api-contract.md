@@ -500,7 +500,7 @@ Run.progress 增加 `social_total/social_done/social_accounts`；仅社媒父轮
 - `coverage` 新增 `incomplete`、`incomplete_reason`（`geocode_failed` / `catalogue_no_bounds`）、`geometry_source`（geocoder / catalogue / null）、`geocoder_retry_at`、`relocatable`、`relocate_block_reason`、`run_id`。凡 text_only 计划都视为不完整，`unresolved` 恰有一条以“结果不完整：”开头的原因（历史轮次在读取时补齐），轮次结束为 partial；planning 工作项仍为 succeeded，`retryable` 不因此为 true。
 - 规划顺序：place_id 目录范围 → Nominatim → 目录唯一同名地点的范围（“已改用内置城市范围（{vintage}）”）→ text_only。南非自治市（whole_municipality）目录无范围时不调用地理编码。
 - `POST /api/runs/{id}/relocate` 矩阵：不存在 404；非市场轮次 400“仅市场检索轮次支持补查”；不是该市场最新一轮检索 409“只能对该市场最新一轮补查”；同市场另有 queued/running/paused 的检索轮次 409“该市场有进行中的轮次，请先等待或暂停”；计划不是 text_only 409“本轮已按城市范围检索，无需补查”；queued/running 409“轮次正在执行，请等待结束或先暂停”；paused 409“请先点继续，或取消后再补查”；cancelled 409“已取消的轮次不能补查，请开始新一轮更新”；completed/partial/failed/blocked 成功：去掉“结果不完整：”原因，planning 置 pending（`{"relocate":true}`），轮次 queued、`finished_at=null`、消息“重试城市定位并补查”。社媒轮次不参与比较。重新规划只忽略 15 分钟失败缓存，不忽略 429/503 冷却与 15 秒间隔；不调用 Maps 访问保护的 resume。
-- 官网表单入口：只有联系 / 询价 / 报价 / 供应商合作 / 经销申请类页面（按 URL 最后一段与页面标题判断；blog、news、privacy、terms、careers、products 等栏目下的页面一律不算）上的 `<form>` 计为入口，每个企业官网一次扫描最多 1 个表单入口；没有联系类页面带表单时，扫描结束时保留最早发现的 1 个其他页面表单。已入库的旧表单入口不删除，下次扫描按新规则生成。“Contact us”等链接入口不受影响。
+- 官网表单入口：只有联系 / 询价 / 报价 / 供应商合作 / 经销申请类页面（按 URL 最后一段与页面标题判断；blog、news、privacy、terms、careers、products 等栏目下的页面一律不算）上的 `<form>` 计为入口，每个企业官网一次扫描最多 1 个表单入口；没有联系类页面带表单时，扫描完整走完时（队列为空、没有失败页面、站点未暂停）保留最早发现的 1 个其他页面表单；部分完成的扫描先把候选留在 checkpoint，“继续”后重试的联系页若有表单则优先。已入库的旧表单入口不删除，下次扫描按新规则生成。“Contact us”等链接入口不受影响。
 - 官网复核工作项 `summary.entries_added` 为去重后新增联系入口数；结束消息为“本次官网扫描读取 N 页，新增联系入口 M 个（去重后）”。
 
 ### 导出（第 8 节）

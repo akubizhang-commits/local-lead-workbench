@@ -104,3 +104,33 @@ async def test_fallback_survives_batches_when_no_contact_page_has_a_form():
     assert first["has_more"] and not forms(first)
     second = await crawl(routes, checkpoint=json.loads(json.dumps(first["checkpoint"])))
     assert [(c["url"], c["source_url"]) for c in forms(second)] == [(ROOT, ROOT)]
+
+
+def resumed(checkpoint, clock):
+    # Mirrors Store.control("resume") once the 503 cooldown has passed: host
+    # gates are released and failed URLs go back into the queue.
+    checkpoint = json.loads(json.dumps(checkpoint))
+    clock[0] = max([clock[0], *(g.get("not_before", 0) for g in checkpoint.get("host_gates", {}).values())]) + 1
+    checkpoint["host_gates"] = {}
+    failures = checkpoint.get("failures", {})
+    checkpoint.setdefault("queue", {}).update(failures)
+    checkpoint["attempted"] = [u for u in checkpoint.get("attempted", []) if u not in failures]
+    checkpoint["failures"] = {}
+    return checkpoint
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("contact_body,expected", [
+    (form("/contact/send"), [ROOT + "contact/send"]),
+    ("<p>Call us</p>", [ROOT]),
+])
+async def test_partial_stop_keeps_fallback_pending_until_a_resume_finishes(contact_body, expected, website_clock):
+    home = page("Acme", form("/", "Leave us a message") + '<a href="/contact">Contact</a>')
+    first = await crawl({ROOT + "robots.txt": Response(status=404), ROOT: home,
+                         ROOT + "contact": Response(status=503)})
+    assert not first["has_more"] and first["status"] == "partial"
+    assert not forms(first)
+    second = await crawl({ROOT + "robots.txt": Response(status=404), ROOT: home,
+                          ROOT + "contact": page("Contact | Acme", contact_body)},
+                         checkpoint=resumed(first["checkpoint"], website_clock))
+    assert [c["url"] for c in forms(second)] == expected
