@@ -22,7 +22,7 @@ from aiohttp.abc import AbstractResolver
 from bs4 import BeautifulSoup, Tag
 
 from leadworkbench.social import organization_social
-from leadworkbench.website_link_policy import link_kind
+from leadworkbench.website_link_policy import contact_page, link_kind
 from leadworkbench.contact_quality import (
     GENERAL_LOCAL, DEPARTMENT_LOCAL, has_supplier_intent, is_department,
     is_job_title, is_person_name, is_procurement_role, invalid_contact_reason,
@@ -955,6 +955,7 @@ def parse_page(html: str, source_url: str) -> dict:
             contact(anchor, url=channel_target, forced_kind="supplier_form")
         elif re.search(r"contact\s*(us|form)|联系我们|聯絡我們", _text(anchor), re.I):
             contact(anchor, url=channel_target, forced_kind="contact_form")
+    form_start = len(result["contacts"])
     for form in soup.find_all("form")[:100]:
         kind = _contact_form_kind(form)
         if kind:
@@ -963,6 +964,10 @@ def parse_page(html: str, source_url: str) -> dict:
             except UnsafeURL:
                 continue
             contact(form, url=target, forced_kind=kind)
+    # Indices of entries produced by <form> elements; enrich_website keeps at
+    # most one per site and prefers forms on contact-type pages.
+    result["form_contacts"] = list(range(form_start, len(result["contacts"])))
+    result["contact_page"] = contact_page(source_url, title)
     # Explicit employee/person blocks remain useful even with both role and
     # email absent. Generic layout headings still require a real job title.
     for node in soup.find_all(["div", "article", "li", "tr", "section"]):
@@ -1160,6 +1165,14 @@ async def enrich_website(url: str, *, max_pages: int = WEBSITE_BATCH_SIZE,
         request_reservation = await pace(request_origin)
     observation_keys = set(checkpoint.get("observation_keys", []))
     contact_keys = set(checkpoint.get("contact_keys", []))
+    form_entry = {"kept": False, "fallback": None, **checkpoint.get("form_entry", {})}
+
+    def add_site_contact(item):
+        key = repr((item["name"], item["role"], item["email"], item["url"],
+                    item["kind"], item["source_url"]))
+        if key not in contact_keys:
+            contact_keys.add(key)
+            result["contacts"].append(item)
     social_seen = set(checkpoint.get("social_seen", []))
     attempted, fetched = set(checkpoint.get("attempted", [])), set(checkpoint.get("fetched", []))
     batch_attempts = 0
@@ -1322,12 +1335,19 @@ async def enrich_website(url: str, *, max_pages: int = WEBSITE_BATCH_SIZE,
                         if key not in observation_keys:
                             observation_keys.add(key)
                             result["observations"].append(item)
-                    for item in parsed["contacts"]:
-                        key = repr((item["name"], item["role"], item["email"], item["url"],
-                               item["kind"], item["source_url"]))
-                        if key not in contact_keys:
-                            contact_keys.add(key)
-                            result["contacts"].append(item)
+                    form_indices = set(parsed.get("form_contacts", ()))
+                    for index, item in enumerate(parsed["contacts"]):
+                        if index in form_indices:
+                            # One form entry per site: the first form on a
+                            # contact-type page, else the earliest other form
+                            # once the traversal ends (see below).
+                            if form_entry["kept"]:
+                                continue
+                            if not parsed.get("contact_page"):
+                                form_entry["fallback"] = form_entry["fallback"] or item
+                                continue
+                            form_entry.update(kept=True, fallback=None)
+                        add_site_contact(item)
                     for link in parsed["social_links"]:
                         if link not in social_seen:
                             social_seen.add(link)
@@ -1377,6 +1397,11 @@ async def enrich_website(url: str, *, max_pages: int = WEBSITE_BATCH_SIZE,
     has_more = bool(queue) and batch_progress > 0 and not host_paused
     if budget_yield and queue and not has_more and not host_paused:
         warn(budget_reason)
+    if not has_more and not form_entry["kept"] and form_entry["fallback"]:
+        # No contact-type page had a form: keep the earliest form found so the
+        # company still shows that it publishes one.
+        add_site_contact(form_entry["fallback"])
+        form_entry.update(kept=True, fallback=None)
     summary = {"pages_checked": previous.get("pages_checked", 0) + result["pages_checked"],
                "pages_skipped": len(skipped), "contacts_found": len(contact_keys),
                "attempted": len(attempted), "remaining": len(queue),
@@ -1391,7 +1416,7 @@ async def enrich_website(url: str, *, max_pages: int = WEBSITE_BATCH_SIZE,
         "version": 1, "start": start, "files_unparsed": list(documents.values()), "queue": queue, "attempted": sorted(attempted),
         "fetched": sorted(fetched), "skipped": sorted(skipped), "discovery_order": discovery_order,
         "observation_keys": sorted(observation_keys), "contact_keys": sorted(contact_keys),
-        "social_seen": sorted(social_seen), "warnings": result["warnings"], "failures": failures,
+        "form_entry": form_entry, "social_seen": sorted(social_seen), "warnings": result["warnings"], "failures": failures,
         "failure_warnings": failure_warnings, "last_request": last_request, "request_delays": request_delays,
         "host_gates": host_gates,
         "logs": logs, "summary": summary, "budget_warning": budget_reason if budget_yield and queue and not has_more and not host_paused else None,
