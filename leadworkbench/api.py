@@ -255,6 +255,8 @@ class ExclusionRuleInput(Input):
 # Repeatable ?category= filter: up to 20 values of 1–120 characters, OR semantics.
 CategoryFilter = Annotated[list[Annotated[str, Field(min_length=1, max_length=120)]], Query(max_length=20)]
 Excluded = Literal["hide", "only", "include"]
+BestTier = Literal["", "named_procurement", "named_role", "named_unknown", "department_email", "general_email",
+                   "form_phone", "company_phone", "none"]
 
 
 def create_app(data_dir=None, *, allowed_hosts=None):
@@ -430,12 +432,12 @@ def create_app(data_dir=None, *, allowed_hosts=None):
     def company_page(q: str = "", status: str = "", type: str = "", market_id: str = "",
                      run_id: str = "", segment: Literal["", "new", "existing", "changed", "not_seen"] = "",
                      contact: Literal["", "email", "procurement"] = "",
-                     sort: Literal["newest", "procurement", "email", "updated"] = "newest",
+                     sort: Literal["newest", "procurement", "email", "updated", "tier"] = "newest",
                      page: int = Query(default=1, ge=1), page_size: int = Query(default=50, ge=1, le=200),
-                     category: CategoryFilter = [], excluded: Excluded = "hide"):
+                     category: CategoryFilter = [], excluded: Excluded = "hide", best_tier: BestTier = ""):
         return store.company_page(q=q, status=status, type=type, market_id=market_id,
                                   run_id=run_id, segment=segment, contact=contact, sort=sort, page=page, page_size=page_size,
-                                  category=category, excluded=excluded)
+                                  category=category, excluded=excluded, best_tier=best_tier)
 
     @app.get("/api/company-categories")
     def company_categories(market_id: str = "", excluded: Excluded = "hide"):
@@ -627,12 +629,12 @@ def create_app(data_dir=None, *, allowed_hosts=None):
     def export(format: Literal["csv", "xlsx"] = "csv", q: str = "", status: str = "", type: str = "",
                market_id: str = "", run_id: str = "",
                contact: Literal["", "email", "procurement"] = "",
-               sort: Literal["newest", "procurement", "email", "updated"] = "newest",
+               sort: Literal["newest", "procurement", "email", "updated", "tier"] = "newest",
                segment: Literal["", "new", "existing", "changed", "not_seen"] = "",
-               category: CategoryFilter = [], excluded: Excluded = "hide"):
+               category: CategoryFilter = [], excluded: Excluded = "hide", best_tier: BestTier = ""):
         output = export_data(store, format, q=q, status=status, type=type,
                              market_id=market_id, run_id=run_id, segment=segment, contact=contact, sort=sort,
-                             category=category, excluded=excluded)
+                             category=category, excluded=excluded, best_tier=best_tier)
         return Response(output, media_type="text/csv; charset=utf-8" if format == "csv" else
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         headers={"Content-Disposition": f'attachment; filename="leads.{format}"'})

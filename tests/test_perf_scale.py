@@ -50,6 +50,9 @@ PAGES = {
     "page_contact_procurement": {"contact": "procurement"},
     "page_q": {"q": "Supply"},
     "page_market": {"market_id": "market0"},
+    "page_tier": {"sort": "tier"},
+    "page_best_tier": {"best_tier": "named_role"},
+    "page_category": {"category": ["Roofing supply store", "Metal supplier"]},
 }
 
 
@@ -58,6 +61,12 @@ def test_company_page_budget(store, name):
     seconds = best_of(lambda: store.company_page(page=1, page_size=50, **PAGES[name]))
     RESULTS[name] = seconds
     assert seconds < PAGE_BUDGET, (name, seconds)
+
+
+def test_market_tier_stats_budget(store):
+    seconds = best_of(store.tasks)
+    RESULTS["tasks_tier_stats"] = seconds
+    assert seconds < PAGE_BUDGET * 2
 
 
 def test_reviews_budget(store):

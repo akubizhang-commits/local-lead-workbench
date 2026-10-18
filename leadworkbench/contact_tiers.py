@@ -102,3 +102,38 @@ def contact_facet(row):
     tier, rank = contact_tier(row)
     identity = json.dumps(contact_key(row), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return int(channel_ok), category, tier, rank, identity, sqlite_email_key(row.get("email"))
+
+
+def company_best_rank(best_contact_rank, phone):
+    """Best entry of a company: its best usable contact, else the company phone, else none."""
+    if best_contact_rank:
+        return int(best_contact_rank)
+    return TIER_RANK["company_phone"] if str(phone or "").strip() else TIER_RANK["none"]
+
+
+def gap_reason(company, best_rank, scan=None):
+    """Why the company has no named procurement contact, and what to do next (design §6.2).
+
+    ``scan`` is the latest website refresh work item: {"state": ..., "result": {...}} or None.
+    ``company`` may carry ``named_count`` (distinct named usable contacts)."""
+    if best_rank == TIER_RANK["named_procurement"] or company.get("status") == "do_not_contact":
+        return None
+    result = (scan or {}).get("result") or {}
+    summary = result.get("summary") or {}
+    pages, remaining = summary.get("pages_checked"), summary.get("remaining")
+    if not str(company.get("website") or "").strip():
+        code, reason, step = "no_website", "没有官网，无法从官网获取联系人", "人工新增联系人，或在社媒中查找"
+    elif not company.get("last_checked_at") and scan is None:
+        code, reason, step = "not_scanned", "官网尚未扫描", "点击“复核官网资料”"
+    elif scan is not None and (scan.get("state") in {"pending", "partial", "blocked", "failed", "running"}
+                               or result.get("has_more")):
+        code, step = "scan_incomplete", "继续复核官网，或人工新增联系人"
+        reason = (f"官网扫描未全部完成（已读 {pages} 页，还剩 {remaining} 个链接）"
+                  if pages is not None and remaining is not None else "官网扫描未全部完成")
+    elif best_rank >= TIER_RANK["department_email"]:
+        code, step = "no_named_people", "人工新增联系人，或补充社媒"
+        reason = f"官网已扫描 {pages} 页，未公开具名人员" if pages is not None else "官网已扫描，未公开具名人员"
+    else:
+        code, step = "no_procurement", "确认现有联系人岗位，或人工新增采购联系人"
+        reason = f"已有具名人员 {int(company.get('named_count') or 0)} 位，但未找到采购岗位"
+    return {"code": code, "reason": reason, "next_step": step}

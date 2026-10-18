@@ -292,9 +292,10 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         return result
 
     def companies(self, q="", status="", type="", *, max_rows=None, market_id="", run_id="", segment="", contact="",
-                  sort="newest", category=(), excluded="hide"):
+                  sort="newest", category=(), excluded="hide", best_tier=""):
         return super().companies(q, status, type, max_rows=max_rows, market_id=market_id, run_id=run_id,
-                                 segment=segment, contact=contact, sort=sort, category=category, excluded=excluded)
+                                 segment=segment, contact=contact, sort=sort, category=category, excluded=excluded,
+                                 best_tier=best_tier)
 
     def resolve_empty_reviews(self):
         with self.connect() as con:
@@ -416,7 +417,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             dict(business_type=r[0], market_id=r[1], market_name=names.get(r[1], "")) for r in con.execute(
                 "SELECT business_type,market_id FROM company_type_hints WHERE company_id=? ORDER BY created_at,market_id",
                 (company["id"],))]
-        return company
+        return self._company_tier(con, company)
 
     def company(self, id):
         self._refresh_facets()
@@ -597,6 +598,9 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             return
         with self.connect() as con:
             con.execute("BEGIN IMMEDIATE")
+            if self._facets_enabled:
+                self._refresh_facets_locked(con)
+            before = self._entry_keys(con, id)
             company = dict(con.execute("SELECT * FROM companies WHERE id=?", (id,)).fetchone())
             for obs in payload.get("observations", []):
                 if not obs.get("source_url") or not obs.get("evidence"):
@@ -670,6 +674,17 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             if self._facets_enabled:
                 self._refresh_facets_locked(con)
         self.reclassify_contacts(id)
+        with self.connect() as con:
+            after = self._entry_keys(con, id)
+        return {"entries_added": len(after - before)}
+
+    def _entry_keys(self, con, company_id):
+        """Distinct usable contact entries (identity keys) of one company."""
+        if not self._facets_enabled:
+            return set()
+        from .market_store import USABLE_FROM, usable_contact_sql
+        return {r[0] for r in con.execute(f"SELECT DISTINCT f.identity_key FROM {USABLE_FROM} WHERE f.company_id=? "
+                                          f"AND {usable_contact_sql()}", (company_id,))}
 
     def _propose_contact_change(self, con, company_id, run_id, prior, contact):
         """Conflict branch of apply_enrichment (design §3.4): never rewrites the contact row."""
@@ -873,7 +888,11 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             related = [brief(row) for row in con.execute("SELECT * FROM companies WHERE id<>? ORDER BY name,address,id", (id,))
                        if key and (website_key(row["website"]) == key or (branch_identity(company) and branch_identity(row) == branch_identity(company)))] if key else []
         from .contact_projection import categorize_outreach
+        from .contact_tiers import TIER_LABEL, contact_tier
         contacts = categorize_outreach(group_contact_records(contacts, company["website"], include_excluded=True))
+        for contact in contacts:
+            contact["tier"] = contact_tier(contact)[0]
+            contact["tier_label"] = TIER_LABEL[contact["tier"]]
         return {"company": company, "contacts": contacts, "observations": observations,
                 "changes": self.changes(id), "social_links": company["social_links"], "related_locations": related}
 
@@ -978,7 +997,9 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                          int(payload["auto_enrich"]), now()))
         return self.task(id)
 
-    def task(self, id):
+    def task(self, id, _tier_stats=None):
+        if _tier_stats is None:
+            self._refresh_facets()
         with self.connect() as con:
             task = self.row(con.execute("SELECT * FROM tasks WHERE id=?", (id,)).fetchone())
             last = con.execute("SELECT * FROM runs WHERE task_id=? ORDER BY created_at DESC LIMIT 1", (id,)).fetchone()
@@ -990,12 +1011,14 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             if geography:
                 task["geography"] = json.loads(geography["payload"])
                 task["county"] = task["geography"].get("county", "")
-            return self._market_task_details(con, task)
+            return self._market_task_details(con, task, _tier_stats)
 
     def tasks(self):
+        self._refresh_facets()
         with self.connect() as con:
             ids = [r[0] for r in con.execute("SELECT id FROM tasks ORDER BY created_at DESC")]
-        return [self.task(i) for i in ids]
+            stats = self._market_tier_stats(con, ids)
+        return [self.task(i, stats) for i in ids]
 
     def _start(self, con, *, task=None, company_id=None):
         kind = "discovery" if task else "refresh"
@@ -1241,9 +1264,9 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             summaries = [s for s in summaries if s]
             if summaries:
                 pages = sum(s.get("pages_checked", 0) for s in summaries)
-                contacts = sum(s.get("contacts_found", 0) for s in summaries)
+                entries = sum(s.get("entries_added", 0) for s in summaries)
                 skipped = sum(s.get("pages_skipped", 0) for s in summaries)
-                message = f"本次官网扫描读取 {pages} 页，提取 {contacts} 条联系记录"
+                message = f"本次官网扫描读取 {pages} 页，新增联系入口 {entries} 个（去重后）"
                 if skipped:
                     message += f"；按扫描规则跳过 {skipped} 个无关页面"
                 files = sum(s.get("files_unparsed", 0) for s in summaries)

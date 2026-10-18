@@ -124,7 +124,7 @@ async def test_refresh_summary_keeps_counts_separate_from_detailed_errors(tmp_pa
     await process_run(store, run["id"], enrich=enrich)
     result = store.run(run["id"])
     assert "读取 3 页" in result["message"]
-    assert "提取 1 条联系记录" in result["message"]
+    assert "新增联系入口 1 个（去重后）" in result["message"]
     assert "跳过 8 个无关页面" in result["message"]
     assert "Response body" not in result["message"]
     assert "Response body" in result["error"]

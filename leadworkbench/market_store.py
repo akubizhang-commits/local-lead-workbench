@@ -42,6 +42,8 @@ def market_name(payload):
 
 
 USABLE_FROM = "contact_facets f JOIN contacts ct ON ct.id=f.contact_id"
+# Best entry of a company without usable contacts: 7 company phone, 8 none (design §6.1).
+COMPANY_RANK_SQL = "CASE WHEN COALESCE(c.phone,'')<>'' THEN 7 ELSE 8 END"
 
 
 def usable_contact_sql(alias="ct", facet="f"):
@@ -584,7 +586,7 @@ class MarketStoreMixin:
                         unresolved=list(dict.fromkeys(str(reason) for reason in reasons)))
         return coverage
 
-    def _market_task_details(self, con, task):
+    def _market_task_details(self, con, task, tier_stats=None):
         if task["limit"] != 0:
             return task
         run_id = task["latest_run"]["id"] if task.get("latest_run") else None
@@ -593,11 +595,11 @@ class MarketStoreMixin:
             run_id=discovery[0] if discovery else None
         task["mode"] = "market"
         task["market_stats"] = self._market_stats(con, task["id"], run_id)
-        task["market_stats"]["excluded"] = 0
-        if self._materialize_exclusions(con, [task["id"]]):
-            task["market_stats"]["excluded"] = con.execute("""SELECT count(*) FROM market_memberships m
-                JOIN companies c ON c.id=m.company_id JOIN temp.excluded_ids x ON x.market_id=m.market_id
-                AND x.company_id=m.company_id WHERE m.market_id=? AND c.merged_into IS NULL""", (task["id"],)).fetchone()[0]
+        if not tier_stats or task["id"] not in tier_stats:
+            tier_stats = self._market_tier_stats(con, [task["id"]])
+        tiers = tier_stats[task["id"]]
+        task["market_stats"]["excluded"] = tiers["excluded"]
+        task["tier_stats"] = tiers["tier_stats"]
         task["coverage"] = self._market_coverage(con, run_id)
         if task.get("latest_run") and task["latest_run"]["kind"]!="social":
             task["latest_run"]["progress"].update(
@@ -611,7 +613,7 @@ class MarketStoreMixin:
         return task
 
     def _company_query(self, con, q, status, type, market_id, run_id, segment, contact="", category=(),
-                       excluded="hide"):
+                       excluded="hide", best_tier=""):
         """Pure-SQL filters shared by the list, the legacy list, exports and category counts.
 
         Exclusion rules are materialized once into temp.excluded_ids for this connection."""
@@ -624,6 +626,9 @@ class MarketStoreMixin:
             raise ValueError("无效市场分组")
         if contact not in {"", "email", "procurement"}:
             raise ValueError("无效联系方式筛选")
+        from .contact_tiers import TIER_RANK
+        if best_tier and best_tier not in TIER_RANK:
+            raise ValueError("无效入口等级")
         if market_id and not con.execute("SELECT 1 FROM tasks WHERE id=?", (market_id,)).fetchone():
             raise KeyError("市场不存在")
         selected = con.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone() if run_id else None
@@ -687,6 +692,10 @@ class MarketStoreMixin:
         if contact:
             clauses.append(f"""EXISTS(SELECT 1 FROM {USABLE_FROM} WHERE f.company_id=c.id
                 AND {usable_contact_sql()} AND {self._outreach_criteria(contact)})""")
+        if best_tier:
+            clauses.append(f"""COALESCE((SELECT min(f.tier_rank) FROM {USABLE_FROM} WHERE f.company_id=c.id
+                AND {usable_contact_sql()}), {COMPANY_RANK_SQL})=?""")
+            params.append(TIER_RANK[best_tier])
         scope = market_id or ""
         rules = self._materialize_exclusions(con, [scope])
         exclusion, exclusion_params = "", []
@@ -764,7 +773,8 @@ class MarketStoreMixin:
             count(DISTINCT CASE WHEN {MarketStoreMixin._outreach_criteria('email')} THEN f.email_key END) email_count,
             count(DISTINCT CASE WHEN f.category='procurement'
                 THEN CASE WHEN f.email_key!='' THEN f.email_key ELSE f.identity_key END END) procurement_count,
-            min(f.tier_rank) best_rank
+            min(f.tier_rank) best_rank,
+            count(DISTINCT CASE WHEN f.tier_rank<=3 THEN f.identity_key END) named_count
             FROM {USABLE_FROM} WHERE {usable_contact_sql()} {where} GROUP BY f.company_id"""
 
     @staticmethod
@@ -774,6 +784,8 @@ class MarketStoreMixin:
             "procurement": ("COALESCE(s.procurement_count,0) DESC,COALESCE(s.email_count,0) DESC,c.created_at DESC,c.id", True),
             "email": ("COALESCE(s.email_count,0) DESC,COALESCE(s.procurement_count,0) DESC,c.created_at DESC,c.id", True),
             "updated": ("COALESCE(c.last_checked_at,c.created_at) DESC,c.created_at DESC,c.id", False),
+            "tier": (f"COALESCE(s.best_rank,{COMPANY_RANK_SQL}),COALESCE(s.procurement_count,0) DESC,"
+                     "c.created_at DESC,c.id", True),
         }
         if sort not in orders:
             raise ValueError("无效企业排序")
@@ -845,9 +857,14 @@ class MarketStoreMixin:
                     f"""SELECT x.company_id,r.id,r.kind,r.value,r.scope FROM temp.excluded_ids x
                     JOIN exclusion_rules r ON r.id=x.rule_id WHERE x.market_id=? AND x.company_id IN ({marks})""",
                     [scope, *ids])}
+            scans = {r["target"]: dict(state=r["state"], result=json.loads(r["result"] or "{}")) for r in con.execute(
+                f"""SELECT target,state,result FROM (SELECT w.target,w.state,w.result,ROW_NUMBER() OVER (
+                    PARTITION BY w.target ORDER BY r.created_at DESC,w.rowid DESC) rn FROM work_items w
+                    JOIN runs r ON r.id=w.run_id WHERE w.stage='refresh' AND w.target IN ({marks})) WHERE rn=1""", ids)}
             for row in chunk:
                 item = companies[row["id"]]
                 counts = stats.get(row["id"], {})
+                self._tier_fields(item, counts, scans.get(row["id"]))
                 item.update(contact_count=counts.get("contact_count", 0), email_count=counts.get("email_count", 0),
                             procurement_count=counts.get("procurement_count", 0),
                             social_count=social.get(row["id"], 0))
@@ -865,8 +882,49 @@ class MarketStoreMixin:
                 result.append(item)
         return result
 
+    @staticmethod
+    def _tier_fields(item, counts, scan):
+        from .contact_tiers import RANK_TIER, TIER_LABEL, company_best_rank, gap_reason
+        rank = company_best_rank(counts.get("best_rank"), item.get("phone"))
+        item.update(best_tier=RANK_TIER[rank], best_tier_label=TIER_LABEL[RANK_TIER[rank]], best_tier_rank=rank,
+                    gap=gap_reason({**item, "named_count": counts.get("named_count", 0)}, rank, scan))
+        return item
+
+    def _company_tier(self, con, company):
+        """best_tier/gap for one company (detail page); same rules as the list."""
+        counts = con.execute(self._contact_stats_sql("AND f.company_id=?"), (company["id"],)).fetchone()
+        scan = con.execute("""SELECT w.state,w.result FROM work_items w JOIN runs r ON r.id=w.run_id
+            WHERE w.target=? AND w.stage='refresh' ORDER BY r.created_at DESC,w.rowid DESC LIMIT 1""",
+                           (company["id"],)).fetchone()
+        return self._tier_fields(company, dict(counts) if counts else {},
+                                 dict(state=scan["state"], result=json.loads(scan["result"] or "{}")) if scan else None)
+
+    def _market_tier_stats(self, con, market_ids):
+        """{market_id: {tier_stats, excluded}} with one exclusion materialization and one GROUP BY."""
+        from .contact_tiers import RANK_TIER, TIERS
+        result = {mid: {"tier_stats": {code: 0 for code, _, _ in TIERS}, "excluded": 0} for mid in market_ids}
+        if not market_ids:
+            return result
+        rules = self._materialize_exclusions(con, market_ids)
+        marks = ",".join("?" for _ in market_ids)
+        hidden = ("LEFT JOIN temp.excluded_ids x ON x.market_id=m.market_id AND x.company_id=m.company_id"
+                  if rules else "")
+        flag = "x.company_id IS NOT NULL" if rules else "0"
+        for row in con.execute(f"""SELECT m.market_id,{flag} hidden,
+                COALESCE(s.best_rank,{COMPANY_RANK_SQL}) rank,count(*) n
+                FROM market_memberships m JOIN companies c ON c.id=m.company_id
+                LEFT JOIN (SELECT f.company_id,min(f.tier_rank) best_rank FROM {USABLE_FROM}
+                    WHERE {usable_contact_sql()} GROUP BY f.company_id) s ON s.company_id=m.company_id
+                {hidden} WHERE m.market_id IN ({marks}) AND c.merged_into IS NULL
+                GROUP BY m.market_id,hidden,rank""", market_ids):
+            if row["hidden"]:
+                result[row["market_id"]]["excluded"] += row["n"]
+            else:
+                result[row["market_id"]]["tier_stats"][RANK_TIER[row["rank"]]] += row["n"]
+        return result
+
     def company_page(self, q="", status="", type="", market_id="", run_id="", segment="", page=1, page_size=50,
-                     contact="", sort="newest", category=(), excluded="hide"):
+                     contact="", sort="newest", category=(), excluded="hide", best_tier=""):
         if isinstance(page, bool) or not isinstance(page, int) or page < 1:
             raise ValueError("无效页码")
         if isinstance(page_size, bool) or not isinstance(page_size, int) or not 1 <= page_size <= 1000:
@@ -874,7 +932,8 @@ class MarketStoreMixin:
         self._company_order(sort)
         self._refresh_facets()
         with self.connect() as con:
-            query = self._company_query(con, q, status, type, market_id, run_id, segment, contact, category, excluded)
+            query = self._company_query(con, q, status, type, market_id, run_id, segment, contact, category, excluded,
+                                        best_tier)
             total = self._company_total(con, query)
             keyed = self._company_ids(con, query, sort, page_size, (page - 1) * page_size)
             items = self._company_rows(con, keyed, query)
@@ -882,11 +941,12 @@ class MarketStoreMixin:
         return {"items": items, "total": total, "page": page, "page_size": page_size, "excluded_total": hidden}
 
     def companies(self, q="", status="", type="", *, max_rows=None, market_id="", run_id="", segment="",
-                  contact="", sort="newest", category=(), excluded="hide"):
+                  contact="", sort="newest", category=(), excluded="hide", best_tier=""):
         self._company_order(sort)
         self._refresh_facets()
         with self.connect() as con:
-            query = self._company_query(con, q, status, type, market_id, run_id, segment, contact, category, excluded)
+            query = self._company_query(con, q, status, type, market_id, run_id, segment, contact, category, excluded,
+                                        best_tier)
             keyed = self._company_ids(con, query, sort, max_rows)
             return self._company_rows(con, keyed, query)
 

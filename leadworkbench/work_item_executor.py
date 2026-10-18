@@ -24,6 +24,7 @@ async def execute_run_item(store, run_id, *, discover=None, enrich, planner=None
         store.finalize(run_id)
         return False
     previous_result = json.loads(item.get("result") or "{}")
+    applied = {}
     access = None
     source_result = None
     skipped = None
@@ -116,7 +117,7 @@ async def execute_run_item(store, run_id, *, discover=None, enrich, planner=None
                     if not job.done():
                         job.cancel()
                     await asyncio.gather(job, return_exceptions=True)
-                store.apply_enrichment(company["id"], result, run_id)
+                applied = store.apply_enrichment(company["id"], result, run_id) or {}
         if pace_maps and item['stage'] == 'discovery' and not skipped:
             if access is None:
                 observe_source(result)
@@ -144,11 +145,14 @@ async def execute_run_item(store, run_id, *, discover=None, enrich, planner=None
             store.finish_item(item["id"], state, item_result)
             return True
         if item["stage"] == "refresh" and "contacts" in result:
-            item_result["summary"] = result.get("summary") or {
+            item_result["summary"] = dict(result.get("summary") or {
                 "pages_checked": result.get("pages_checked", 0),
                 "pages_skipped": result.get("pages_skipped", 0),
                 "contacts_found": len(result["contacts"]),
-            }
+            })
+            # New deduplicated contact entries across all batches of this item.
+            item_result["summary"]["entries_added"] = ((previous_result.get("summary") or {}).get("entries_added", 0)
+                                                       + applied.get("entries_added", 0))
         if item["stage"] == "refresh" and result.get("has_more"):
             state = "pending"
             summary = item_result["summary"]
