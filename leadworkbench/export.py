@@ -42,13 +42,35 @@ ENTRY_SOURCE_HEADERS = ["企业名称", "企业编号", "字段", "值", "来源
 METHOD_LABELS = {"maps": "Google Maps", "website": "企业官网", "manual": "人工录入", "social": "社媒"}
 
 
+FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
+
+
 def safe(value):
+    """Plain cell text. The formula guard is applied per format in _write."""
     if value is None:
         return ""
     if isinstance(value, list):
         value = ", ".join(str(v) for v in value)
-    text = str(value)
-    return "'" + text if text.lstrip().startswith(("=", "+", "-", "@", "\t", "\r")) else text
+    return str(value)
+
+
+def _formula_like(value):
+    return isinstance(value, str) and value.lstrip().startswith(FORMULA_START)
+
+
+def _csv_cell(value):
+    # CSV has no cell types: a leading ' keeps spreadsheets from evaluating it.
+    return "'" + value if _formula_like(value) else value
+
+
+def _xlsx_cell(ws, value):
+    # XLSX stores these as explicit text cells (no visible apostrophe); openpyxl
+    # would otherwise turn a leading "=" into a formula.
+    if not _formula_like(value):
+        return value
+    cell = WriteOnlyCell(ws, value=value)
+    cell.data_type, cell.number_format = "s", "@"
+    return cell
 
 
 def _batch(con, sql, params=()):
@@ -128,7 +150,7 @@ def _write(format, sheets):
         writer = csv.writer(stream)
         title, headers, rows = sheets[0]
         writer.writerow(headers)
-        writer.writerows(rows)
+        writer.writerows([_csv_cell(v) for v in row] for row in rows)
         return ("\ufeff" + stream.getvalue()).encode("utf-8")
     book = Workbook(write_only=True)
     font, fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="173C46")
@@ -146,7 +168,7 @@ def _write(format, sheets):
             cells.append(cell)
         ws.append(cells)
         for row in rows:
-            ws.append(row)
+            ws.append([_xlsx_cell(ws, v) for v in row])
     buffer = io.BytesIO()
     book.save(buffer)
     return buffer.getvalue()

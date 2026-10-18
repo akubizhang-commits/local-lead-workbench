@@ -111,8 +111,32 @@ def test_xlsx_has_four_sheets_each_starting_with_company_name(setup):
     assert book.sheetnames == ["联系入口", "企业", "地点", "来源证据"]
     for sheet in book:
         values = list(sheet.values)
-        assert values[0][0] == "企业名称" and values[1][0] == "'=cmd|' /C calc'!A0"
+        assert values[0][0] == "企业名称" and values[1][0] == "=cmd|' /C calc'!A0"
+        assert sheet["A2"].data_type == "s"  # text cell, not a formula
         assert sheet.freeze_panes == "A2" and sheet.auto_filter.ref.startswith("A1:")
+
+
+def test_xlsx_writes_formula_like_values_as_text_without_apostrophe(setup):
+    store, task, run, add = setup
+    values = ['=HYPERLINK("https://evil.example","x")', "+1 408-555-0101", "-x", "@x"]
+    for n, name in enumerate(values, 1):
+        add(n, name, f"{n} Main St, San Jose, CA 95112", phone="+1 408-555-010" + str(n))
+    for layout in ("entries", "companies"):
+        book = load_workbook(io.BytesIO(export_data(store, "xlsx", layout)))
+        sheet = book["联系入口" if layout == "entries" else "Companies"]
+        header = [c.value for c in sheet[1]]
+        name_col, phone_col = (header.index("企业名称"), header.index("联系方式")) if layout == "entries" else \
+            (header.index("name"), header.index("phone"))
+        cells = list(sheet.iter_rows(min_row=2))
+        assert {c[name_col].value for c in cells} == set(values)
+        for row in cells:
+            for cell in (row[name_col], row[phone_col]):
+                assert cell.data_type == "s" and cell.number_format == "@", (layout, cell.value)
+                assert not str(cell.value).startswith("'")
+        assert {row[phone_col].value for row in cells} >= {"+1 408-555-0101"}
+    entries, _ = rows(export_data(store, "csv", "entries"))
+    assert {e["企业名称"] for e in entries} == {"'" + v for v in values}
+    assert all(e["联系方式"].startswith("'+1 ") for e in entries)
 
 
 def test_manual_contact_exported_as_manual(setup):
@@ -124,6 +148,12 @@ def test_manual_contact_exported_as_manual(setup):
     assert (entry["来源"], entry["审核状态"], entry["入口等级"]) == ("人工录入", "人工录入", "具名采购")
 
 
+def unguarded(table):
+    """9423c53 baselines carry the old XLSX apostrophe guard; values now stay plain text cells."""
+    return [[v[1:] if isinstance(v, str) and v[:1] == "'" and v[1:].lstrip().startswith(("=", "+", "-", "@"))
+             else v for v in row] for row in table]
+
+
 def test_legacy_layout_unchanged_on_export_source_fixture(tmp_path):
     load_legacy(tmp_path, "legacy_export_source.sql")
     book = load_workbook(io.BytesIO(export_data(Store(tmp_path), "xlsx")))
@@ -131,7 +161,7 @@ def test_legacy_layout_unchanged_on_export_source_fixture(tmp_path):
     for name in ("Contacts", "Locations", "Sources"):
         got = [[c if c is not None else "" for c in r] for r in book[name].iter_rows(values_only=True)]
         assert got[0][-1] == "company_name"
-        assert [r[:-1] for r in got] == baseline[name], name
+        assert [r[:-1] for r in got] == unguarded(baseline[name]), name
     assert book.sheetnames == ["Companies", "Contacts", "Locations", "Sources"]
 
 
@@ -145,11 +175,11 @@ def test_legacy_layout_on_full_fixture_only_adds_repaired_contacts(tmp_path):
     book = load_workbook(io.BytesIO(export_data(store, "xlsx")))
     baseline = json.loads((FIXTURES / "legacy_v2_export_9423c53.json").read_text(encoding="utf-8"))
     contacts = [[c if c is not None else "" for c in r][:-1] for r in book["Contacts"].iter_rows(values_only=True)]
-    assert sorted(map(tuple, [r for r in contacts if r[3] not in repaired])) == sorted(map(tuple, baseline["Contacts"]))
+    assert sorted(map(tuple, [r for r in contacts if r[3] not in repaired])) == sorted(map(tuple, unguarded(baseline["Contacts"])))
     assert {r[1] for r in contacts if r[3] in repaired} == {"Bob Buyer", "Dana Smith"}
     sources = [[c if c is not None else "" for c in r][:-1] for r in book["Sources"].iter_rows(values_only=True)]
     assert sorted(map(tuple, [r for r in sources if not (r[1] == "contact" and r[2] in repaired)])) == \
-        sorted(map(tuple, baseline["Sources"]))
+        sorted(map(tuple, unguarded(baseline["Sources"])))
 
 
 def test_api_layout_and_filename(tmp_path):
