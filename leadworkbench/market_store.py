@@ -41,11 +41,15 @@ def market_name(payload):
     return " · ".join(value for value in (location, types, keyword_label) if value)
 
 
-def usable_contact_sql(alias="ct"):
-    return (f"{alias}.review_status NOT IN ('pending','reject','invalid','superseded') AND NOT EXISTS "
+USABLE_FROM = "contact_facets f JOIN contacts ct ON ct.id=f.contact_id"
+
+
+def usable_contact_sql(alias="ct", facet="f"):
+    """A contact that counts, exports and ranks; pure SQL over contact_facets (design §1.2)."""
+    return (f"{facet}.channel_ok=1 AND {facet}.category!='irrelevant' AND "
+            f"{alias}.review_status NOT IN ('pending','reject','invalid','superseded') AND NOT EXISTS "
             f"(SELECT 1 FROM contact_decisions d WHERE d.contact_id={alias}.id "
-            "AND d.adoption_status='excluded') AND "
-            f"contact_channel_valid({alias}.kind,{alias}.email,{alias}.url,{alias}.evidence)")
+            "AND d.adoption_status='excluded')")
 
 
 def source_identity(method, url):
@@ -596,11 +600,9 @@ class MarketStoreMixin:
         return task
 
     def _company_query(self, con, q, status, type, market_id, run_id, segment, contact=""):
-        from .contact_projection import outreach_category
-        from .contact_quality import invalid_contact_channel_reason
-        con.create_function("outreach_category",4,outreach_category,deterministic=True)
-        con.create_function("contact_channel_valid", 4,
-                            lambda *args: not invalid_contact_channel_reason(*args), deterministic=True)
+        """Pure-SQL filters shared by the list, the legacy list and exports.
+
+        Returns (joins, where, columns, join_params, where_params, market_id)."""
         if segment not in {"", "new", "existing", "changed", "not_seen"}:
             raise ValueError("无效市场分组")
         if contact not in {"", "email", "procurement"}:
@@ -618,12 +620,13 @@ class MarketStoreMixin:
             selected = con.execute("SELECT * FROM runs WHERE task_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1",
                                    (market_id,)).fetchone()
             run_id = selected["id"] if selected else ""
-        clauses, params, joins, columns = ["c.merged_into IS NULL"], [], "", ""
+        clauses, params, joins, columns, join_params = ["c.merged_into IS NULL"], [], "", "", []
         if market_id:
             joins = """ JOIN market_memberships m ON m.company_id=c.id
                 LEFT JOIN run_companies rc ON rc.company_id=c.id AND rc.run_id=?"""
-            params.extend([run_id or "", market_id])
+            join_params.append(run_id or "")
             clauses.append("m.market_id=?")
+            params.append(market_id)
             columns = """,COALESCE(rc.segment,'not_seen') market_segment,COALESCE(rc.changed,0) market_changed,
                 m.first_seen,m.last_seen"""
             if selected:
@@ -656,55 +659,98 @@ class MarketStoreMixin:
                            ",".join("?" for _ in aliases) + "))")
             params.extend(aliases)
         if contact:
-            criteria = self._outreach_criteria(contact)
-            clauses.append(f"""EXISTS(SELECT 1 FROM contacts ct WHERE ct.company_id=c.id
-                AND {usable_contact_sql()} AND {criteria})""")
-        return " FROM companies c" + joins + " WHERE " + " AND ".join(clauses), columns, params
+            clauses.append(f"""EXISTS(SELECT 1 FROM {USABLE_FROM} WHERE f.company_id=c.id
+                AND {usable_contact_sql()} AND {self._outreach_criteria(contact)})""")
+        return joins, " AND ".join(clauses), columns, join_params, params, market_id
 
     @staticmethod
-    def _outreach_criteria(category, alias="ct"):
-        route = f"outreach_category({alias}.kind,{alias}.role_status,{alias}.email,{alias}.role)"
+    def _outreach_criteria(category, facet="f"):
         if category == 'procurement':
-            return route + "='procurement'"
-        return f"""{route}='email' AND NOT EXISTS(
-            SELECT 1 FROM contacts buyer WHERE buyer.company_id={alias}.company_id
-            AND lower(trim(buyer.email))=lower(trim({alias}.email))
-            AND {usable_contact_sql('buyer')}
-            AND outreach_category(buyer.kind,buyer.role_status,buyer.email,buyer.role)='procurement')"""
+            return f"{facet}.category='procurement'"
+        return f"""{facet}.category='email' AND NOT EXISTS(
+            SELECT 1 FROM contact_facets bf JOIN contacts buyer ON buyer.id=bf.contact_id
+            WHERE bf.company_id={facet}.company_id AND bf.email_key={facet}.email_key
+            AND bf.category='procurement' AND {usable_contact_sql('buyer', 'bf')})"""
 
     @staticmethod
-    def _company_contact_columns(con):
-        from .contact_projection import contact_key
-        keys = ("id", "company_id", "name", "role", "email", "url", "kind", "role_status", "association_status")
-        con.create_function("market_contact_key", len(keys),
-                            lambda *values: canonical(contact_key(dict(zip(keys, values)))),
-                            deterministic=True)
-        identity = "market_contact_key(" + ",".join(f"ct.{key}" for key in keys) + ")"
-        usable = usable_contact_sql()
-        return f""",(SELECT count(DISTINCT {identity}) FROM contacts ct WHERE ct.company_id=c.id
-            AND {usable} AND outreach_category(ct.kind,ct.role_status,ct.email,ct.role)!='irrelevant') contact_count,
-            (SELECT count(DISTINCT lower(trim(ct.email))) FROM contacts ct WHERE ct.company_id=c.id
-            AND {usable} AND {MarketStoreMixin._outreach_criteria('email')}) email_count,
-            (SELECT count(DISTINCT CASE WHEN trim(COALESCE(ct.email,''))!=''
-                THEN lower(trim(ct.email)) ELSE {identity} END) FROM contacts ct WHERE ct.company_id=c.id AND {usable}
-            AND {MarketStoreMixin._outreach_criteria('procurement')}) procurement_count,
-            (SELECT count(DISTINCT e.id) FROM company_social cs JOIN social_entities e ON cs.entity_id=e.id
-                WHERE cs.company_id=c.id AND cs.status!='excluded' AND e.kind='account'
-                AND NOT EXISTS(SELECT 1 FROM contacts ct WHERE ct.company_id=c.id AND {usable}
-                    AND {MarketStoreMixin._outreach_criteria('procurement')}
-                    AND rtrim(ct.url,'/')=rtrim(e.url,'/'))) social_count"""
+    def _contact_stats_sql(where=""):
+        """Per-company counts over usable contacts; same rules as the detail page."""
+        return f"""SELECT f.company_id company_id,count(DISTINCT f.identity_key) contact_count,
+            count(DISTINCT CASE WHEN {MarketStoreMixin._outreach_criteria('email')} THEN f.email_key END) email_count,
+            count(DISTINCT CASE WHEN f.category='procurement'
+                THEN CASE WHEN f.email_key!='' THEN f.email_key ELSE f.identity_key END END) procurement_count,
+            min(f.tier_rank) best_rank
+            FROM {USABLE_FROM} WHERE {usable_contact_sql()} {where} GROUP BY f.company_id"""
 
     @staticmethod
     def _company_order(sort):
         orders = {
-            "newest": "c.created_at DESC,c.id",
-            "procurement": "procurement_count DESC,email_count DESC,c.created_at DESC,c.id",
-            "email": "email_count DESC,procurement_count DESC,c.created_at DESC,c.id",
-            "updated": "COALESCE(c.last_checked_at,c.created_at) DESC,c.created_at DESC,c.id",
+            "newest": ("c.created_at DESC,c.id", False),
+            "procurement": ("COALESCE(s.procurement_count,0) DESC,COALESCE(s.email_count,0) DESC,c.created_at DESC,c.id", True),
+            "email": ("COALESCE(s.email_count,0) DESC,COALESCE(s.procurement_count,0) DESC,c.created_at DESC,c.id", True),
+            "updated": ("COALESCE(c.last_checked_at,c.created_at) DESC,c.created_at DESC,c.id", False),
         }
         if sort not in orders:
             raise ValueError("无效企业排序")
-        return " ORDER BY " + orders[sort]
+        order, stats = orders[sort]
+        return " ORDER BY " + order, stats
+
+    def _company_ids(self, con, query, sort, limit=None, offset=0):
+        """Stage 1: ids (plus market columns) in display order, pure SQL."""
+        joins, where, columns, join_params, params, _ = query
+        order, needs_stats = self._company_order(sort)
+        stats = f" LEFT JOIN ({self._contact_stats_sql()}) s ON s.company_id=c.id" if needs_stats else ""
+        sql = "SELECT c.id" + columns + " FROM companies c" + joins + stats + " WHERE " + where + order
+        values = join_params + params
+        if limit is not None:
+            sql += " LIMIT ? OFFSET ?"
+            values = values + [limit, offset]
+        return [dict(r) for r in con.execute(sql, values)]
+
+    @staticmethod
+    def _company_total(con, query):
+        joins, where, _, join_params, params, _ = query
+        return con.execute("SELECT count(*) FROM companies c" + joins + " WHERE " + where,
+                           join_params + params).fetchone()[0]
+
+    def _company_rows(self, con, keyed):
+        """Stage 2: full rows for at most a page of ids, one batched query per kind of data."""
+        result = []
+        for start in range(0, len(keyed), 500):
+            chunk = keyed[start:start + 500]
+            ids = [row["id"] for row in chunk]
+            marks = ",".join("?" for _ in ids)
+            companies = {r["id"]: self.row(r) for r in con.execute(f"SELECT * FROM companies WHERE id IN ({marks})", ids)}
+            stats = {r["company_id"]: dict(r) for r in con.execute(
+                self._contact_stats_sql(f"AND f.company_id IN ({marks})"), ids)}
+            social = dict(con.execute(f"""SELECT cs.company_id,count(DISTINCT e.id) FROM company_social cs
+                JOIN social_entities e ON cs.entity_id=e.id
+                WHERE cs.company_id IN ({marks}) AND cs.status!='excluded' AND e.kind='account'
+                AND NOT EXISTS(SELECT 1 FROM {USABLE_FROM} WHERE f.company_id=cs.company_id
+                    AND {usable_contact_sql()} AND f.category='procurement'
+                    AND rtrim(ct.url,'/')=rtrim(e.url,'/')) GROUP BY cs.company_id""", ids).fetchall())
+            operating = {r["company_id"]: r for r in con.execute(f"""SELECT company_id,value,source_url,observed_at FROM
+                (SELECT company_id,value,source_url,observed_at,ROW_NUMBER() OVER (PARTITION BY company_id
+                    ORDER BY observed_at DESC,rowid DESC) rn FROM observations
+                 WHERE field='operating_status' AND company_id IN ({marks})) WHERE rn=1""", ids)}
+            checked = dict(con.execute(
+                f"SELECT company_id,checked_at FROM company_manual_checks WHERE company_id IN ({marks})", ids).fetchall())
+            for row in chunk:
+                item = companies[row["id"]]
+                counts = stats.get(row["id"], {})
+                item.update(contact_count=counts.get("contact_count", 0), email_count=counts.get("email_count", 0),
+                            procurement_count=counts.get("procurement_count", 0),
+                            social_count=social.get(row["id"], 0))
+                item.update({k: v for k, v in row.items() if k != "id"})
+                if "market_changed" in item:
+                    item["market_changed"] = bool(item["market_changed"])
+                status = operating.get(row["id"])
+                item["manual_checked_at"] = checked.get(row["id"])
+                item["operating_status"] = status["value"] if status else "unknown"
+                item["operating_source_url"] = status["source_url"] if status else ""
+                item["operating_observed_at"] = status["observed_at"] if status else ""
+                result.append(item)
+        return result
 
     def company_page(self, q="", status="", type="", market_id="", run_id="", segment="", page=1, page_size=50,
                      contact="", sort="newest"):
@@ -712,34 +758,20 @@ class MarketStoreMixin:
             raise ValueError("无效页码")
         if isinstance(page_size, bool) or not isinstance(page_size, int) or not 1 <= page_size <= 1000:
             raise ValueError("每页条数须为1至1000")
-        order = self._company_order(sort)
+        self._company_order(sort)
+        self._refresh_facets()
         with self.connect() as con:
-            base, columns, params = self._company_query(con, q, status, type, market_id, run_id, segment, contact)
-            total = con.execute("SELECT count(*)" + base, params).fetchone()[0]
-            rows = con.execute("SELECT c.*"
-                               + self._company_contact_columns(con) + columns + base + order + " LIMIT ? OFFSET ?",
-                               params + [page_size, (page - 1) * page_size]).fetchall()
-            items = [self.row(r) for r in rows]
-            for item in items:
-                self._decorate_operating(con, item)
-                if "market_changed" in item:
-                    item["market_changed"] = bool(item["market_changed"])
+            query = self._company_query(con, q, status, type, market_id, run_id, segment, contact)
+            total = self._company_total(con, query)
+            keyed = self._company_ids(con, query, sort, page_size, (page - 1) * page_size)
+            items = self._company_rows(con, keyed)
         return {"items": items, "total": total, "page": page, "page_size": page_size}
 
     def companies(self, q="", status="", type="", *, max_rows=None, market_id="", run_id="", segment="",
                   contact="", sort="newest"):
-        order = self._company_order(sort)
+        self._company_order(sort)
+        self._refresh_facets()
         with self.connect() as con:
-            base, columns, params = self._company_query(con, q, status, type, market_id, run_id, segment, contact)
-            suffix = order
-            if max_rows is not None:
-                suffix += " LIMIT ?"
-                params.append(max_rows)
-            rows = con.execute("SELECT c.*"
-                               + self._company_contact_columns(con) + columns + base + suffix, params).fetchall()
-            result = [self.row(row) for row in rows]
-            for item in result:
-                self._decorate_operating(con, item)
-                if "market_changed" in item:
-                    item["market_changed"] = bool(item["market_changed"])
-            return result
+            query = self._company_query(con, q, status, type, market_id, run_id, segment, contact)
+            keyed = self._company_ids(con, query, sort, max_rows)
+            return self._company_rows(con, keyed)

@@ -66,6 +66,9 @@ def test_upgrade_keeps_legacy_rows_and_records_ledger(tmp_path, fixture):
         assert con.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert con.execute("PRAGMA foreign_key_check").fetchall() == []
         assert con.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert con.execute("SELECT count(*) FROM contact_facets").fetchone()[0] == \
+            con.execute("SELECT count(*) FROM contacts").fetchone()[0]
+        assert not con.execute("SELECT 1 FROM contact_facets_dirty").fetchone()
 
 
 @pytest.mark.parametrize("fixture", FIXTURES)

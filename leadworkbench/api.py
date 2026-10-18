@@ -298,6 +298,7 @@ def create_app(data_dir=None, *, allowed_hosts=None):
     def overview():
         binary = Path(os.environ.get("MAPS_SCRAPER_BIN", str(ROOT / "tools/bin/google-maps-scraper")))
         available = binary.is_file() and os.access(binary, os.X_OK)
+        store._refresh_facets()
         with store.connect() as con:
             counts = {key: con.execute(sql).fetchone()[0] for key, sql in {
                 "companies": "SELECT count(*) FROM companies WHERE merged_into IS NULL",

@@ -17,6 +17,8 @@ QUERIES = [
     ("""SELECT value FROM observations WHERE company_id=? AND field='operating_status'
         ORDER BY observed_at DESC""", ("x",)),
     ("SELECT id FROM companies ORDER BY created_at DESC,id LIMIT 50", ()),
+    ("SELECT * FROM contact_facets WHERE company_id=? AND category='procurement'", ("x",)),
+    ("SELECT 1 FROM contact_facets WHERE company_id=? AND email_key=?", ("x", "a@b.example")),
 ]
 
 

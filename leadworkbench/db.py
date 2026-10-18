@@ -11,6 +11,7 @@ import re
 from pathlib import Path
 import shutil
 import sqlite3
+import threading
 import uuid
 from zoneinfo import ZoneInfo
 from .run_activity import RunActivityMixin
@@ -123,7 +124,10 @@ PRAGMA user_version=1;
 
 
 class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMixin):
+    _facets_enabled = False
+
     def __init__(self, directory: Path | str):
+        self._local = threading.local()
         self.directory = Path(directory).expanduser().resolve()
         self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.path = self.directory / "workbench.sqlite3"
@@ -141,6 +145,8 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             self._migrate_market_social(con)
             from .p0_migrations import migrate_p0
             migrate_p0(self, con)
+            self._facets_enabled = bool(con.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='contact_facets'").fetchone())
         self.path.chmod(0o600)
         self.resolve_branch_reviews()
         self.resolve_empty_reviews()
@@ -208,6 +214,10 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         con.row_factory = sqlite3.Row
         con.execute("PRAGMA foreign_keys=ON")
         con.execute("PRAGMA busy_timeout=15000")
+        # Open-connection depth per thread: facet refresh must never run inside one.
+        local = self.__dict__.get("_local")
+        if local is not None:
+            local.depth = getattr(local, "depth", 0) + 1
         try:
             yield con
             con.commit()
@@ -216,6 +226,44 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             raise
         finally:
             con.close()
+            if local is not None:
+                local.depth -= 1
+
+    def _refresh_facets_locked(self, con, limit=None):
+        """Recompute dirty contact facets inside the caller's write transaction."""
+        from .contact_tiers import FACET_VERSION, contact_facet
+        rows = con.execute("""SELECT d.contact_id dirty_id,ct.*,mc.phone manual_phone FROM contact_facets_dirty d
+            LEFT JOIN contacts ct ON ct.id=d.contact_id LEFT JOIN manual_contacts mc ON mc.contact_id=d.contact_id"""
+                           + (" LIMIT ?" if limit else ""), (limit,) if limit else ()).fetchall()
+        facets = []
+        for row in rows:
+            if row["id"] is None:
+                continue
+            try:
+                values = contact_facet(row)
+            except Exception:
+                log.warning("contact facet failed: %s", row["id"], exc_info=True)
+                values = (0, "irrelevant", "none", 8, encode([row["id"]]), "")
+            facets.append((row["id"], row["company_id"], *values, FACET_VERSION))
+        con.executemany("INSERT OR REPLACE INTO contact_facets VALUES(?,?,?,?,?,?,?,?,?)", facets)
+        con.executemany("DELETE FROM contact_facets_dirty WHERE contact_id=?", [(r["dirty_id"],) for r in rows])
+        return len(rows)
+
+    def _refresh_facets(self):
+        """Read entry points call this before opening their own read connection."""
+        if getattr(self._local, "depth", 0) > 0:
+            raise RuntimeError("_refresh_facets called inside a write transaction")
+        if not self._facets_enabled:
+            return
+        with self.connect() as con:
+            if not con.execute("SELECT 1 FROM contact_facets_dirty LIMIT 1").fetchone():
+                return
+            while True:
+                con.execute("BEGIN IMMEDIATE")
+                done = self._refresh_facets_locked(con, limit=2000)
+                con.commit()
+                if done < 2000:
+                    return
 
     @staticmethod
     def row(row):
@@ -349,6 +397,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         return company
 
     def company(self, id):
+        self._refresh_facets()
         with self.connect() as con:
             company = self.row(con.execute("""SELECT c.*,(SELECT count(*) FROM contacts WHERE company_id=c.id)
                 contact_count FROM companies c WHERE c.id=?""", (id,)).fetchone())
@@ -590,18 +639,17 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                         (encode(social), now() if payload.get("status") == "completed" else None, id))
             self._sync_social(con, id)
             self._sync_market_social_links(con, id)
+            if self._facets_enabled:
+                self._refresh_facets_locked(con)
         self.reclassify_contacts(id)
 
     def contact_count(self, con, company_id=None):
-        sql = """SELECT c.* FROM contacts c WHERE review_status NOT IN ('reject','invalid','superseded','pending')
-            AND NOT EXISTS (SELECT 1 FROM contact_decisions d WHERE d.contact_id=c.id AND d.adoption_status='excluded')"""
-        rows = con.execute(sql + (" AND company_id=?" if company_id else ""),
-                           (company_id,) if company_id else ()).fetchall()
-        from .contact_projection import outreach_category
-        from .contact_quality import invalid_contact_channel_reason
-        return len({contact_key(dict(r)) for r in rows
-                    if outreach_category(r['kind'], r['role_status'], r['email'], r['role']) != 'irrelevant'
-                    and not invalid_contact_channel_reason(r['kind'], r['email'], r['url'], r['evidence'])})
+        """Distinct usable contact entries; callers refresh facets before opening `con`."""
+        from .market_store import USABLE_FROM, usable_contact_sql
+        sql = f"SELECT count(DISTINCT f.identity_key) FROM {USABLE_FROM} WHERE {usable_contact_sql()}"
+        if company_id:
+            return con.execute(sql + " AND f.company_id=?", (company_id,)).fetchone()[0]
+        return con.execute(sql).fetchone()[0]
 
     def contact_records(self, con, company_id):
         """Current identities with source snapshots; attribution history stays separate."""
@@ -655,6 +703,8 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                              encode({'id':row['id'], 'review_status':'invalid'}), now(),
                              '联系人识别修正：' + {'invalid_person_name':'服务栏目、宣传句或混合文字被误认为姓名', 'invalid_job_title':'普通文案被误认为岗位', 'placeholder_email':'建站占位邮箱', 'invalid_email_format':'邮箱格式无效', 'placeholder_contact_link':'菜单占位链接，不是联系入口', 'non_contact_form':'订阅或购物用途页面，不是联系入口', 'page_wrapper_form':'整页导航外层表单被误认为联系表单', 'invalid_contact_link':'联系地址无效', 'third_party_service_email':'第三方网站插件服务邮箱', 'shared_mailbox_assigned_to_person':'通用邮箱被错误归属个人', 'supplier_link_without_contact_intent':'缺少供应商申请或联系意图'}.get(reason, reason) + '；原始证据保留'))
                 archived += 1
+            if self._facets_enabled:
+                self._refresh_facets_locked(con)
         return {'archived': archived, 'channels_preserved': channels_preserved}
 
     def detail(self, id):
