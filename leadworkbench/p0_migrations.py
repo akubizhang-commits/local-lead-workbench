@@ -97,6 +97,59 @@ def _facets_fill(store, con):
         raise Pending()
 
 
+CATEGORIES_SCHEMA = [
+    """CREATE TABLE IF NOT EXISTS company_categories(
+        company_id TEXT NOT NULL REFERENCES companies(id), category_key TEXT NOT NULL, category TEXT NOT NULL,
+        source_url TEXT NOT NULL DEFAULT '', first_seen TEXT NOT NULL, last_seen TEXT NOT NULL,
+        PRIMARY KEY(company_id, category_key))""",
+    "CREATE INDEX IF NOT EXISTS company_categories_key ON company_categories(category_key, company_id)",
+    """CREATE TABLE IF NOT EXISTS company_type_hints(
+        company_id TEXT NOT NULL REFERENCES companies(id), business_type TEXT NOT NULL,
+        market_id TEXT NOT NULL REFERENCES tasks(id), created_at TEXT NOT NULL,
+        PRIMARY KEY(company_id, business_type, market_id))""",
+    """CREATE TABLE IF NOT EXISTS exclusion_rules(
+        id TEXT PRIMARY KEY, scope TEXT NOT NULL CHECK(scope IN ('global','market')),
+        market_id TEXT REFERENCES tasks(id), kind TEXT NOT NULL CHECK(kind IN ('category','keyword')),
+        value TEXT NOT NULL, value_key TEXT NOT NULL, created_at TEXT NOT NULL,
+        CHECK((scope='global' AND market_id IS NULL) OR (scope='market' AND market_id IS NOT NULL)))""",
+    """CREATE UNIQUE INDEX IF NOT EXISTS exclusion_rules_unique
+        ON exclusion_rules(scope, COALESCE(market_id,''), kind, value_key)""",
+]
+# Market company types -> initial (unverified) business type hints.
+TYPE_HINTS = {"wholesale": "wholesaler", "retail": "retailer", "import": "importer"}
+
+
+def _categories(store, con):
+    import json
+    from .market_store import normalized
+    for statement in CATEGORIES_SCHEMA:
+        con.execute(statement)
+    grouped = {}
+    for row in con.execute("""SELECT company_id,value,source_url,observed_at FROM observations
+            WHERE field='category' AND method='maps' ORDER BY observed_at,rowid"""):
+        key = normalized(row["value"])
+        if not key:
+            continue
+        item = grouped.setdefault((row["company_id"], key), [row["value"], row["source_url"], row["observed_at"],
+                                                             row["observed_at"]])
+        if row["observed_at"] >= item[3]:
+            item[0], item[1], item[3] = row["value"], row["source_url"], row["observed_at"]
+    con.executemany("INSERT OR IGNORE INTO company_categories VALUES(?,?,?,?,?,?)",
+                    [(cid, key, v[0], v[1] or "", v[2], v[3]) for (cid, key), v in grouped.items()])
+    stamp = now()
+    hints = []
+    for task in con.execute("SELECT id,company_types FROM tasks").fetchall():
+        try:
+            types = json.loads(task["company_types"] or "[]")
+        except ValueError:
+            continue
+        for kind in types if isinstance(types, list) else []:
+            if kind in TYPE_HINTS:
+                hints += [(row[0], TYPE_HINTS[kind], task["id"], stamp) for row in con.execute(
+                    "SELECT company_id FROM market_memberships WHERE market_id=?", (task["id"],))]
+    con.executemany("INSERT OR IGNORE INTO company_type_hints VALUES(?,?,?,?)", hints)
+
+
 PROPOSALS_SCHEMA = [
     """CREATE TABLE IF NOT EXISTS contact_change_proposals(
         review_id TEXT PRIMARY KEY REFERENCES reviews(id),
@@ -173,6 +226,7 @@ def _registry():
         ("p0_20261018_facets_schema", _facets_schema),
         (f"contact_facets_v{FACET_VERSION}_mark", _facets_mark),
         (f"contact_facets_v{FACET_VERSION}", _facets_fill),
+        ("p0_20261018_categories", _categories),
         ("p0_20261018_contact_proposals", _contact_proposals),
         ("p0_20261018_repair_rejected", _repair_rejected),
     ]

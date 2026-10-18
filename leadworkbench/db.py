@@ -291,9 +291,10 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                 result[key] = bool(result[key])
         return result
 
-    def companies(self, q="", status="", type="", *, max_rows=None, market_id="", run_id="", segment="", contact="", sort="newest"):
-        return super().companies(q, status, type, max_rows=max_rows, market_id=market_id,
-                                 run_id=run_id, segment=segment, contact=contact, sort=sort)
+    def companies(self, q="", status="", type="", *, max_rows=None, market_id="", run_id="", segment="", contact="",
+                  sort="newest", category=(), excluded="hide"):
+        return super().companies(q, status, type, max_rows=max_rows, market_id=market_id, run_id=run_id,
+                                 segment=segment, contact=contact, sort=sort, category=category, excluded=excluded)
 
     def resolve_empty_reviews(self):
         with self.connect() as con:
@@ -520,6 +521,8 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             for field in ("name", "address", "phone", "website"):
                 self._observed_field(con, company, field, record.get(field), record["source_url"],
                                      f"Google Maps 实际查询：{query}", timestamp, "maps", run_id, query)
+            if record.get("category"):
+                self._write_category(con, id, record["category"], record["source_url"], timestamp)
         return self.company(id)
 
     def update_company(self, id, revision, fields, notes=None, status=None, business_types=None):

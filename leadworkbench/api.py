@@ -4,7 +4,7 @@ import asyncio
 import os
 from pathlib import Path
 import secrets
-from typing import Literal
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -229,6 +229,34 @@ class Restore(Input):
     name: str = Field(min_length=1, max_length=200)
 
 
+class ExclusionRuleInput(Input):
+    scope: Literal["global", "market"]
+    market_id: str | None = Field(default=None, min_length=1, max_length=100)
+    kind: Literal["category", "keyword"]
+    value: str = Field(min_length=1, max_length=200)
+
+    @field_validator("value")
+    @classmethod
+    def value_valid(cls, value):
+        value = value.strip()
+        if not 1 <= len(value) <= 120 or any(ord(c) < 32 or ord(c) == 127 for c in value):
+            raise ValueError("排除值须为 1–120 个字符，且不含控制字符")
+        return value
+
+    @model_validator(mode="after")
+    def scope_valid(self):
+        if self.scope == "global" and self.market_id is not None:
+            raise ValueError("全局规则不能指定市场")
+        if self.scope == "market" and not self.market_id:
+            raise ValueError("市场规则须指定市场")
+        return self
+
+
+# Repeatable ?category= filter: up to 20 values of 1–120 characters, OR semantics.
+CategoryFilter = Annotated[list[Annotated[str, Field(min_length=1, max_length=120)]], Query(max_length=20)]
+Excluded = Literal["hide", "only", "include"]
+
+
 def create_app(data_dir=None, *, allowed_hosts=None):
     from contextlib import asynccontextmanager
     @asynccontextmanager
@@ -394,17 +422,38 @@ def create_app(data_dir=None, *, allowed_hosts=None):
         return store.control(id, action)
 
     @app.get("/api/companies")
-    def companies(q: str = "", status: str = "", type: str = ""):
-        return store.companies(q, status, type)
+    def companies(q: str = "", status: str = "", type: str = "", category: CategoryFilter = [],
+                  excluded: Excluded = "hide"):
+        return store.companies(q, status, type, category=category, excluded=excluded)
 
     @app.get("/api/company-page")
     def company_page(q: str = "", status: str = "", type: str = "", market_id: str = "",
                      run_id: str = "", segment: Literal["", "new", "existing", "changed", "not_seen"] = "",
                      contact: Literal["", "email", "procurement"] = "",
                      sort: Literal["newest", "procurement", "email", "updated"] = "newest",
-                     page: int = Query(default=1, ge=1), page_size: int = Query(default=50, ge=1, le=200)):
+                     page: int = Query(default=1, ge=1), page_size: int = Query(default=50, ge=1, le=200),
+                     category: CategoryFilter = [], excluded: Excluded = "hide"):
         return store.company_page(q=q, status=status, type=type, market_id=market_id,
-                                  run_id=run_id, segment=segment, contact=contact, sort=sort, page=page, page_size=page_size)
+                                  run_id=run_id, segment=segment, contact=contact, sort=sort, page=page, page_size=page_size,
+                                  category=category, excluded=excluded)
+
+    @app.get("/api/company-categories")
+    def company_categories(market_id: str = "", excluded: Excluded = "hide"):
+        return store.company_categories(market_id=market_id, excluded=excluded)
+
+    @app.get("/api/exclusion-rules")
+    def exclusion_rules(market_id: str = ""):
+        return store.exclusion_rules(market_id)
+
+    @app.post("/api/exclusion-rules")
+    def create_exclusion_rule(body: ExclusionRuleInput):
+        rule = store.create_exclusion_rule(body.scope, body.kind, body.value, body.market_id)
+        return JSONResponse(rule, status_code=200 if rule["reused"] else 201)
+
+    @app.delete("/api/exclusion-rules/{id}", status_code=204)
+    def delete_exclusion_rule(id: str):
+        store.delete_exclusion_rule(id)
+        return Response(status_code=204)
 
     @app.post("/api/companies")
     def create_company(body: CompanyInput):
@@ -579,9 +628,11 @@ def create_app(data_dir=None, *, allowed_hosts=None):
                market_id: str = "", run_id: str = "",
                contact: Literal["", "email", "procurement"] = "",
                sort: Literal["newest", "procurement", "email", "updated"] = "newest",
-               segment: Literal["", "new", "existing", "changed", "not_seen"] = ""):
+               segment: Literal["", "new", "existing", "changed", "not_seen"] = "",
+               category: CategoryFilter = [], excluded: Excluded = "hide"):
         output = export_data(store, format, q=q, status=status, type=type,
-                             market_id=market_id, run_id=run_id, segment=segment, contact=contact, sort=sort)
+                             market_id=market_id, run_id=run_id, segment=segment, contact=contact, sort=sort,
+                             category=category, excluded=excluded)
         return Response(output, media_type="text/csv; charset=utf-8" if format == "csv" else
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         headers={"Content-Disposition": f'attachment; filename="leads.{format}"'})

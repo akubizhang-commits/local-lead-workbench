@@ -432,6 +432,12 @@ class MarketStoreMixin:
             if category:
                 self._observe(con, company_id, "category", category, record["source_url"],
                               f"Google Maps 来源类别：{category}；实际查询：{query}", timestamp, "maps", run_id, query)
+                self._write_category(con, company_id, category, record["source_url"], timestamp)
+            from .p0_migrations import TYPE_HINTS
+            for kind in json.loads(task["company_types"] or "[]"):
+                if kind in TYPE_HINTS:
+                    con.execute("INSERT OR IGNORE INTO company_type_hints VALUES(?,?,?,?)",
+                                (company_id, TYPE_HINTS[kind], task_id, stamp()))
             for field in ("name", "address", "phone", "website", "business_types"):
                 value = record.get(field)
                 if field == "business_types" and value is None and category:
@@ -587,6 +593,11 @@ class MarketStoreMixin:
             run_id=discovery[0] if discovery else None
         task["mode"] = "market"
         task["market_stats"] = self._market_stats(con, task["id"], run_id)
+        task["market_stats"]["excluded"] = 0
+        if self._materialize_exclusions(con, [task["id"]]):
+            task["market_stats"]["excluded"] = con.execute("""SELECT count(*) FROM market_memberships m
+                JOIN companies c ON c.id=m.company_id JOIN temp.excluded_ids x ON x.market_id=m.market_id
+                AND x.company_id=m.company_id WHERE m.market_id=? AND c.merged_into IS NULL""", (task["id"],)).fetchone()[0]
         task["coverage"] = self._market_coverage(con, run_id)
         if task.get("latest_run") and task["latest_run"]["kind"]!="social":
             task["latest_run"]["progress"].update(
@@ -599,10 +610,16 @@ class MarketStoreMixin:
             task["latest_run"]["coverage"] = task["coverage"]
         return task
 
-    def _company_query(self, con, q, status, type, market_id, run_id, segment, contact=""):
-        """Pure-SQL filters shared by the list, the legacy list and exports.
+    def _company_query(self, con, q, status, type, market_id, run_id, segment, contact="", category=(),
+                       excluded="hide"):
+        """Pure-SQL filters shared by the list, the legacy list, exports and category counts.
 
-        Returns (joins, where, columns, join_params, where_params, market_id)."""
+        Exclusion rules are materialized once into temp.excluded_ids for this connection."""
+        if excluded not in {"hide", "only", "include"}:
+            raise ValueError("无效排除口径")
+        category = [category] if isinstance(category, str) else list(category or ())
+        if len(category) > 20 or any(not isinstance(c, str) or not 1 <= len(c) <= 120 for c in category):
+            raise ValueError("来源类别筛选最多 20 个，每个 1–120 个字符")
         if segment not in {"", "new", "existing", "changed", "not_seen"}:
             raise ValueError("无效市场分组")
         if contact not in {"", "email", "procurement"}:
@@ -655,13 +672,81 @@ class MarketStoreMixin:
         if type:
             aliases = next((group for group in (("wholesale", "wholesaler"), ("retail", "retailer"), ("import", "importer"))
                             if normalized(type) in group), (normalized(type),))
-            clauses.append("EXISTS(SELECT 1 FROM json_each(c.business_types) WHERE lower(trim(value)) IN (" +
-                           ",".join("?" for _ in aliases) + "))")
+            marks = ",".join("?" for _ in aliases)
+            # Market-defined types count only while the company has no recorded business type.
+            clauses.append(f"""(EXISTS(SELECT 1 FROM json_each(c.business_types) WHERE lower(trim(value)) IN ({marks}))
+                OR (c.business_types IN ('[]','') AND EXISTS(SELECT 1 FROM company_type_hints h
+                    WHERE h.company_id=c.id AND h.business_type IN ({marks}))))""")
             params.extend(aliases)
+            params.extend(aliases)
+        keys = sorted({normalized(c) for c in category if normalized(c)})
+        if keys:
+            clauses.append("EXISTS(SELECT 1 FROM company_categories cc WHERE cc.company_id=c.id AND cc.category_key IN ("
+                           + ",".join("?" for _ in keys) + "))")
+            params.extend(keys)
         if contact:
             clauses.append(f"""EXISTS(SELECT 1 FROM {USABLE_FROM} WHERE f.company_id=c.id
                 AND {usable_contact_sql()} AND {self._outreach_criteria(contact)})""")
-        return joins, " AND ".join(clauses), columns, join_params, params, market_id
+        scope = market_id or ""
+        rules = self._materialize_exclusions(con, [scope])
+        exclusion, exclusion_params = "", []
+        if rules and excluded != "include":
+            exclusion = (" AND " + ("NOT " if excluded == "hide" else "")
+                         + "EXISTS(SELECT 1 FROM temp.excluded_ids x WHERE x.market_id=? AND x.company_id=c.id)")
+            exclusion_params = [scope]
+        return dict(joins=joins, base=" AND ".join(clauses), where=" AND ".join(clauses) + exclusion,
+                    columns=columns, join_params=join_params, base_params=params,
+                    params=params + exclusion_params, market_id=market_id, scope=scope, rules=rules)
+
+    def _materialize_exclusions(self, con, market_ids):
+        """Fill temp.excluded_ids(market_id, company_id, rule_id) for each scope; '' = not by market.
+
+        Category rules win over keyword rules, and within a kind the earliest rule wins."""
+        rules = [dict(r) for r in con.execute("SELECT * FROM exclusion_rules ORDER BY created_at,rowid")]
+        if not rules:
+            return False
+        con.execute("""CREATE TEMP TABLE IF NOT EXISTS excluded_ids(market_id TEXT NOT NULL,company_id TEXT NOT NULL,
+            rule_id TEXT NOT NULL,PRIMARY KEY(market_id,company_id))""")
+        con.execute("DELETE FROM temp.excluded_ids")
+        keywords = [r for r in rules if r["kind"] == "keyword"]
+        for scope in dict.fromkeys(market_ids):
+            if scope:
+                con.execute("""INSERT OR IGNORE INTO temp.excluded_ids SELECT ?,cc.company_id,r.id
+                    FROM exclusion_rules r JOIN company_categories cc ON cc.category_key=r.value_key
+                    WHERE r.kind='category' AND (r.scope='global' OR r.market_id=?)
+                    AND EXISTS(SELECT 1 FROM market_memberships m WHERE m.company_id=cc.company_id AND m.market_id=?)
+                    ORDER BY r.created_at,r.rowid""", (scope, scope, scope))
+            else:
+                con.execute("""INSERT OR IGNORE INTO temp.excluded_ids SELECT '',cc.company_id,r.id
+                    FROM exclusion_rules r JOIN company_categories cc ON cc.category_key=r.value_key
+                    WHERE r.kind='category' AND (r.scope='global' OR EXISTS(SELECT 1 FROM market_memberships m
+                        WHERE m.company_id=cc.company_id AND m.market_id=r.market_id))
+                    ORDER BY r.created_at,r.rowid""")
+            if not keywords:
+                continue
+            groups = {}
+            for rule in keywords:
+                if rule["scope"] == "global" or rule["market_id"] == scope or not scope:
+                    groups.setdefault("" if rule["scope"] == "global" or scope else rule["market_id"], []).append(rule)
+            hits = []
+            for group, group_rules in groups.items():
+                pattern = re.compile("|".join(re.escape(r["value_key"]) for r in group_rules))
+                member = scope or group
+                sql = """SELECT c.id,c.name,group_concat(cc.category_key,'|') categories FROM companies c
+                    LEFT JOIN company_categories cc ON cc.company_id=c.id WHERE c.merged_into IS NULL"""
+                values = ()
+                if member:
+                    sql += " AND EXISTS(SELECT 1 FROM market_memberships m WHERE m.company_id=c.id AND m.market_id=?)"
+                    values = (member,)
+                for row in con.execute(sql + " GROUP BY c.id", values):
+                    text = normalized(row["name"]) + "|" + (row["categories"] or "")
+                    if pattern.search(text):
+                        rule = next(r for r in group_rules if r["value_key"] in text)
+                        hits.append((rule["created_at"], rule["id"], row["id"]))
+            # Earliest rule first so INSERT OR IGNORE keeps it.
+            con.executemany("INSERT OR IGNORE INTO temp.excluded_ids VALUES(?,?,?)",
+                            [(scope, company_id, rule_id) for _, rule_id, company_id in sorted(hits)])
+        return True
 
     @staticmethod
     def _outreach_criteria(category, facet="f"):
@@ -697,11 +782,11 @@ class MarketStoreMixin:
 
     def _company_ids(self, con, query, sort, limit=None, offset=0):
         """Stage 1: ids (plus market columns) in display order, pure SQL."""
-        joins, where, columns, join_params, params, _ = query
         order, needs_stats = self._company_order(sort)
         stats = f" LEFT JOIN ({self._contact_stats_sql()}) s ON s.company_id=c.id" if needs_stats else ""
-        sql = "SELECT c.id" + columns + " FROM companies c" + joins + stats + " WHERE " + where + order
-        values = join_params + params
+        sql = ("SELECT c.id" + query["columns"] + " FROM companies c" + query["joins"] + stats
+               + " WHERE " + query["where"] + order)
+        values = query["join_params"] + query["params"]
         if limit is not None:
             sql += " LIMIT ? OFFSET ?"
             values = values + [limit, offset]
@@ -709,13 +794,23 @@ class MarketStoreMixin:
 
     @staticmethod
     def _company_total(con, query):
-        joins, where, _, join_params, params, _ = query
-        return con.execute("SELECT count(*) FROM companies c" + joins + " WHERE " + where,
-                           join_params + params).fetchone()[0]
+        return con.execute("SELECT count(*) FROM companies c" + query["joins"] + " WHERE " + query["where"],
+                           query["join_params"] + query["params"]).fetchone()[0]
 
-    def _company_rows(self, con, keyed):
+    @staticmethod
+    def _excluded_total(con, query):
+        """Companies hidden by rules under the other current filters."""
+        if not query["rules"]:
+            return 0
+        return con.execute("SELECT count(*) FROM companies c" + query["joins"] + " WHERE " + query["base"]
+                           + " AND EXISTS(SELECT 1 FROM temp.excluded_ids x WHERE x.market_id=? AND x.company_id=c.id)",
+                           query["join_params"] + query["base_params"] + [query["scope"]]).fetchone()[0]
+
+    def _company_rows(self, con, keyed, query=None):
         """Stage 2: full rows for at most a page of ids, one batched query per kind of data."""
         result = []
+        scope = query["scope"] if query and query["rules"] else None
+        names = {r["id"]: r["name"] for r in con.execute("SELECT id,name FROM tasks")}
         for start in range(0, len(keyed), 500):
             chunk = keyed[start:start + 500]
             ids = [row["id"] for row in chunk]
@@ -735,6 +830,21 @@ class MarketStoreMixin:
                  WHERE field='operating_status' AND company_id IN ({marks})) WHERE rn=1""", ids)}
             checked = dict(con.execute(
                 f"SELECT company_id,checked_at FROM company_manual_checks WHERE company_id IN ({marks})", ids).fetchall())
+            categories = {}
+            for r in con.execute(f"""SELECT company_id,category FROM company_categories WHERE company_id IN ({marks})
+                    ORDER BY last_seen DESC,category""", ids):
+                categories.setdefault(r[0], []).append(r[1])
+            hints = {}
+            for r in con.execute(f"""SELECT h.company_id,h.business_type,h.market_id FROM company_type_hints h
+                    JOIN companies c ON c.id=h.company_id WHERE h.company_id IN ({marks})
+                    AND c.business_types IN ('[]','') ORDER BY h.created_at,h.market_id""", ids):
+                hints.setdefault(r[0], []).append(dict(business_type=r[1], market_id=r[2], market_name=names.get(r[2], "")))
+            exclusions = {}
+            if scope is not None:
+                exclusions = {r[0]: dict(rule_id=r[1], kind=r[2], value=r[3], scope=r[4]) for r in con.execute(
+                    f"""SELECT x.company_id,r.id,r.kind,r.value,r.scope FROM temp.excluded_ids x
+                    JOIN exclusion_rules r ON r.id=x.rule_id WHERE x.market_id=? AND x.company_id IN ({marks})""",
+                    [scope, *ids])}
             for row in chunk:
                 item = companies[row["id"]]
                 counts = stats.get(row["id"], {})
@@ -749,11 +859,14 @@ class MarketStoreMixin:
                 item["operating_status"] = status["value"] if status else "unknown"
                 item["operating_source_url"] = status["source_url"] if status else ""
                 item["operating_observed_at"] = status["observed_at"] if status else ""
+                item["categories"] = categories.get(row["id"], [])
+                item["type_hints"] = hints.get(row["id"], [])
+                item["exclusion"] = exclusions.get(row["id"])
                 result.append(item)
         return result
 
     def company_page(self, q="", status="", type="", market_id="", run_id="", segment="", page=1, page_size=50,
-                     contact="", sort="newest"):
+                     contact="", sort="newest", category=(), excluded="hide"):
         if isinstance(page, bool) or not isinstance(page, int) or page < 1:
             raise ValueError("无效页码")
         if isinstance(page_size, bool) or not isinstance(page_size, int) or not 1 <= page_size <= 1000:
@@ -761,17 +874,102 @@ class MarketStoreMixin:
         self._company_order(sort)
         self._refresh_facets()
         with self.connect() as con:
-            query = self._company_query(con, q, status, type, market_id, run_id, segment, contact)
+            query = self._company_query(con, q, status, type, market_id, run_id, segment, contact, category, excluded)
             total = self._company_total(con, query)
             keyed = self._company_ids(con, query, sort, page_size, (page - 1) * page_size)
-            items = self._company_rows(con, keyed)
-        return {"items": items, "total": total, "page": page, "page_size": page_size}
+            items = self._company_rows(con, keyed, query)
+            hidden = self._excluded_total(con, query)
+        return {"items": items, "total": total, "page": page, "page_size": page_size, "excluded_total": hidden}
 
     def companies(self, q="", status="", type="", *, max_rows=None, market_id="", run_id="", segment="",
-                  contact="", sort="newest"):
+                  contact="", sort="newest", category=(), excluded="hide"):
         self._company_order(sort)
         self._refresh_facets()
         with self.connect() as con:
-            query = self._company_query(con, q, status, type, market_id, run_id, segment, contact)
+            query = self._company_query(con, q, status, type, market_id, run_id, segment, contact, category, excluded)
             keyed = self._company_ids(con, query, sort, max_rows)
-            return self._company_rows(con, keyed)
+            return self._company_rows(con, keyed, query)
+
+    def company_categories(self, market_id="", excluded="hide"):
+        """Source categories with company counts under the market/exclusion scope (max 200)."""
+        with self.connect() as con:
+            query = self._company_query(con, "", "", "", market_id, "", "", "", (), excluded)
+            rows = con.execute(f"""SELECT cc.category_key,count(DISTINCT cc.company_id) count,
+                (SELECT x.category FROM company_categories x WHERE x.category_key=cc.category_key
+                 ORDER BY x.last_seen DESC LIMIT 1) category
+                FROM companies c{query["joins"]} JOIN company_categories cc ON cc.company_id=c.id
+                WHERE {query["where"]} GROUP BY cc.category_key ORDER BY count DESC,cc.category_key LIMIT 200""",
+                               query["join_params"] + query["params"]).fetchall()
+        return [dict(category=r["category"], category_key=r["category_key"], count=r["count"]) for r in rows]
+
+    def _rule_matches(self, con, rule):
+        member = "" if rule["scope"] == "global" else rule["market_id"]
+        membership = ("AND EXISTS(SELECT 1 FROM market_memberships m WHERE m.company_id=c.id AND m.market_id=?)"
+                      if member else "")
+        values = (member,) if member else ()
+        if rule["kind"] == "category":
+            return con.execute(f"""SELECT count(DISTINCT c.id) FROM companies c JOIN company_categories cc
+                ON cc.company_id=c.id WHERE c.merged_into IS NULL AND cc.category_key=? {membership}""",
+                               (rule["value_key"], *values)).fetchone()[0]
+        count = 0
+        for row in con.execute(f"""SELECT c.name,group_concat(cc.category_key,'|') categories FROM companies c
+                LEFT JOIN company_categories cc ON cc.company_id=c.id WHERE c.merged_into IS NULL {membership}
+                GROUP BY c.id""", values):
+            count += rule["value_key"] in normalized(row["name"]) + "|" + (row["categories"] or "")
+        return count
+
+    def exclusion_rules(self, market_id=""):
+        with self.connect() as con:
+            if market_id and not con.execute("SELECT 1 FROM tasks WHERE id=?", (market_id,)).fetchone():
+                raise KeyError("市场不存在")
+            sql = "SELECT * FROM exclusion_rules"
+            values = ()
+            if market_id:
+                sql += " WHERE scope='global' OR market_id=?"
+                values = (market_id,)
+            rules = [dict(r) for r in con.execute(sql + " ORDER BY created_at,rowid", values)]
+            for rule in rules:
+                rule["matched"] = self._rule_matches(con, rule)
+            return rules
+
+    def create_exclusion_rule(self, scope, kind, value, market_id=None):
+        value = " ".join(str(value).split())
+        key = normalized(value)
+        if kind == "keyword" and len(key) < 2:
+            raise ValueError("排除关键词至少 2 个字符")
+        if not key:
+            raise ValueError("排除值不能为空")
+        with self.connect() as con:
+            con.execute("BEGIN IMMEDIATE")
+            if scope == "market" and not con.execute("SELECT 1 FROM tasks WHERE id=?", (market_id,)).fetchone():
+                raise KeyError("市场不存在")
+            prior = con.execute("""SELECT * FROM exclusion_rules WHERE scope=? AND COALESCE(market_id,'')=?
+                AND kind=? AND value_key=?""", (scope, market_id or "", kind, key)).fetchone()
+            if prior:
+                rule = dict(prior)
+                rule.update(reused=True, matched=self._rule_matches(con, rule))
+                return rule
+            from .db import Conflict
+            if con.execute("SELECT count(*) FROM exclusion_rules").fetchone()[0] >= 200:
+                raise Conflict("排除规则已达上限 200 条，请先删除不用的规则")
+            rule = dict(id=ident(), scope=scope, market_id=market_id if scope == "market" else None, kind=kind,
+                        value=value, value_key=key, created_at=stamp())
+            con.execute("INSERT INTO exclusion_rules VALUES(?,?,?,?,?,?,?)", tuple(rule.values()))
+            rule.update(reused=False, matched=self._rule_matches(con, rule))
+            return rule
+
+    def delete_exclusion_rule(self, id):
+        with self.connect() as con:
+            con.execute("BEGIN IMMEDIATE")
+            if not con.execute("DELETE FROM exclusion_rules WHERE id=?", (id,)).rowcount:
+                raise KeyError("记录不存在")
+
+    def _write_category(self, con, company_id, category, source_url, timestamp):
+        key = normalized(category)
+        if key:
+            con.execute("""INSERT INTO company_categories VALUES(?,?,?,?,?,?)
+                ON CONFLICT(company_id,category_key) DO UPDATE SET
+                category=CASE WHEN excluded.last_seen>=last_seen THEN excluded.category ELSE category END,
+                source_url=CASE WHEN excluded.last_seen>=last_seen THEN excluded.source_url ELSE source_url END,
+                first_seen=min(first_seen,excluded.first_seen),last_seen=max(last_seen,excluded.last_seen)""",
+                        (company_id, key, str(category), source_url or "", timestamp, timestamp))

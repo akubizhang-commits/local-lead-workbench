@@ -72,12 +72,32 @@ def test_csv_export_budget(store):
     assert seconds < CSV_BUDGET
 
 
-@pytest.mark.skipif(not FULL, reason="XLSX timing is recorded only in LEAD_PERF=1 runs")
 def test_xlsx_export_recorded(store):
-    RESULTS["xlsx"] = best_of(lambda: export_data(store, "xlsx"))
+    # Recorded only (decision 1: XLSX is not a hard budget).
+    RESULTS["xlsx"] = best_of(lambda: export_data(store, "xlsx"), 3 if FULL else 1)
 
 
-@pytest.mark.skipif(not FULL, reason="first-start migration timing runs only with LEAD_PERF=1")
+def test_page_with_exclusion_rules(store):
+    with store.connect() as con:
+        con.executemany("INSERT INTO exclusion_rules VALUES(?,?,?,?,?,?,?)",
+                        [(f"perf-k{i}", "global", None, "keyword", f"zzkeyword{i}", f"zzkeyword{i}", "2026")
+                         for i in range(29)] + [("perf-k29", "global", None, "keyword", "company 1", "company 1", "2026")]
+                        + [(f"perf-c{i}", "global" if i % 2 else "market", None if i % 2 else "market0", "category",
+                            f"cat{i}", " ".join(c.casefold().split()), "2026")
+                           for i, c in enumerate(["Roofing contractor", "Hardware store", "Lumber store",
+                                                  "Paint store", "Tile store", "Door supplier", "Window supplier",
+                                                  "General contractor", "Siding contractor", "Concrete contractor"])])
+    try:
+        seconds = best_of(lambda: store.company_page(page=1, page_size=50))
+        RESULTS["page_with_40_rules"] = seconds
+        RESULTS["page_with_40_rules_market"] = best_of(lambda: store.company_page(market_id="market0"))
+        assert store.company_page()["excluded_total"] > 0
+        assert seconds < PAGE_BUDGET and RESULTS["page_with_40_rules_market"] < PAGE_BUDGET
+    finally:
+        with store.connect() as con:
+            con.execute("DELETE FROM exclusion_rules WHERE id LIKE 'perf-%'")
+
+
 def test_first_start_migration_on_9423c53_database(tmp_path, caplog):
     code = legacy_code_tmp()
     if code is None:
@@ -98,3 +118,5 @@ def test_first_start_migration_on_9423c53_database(tmp_path, caplog):
     RESULTS["first_start_total"] = round(total, 2)
     RESULTS["first_start_longest_transaction"] = max(steps)
     assert total < 15 and max(steps) < 3, (total, steps)
+    with Store(target).connect() as con:
+        assert con.execute("SELECT count(*) FROM contact_facets").fetchone()[0] == COMPANIES * CONTACTS
