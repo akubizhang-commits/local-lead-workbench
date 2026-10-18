@@ -40,3 +40,9 @@ test('array filters repeat their key and empty arrays disappear', () => {
  assert.equal(query.get('excluded'), 'only');
  assert.equal(filtersQuery({q:'',status:'',type:'',category:[],excluded:''}), '');
 });
+test('export URL carries layout, format and every list filter', async () => {
+ const {exportUrl} = await import('../src/helpers.ts');
+ const url = new URL(exportUrl({q:'roof',status:'',type:'',market_id:'m1',category:['Metal supplier'],excluded:'include',best_tier:'named_role'},'csv','entries'),'http://x');
+ assert.equal(url.pathname,'/exports');
+ assert.deepEqual(Object.fromEntries(url.searchParams),{q:'roof',market_id:'m1',category:'Metal supplier',excluded:'include',best_tier:'named_role',format:'csv',layout:'entries'});
+});

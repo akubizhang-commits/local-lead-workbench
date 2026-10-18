@@ -212,3 +212,35 @@ test("real DOM: batch conflict is not retried, clears selected revisions and lea
     await h.cleanup();
   }
 });
+test('export buttons: entries first, busy label blocks repeat clicks, footnote explains the layout',async()=>{
+ const h=await setupDOM();
+ const requests:string[]=[];
+ let release:()=>void=()=>{};
+ globalThis.fetch=async(input)=>{const url=String(input);requests.push(url);
+  if(url==='/api/session')return new Response(JSON.stringify({token:'t'}),{headers:{'Content-Type':'application/json'}});
+  if(url.startsWith('/api/exports')){await new Promise<void>(r=>{release=r;});return new Response('x');}
+  const body=url.startsWith('/api/company-page')?{items:[],total:0,page:1,page_size:50,excluded_total:0}:[];
+  return new Response(JSON.stringify(body),{headers:{'Content-Type':'application/json'}});};
+ Object.assign(window.URL,{createObjectURL:()=>'blob:x',revokeObjectURL:()=>{}});
+ window.HTMLAnchorElement.prototype.click=()=>{}; // jsdom cannot navigate to a blob download
+ try {
+  const {CompaniesPage,EXPORT_FOOTNOTE}=await import('../src/pages/CompaniesPage.tsx');
+  const {defaultFilters}=await import('../src/navigation.ts');
+  let pending:Promise<unknown>=Promise.resolve();
+  const act=(work:()=>Promise<unknown>)=>{pending=work();return pending;};
+  const props={version:0,filters:{...defaultFilters(),category:['Metal supplier'],best_tier:'named_role'},page:1,busy:false,act,refresh:()=>{},
+   updateFilters:()=>{},setPage:()=>{},openCompany:()=>{},quickStatus:()=>{}};
+  await h.act(async()=>{h.root.render(createElement(CompaniesPage,props as never));await new Promise(r=>setTimeout(r,30));});
+  const buttons=()=>[...document.querySelectorAll('.section-title .actions button')] as HTMLButtonElement[];
+  assert.deepEqual(buttons().map(b=>b.textContent),['导出联系入口 CSV','导出联系入口 XLSX','导出企业表 CSV']);
+  assert.ok(buttons()[0].classList.contains('primary'));
+  assert.equal(document.querySelector('.footnote')!.textContent,EXPORT_FOOTNOTE);
+  await h.act(async()=>{buttons()[0].click();await new Promise(r=>setTimeout(r,30));});
+  assert.equal(buttons()[0].textContent,'正在生成文件…');
+  assert.ok(buttons().every(b=>b.disabled));
+  const exportRequest=requests.find(u=>u.startsWith('/api/exports'))!;
+  assert.match(exportRequest,/layout=entries/);assert.match(exportRequest,/category=Metal\+supplier/);assert.match(exportRequest,/best_tier=named_role/);
+  await h.act(async()=>{release();await pending;await new Promise(r=>setTimeout(r,10));});
+  assert.equal(buttons()[0].textContent,'导出联系入口 CSV');
+ } finally {await h.cleanup();}
+});

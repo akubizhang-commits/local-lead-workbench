@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, download } from "../api";
 import { batchStatusPayload } from "../companyEdits";
 import { CompanyStatus, StatusOptions } from "../CompanyStatus";
-import { date, filtersQuery, hintLabel, tierClass, TIERS, type Filters } from "../helpers";
+import { date, exportUrl, filtersQuery, hintLabel, tierClass, TIERS, type Filters } from "../helpers";
 import { CategoryFilter } from "../CategoryFilter";
 import { ExclusionRules } from "../ExclusionRules";
 import { useResource } from "../hooks";
@@ -48,6 +48,13 @@ export function ExcludedNotice({
     </div>
   );
 }
+export const EXPORT_FOOTNOTE =
+  "导出当前筛选下的全部结果，不受分页限制。联系入口表一行一个入口，已排除拒绝联系企业、不采用的联系人和按排除规则隐藏的企业；XLSX 另含企业、地点和来源证据表，每张表都带企业名称。";
+const EXPORTS: [string, string, "csv" | "xlsx", "entries" | "companies", string][] = [
+  ["entries-csv", "导出联系入口 CSV", "csv", "entries", "联系入口"],
+  ["entries-xlsx", "导出联系入口 XLSX", "xlsx", "entries", "联系入口"],
+  ["companies-csv", "导出企业表 CSV", "csv", "companies", "企业表"],
+];
 /** 联系入口 column: best tier, deduplicated entry count, gap reason; legacy counts stay in the tooltip. */
 export function EntryCell({ company: c }: { company: Company }) {
   return (
@@ -97,6 +104,7 @@ export function CompaniesPage({
   >({});
   const [batchStatus, setBatchStatus] = useState("candidate");
   const [showRules, setShowRules] = useState(false);
+  const [exporting, setExporting] = useState("");
   useEffect(() => {
     setDraftQuery(filters.q);
     setSelection({});
@@ -254,23 +262,27 @@ export function CompaniesPage({
           共 {companies.data?.total ?? "—"} 家 · 每页 50 家
         </span>
         <div className="actions">
-          {["csv", "xlsx"].map((format) => (
+          {EXPORTS.map(([key, title, format, layout, file]) => (
             <button
-              disabled={busy || companies.loading || !!companies.error}
-              key={format}
+              className={key === "entries-csv" ? "primary" : undefined}
+              disabled={busy || !!exporting || companies.loading || !!companies.error}
+              key={key}
               onClick={() =>
-                act(
-                  () =>
-                    download(
-                      `/exports?format=${format}&${filtersQuery(filters)}`,
-                      `企业线索-${new Date().toISOString().slice(0, 10)}.${format}`,
-                    ),
-                  "导出文件已下载",
-                )
+                act(async () => {
+                  setExporting(key);
+                  try {
+                    return await download(
+                      exportUrl(filters, format, layout),
+                      `${file}-${new Date().toISOString().slice(0, 10)}.${format}`,
+                    );
+                  } finally {
+                    setExporting("");
+                  }
+                }, "导出文件已下载")
               }
             >
               <Icon name="download" size={16} />
-              {format.toUpperCase()}
+              {exporting === key ? "正在生成文件…" : title}
             </button>
           ))}
         </div>
@@ -511,8 +523,7 @@ export function CompaniesPage({
         </div>
       </nav>
       <p className="footnote">
-        导出当前筛选下的全部结果，不受分页限制，默认排除拒绝联系记录。CSV
-        为企业表；XLSX 包含企业、联系人与地点表。
+        {EXPORT_FOOTNOTE}
       </p>
     </>
   );
