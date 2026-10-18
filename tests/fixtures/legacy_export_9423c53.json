@@ -1,0 +1,272 @@
+{
+ "Contacts": [
+  [
+   "company_id",
+   "name",
+   "role",
+   "email",
+   "url",
+   "kind",
+   "role_status",
+   "association_status",
+   "review_status",
+   "source_url",
+   "evidence",
+   "observed_at"
+  ],
+  [
+   "73d5c66f5c954b20ba460a258d836c13",
+   "Bob Buyer",
+   "Buyer",
+   "team@fox.example",
+   "",
+   "procurement",
+   "explicit",
+   "same_block",
+   "accept",
+   "https://fox.example/about",
+   "Bob Buyer | Buyer | team@fox.example",
+   "2026-10-18T08:00:29.096612+00:00"
+  ],
+  [
+   "fc4c05b1a8ee4a238b7132ff51b269ae",
+   "Erin Buyer",
+   "Buyer",
+   "erin@echo.example",
+   "",
+   "procurement",
+   "explicit",
+   "same_block",
+   "auto_recorded",
+   "https://echo.example/team",
+   "Erin Buyer | Buyer | Phone: +1 408 555 0177 | erin@echo.example",
+   "2026-10-18T08:00:29.082312+00:00"
+  ],
+  [
+   "fc4c05b1a8ee4a238b7132ff51b269ae",
+   "",
+   "",
+   "",
+   "https://echo.example/contact",
+   "contact_form",
+   "unknown",
+   "company_only",
+   "auto_recorded",
+   "https://echo.example/contact",
+   "Contact us form",
+   "2026-10-18T08:00:29.082342+00:00"
+  ],
+  [
+   "fc4c05b1a8ee4a238b7132ff51b269ae",
+   "",
+   "",
+   "info@echo.example",
+   "",
+   "general",
+   "unknown",
+   "company_only",
+   "auto_recorded",
+   "https://echo.example/about",
+   "Write to info@echo.example",
+   "2026-10-18T08:00:29.082279+00:00"
+  ]
+ ],
+ "Locations": [
+  [
+   "company_id",
+   "address",
+   "latitude",
+   "longitude",
+   "source_url",
+   "observed_at"
+  ],
+  [
+   "73d5c66f5c954b20ba460a258d836c13",
+   "12 Fox Rd, Campbell, CA 95008",
+   "37.312",
+   "'-121.892",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_12",
+   "2026-10-01T02:00:00+00:00"
+  ],
+  [
+   "fc4c05b1a8ee4a238b7132ff51b269ae",
+   "11 Echo Ave, San Jose, CA 95112",
+   "37.311",
+   "'-121.89099999999999",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_11",
+   "2026-10-01T01:00:00+00:00"
+  ]
+ ],
+ "Sources": [
+  [
+   "company_id",
+   "field",
+   "value",
+   "source_url",
+   "evidence",
+   "observed_at",
+   "method",
+   "query"
+  ],
+  [
+   "73d5c66f5c954b20ba460a258d836c13",
+   "contact",
+   "team@fox.example",
+   "https://fox.example/about",
+   "Bob Buyer | Buyer | team@fox.example",
+   "2026-10-18T08:00:29.096612+00:00",
+   "website",
+   ""
+  ],
+  [
+   "73d5c66f5c954b20ba460a258d836c13",
+   "category",
+   "Metal supplier",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_12",
+   "Google Maps 来源类别：Metal supplier；实际查询：roofing",
+   "2026-10-01T02:00:00+00:00",
+   "maps",
+   "roofing"
+  ],
+  [
+   "73d5c66f5c954b20ba460a258d836c13",
+   "name",
+   "Foxtrot Metals",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_12",
+   "Google Maps 实际查询：roofing",
+   "2026-10-01T02:00:00+00:00",
+   "maps",
+   "roofing"
+  ],
+  [
+   "73d5c66f5c954b20ba460a258d836c13",
+   "address",
+   "12 Fox Rd, Campbell, CA 95008",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_12",
+   "Google Maps 实际查询：roofing",
+   "2026-10-01T02:00:00+00:00",
+   "maps",
+   "roofing"
+  ],
+  [
+   "73d5c66f5c954b20ba460a258d836c13",
+   "phone",
+   "'+1 408-555-0112",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_12",
+   "Google Maps 实际查询：roofing",
+   "2026-10-01T02:00:00+00:00",
+   "maps",
+   "roofing"
+  ],
+  [
+   "73d5c66f5c954b20ba460a258d836c13",
+   "website",
+   "https://fox.example",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_12",
+   "Google Maps 实际查询：roofing",
+   "2026-10-01T02:00:00+00:00",
+   "maps",
+   "roofing"
+  ],
+  [
+   "fc4c05b1a8ee4a238b7132ff51b269ae",
+   "contact",
+   "erin@echo.example",
+   "https://echo.example/team",
+   "Erin Buyer | Buyer | Phone: +1 408 555 0177 | erin@echo.example",
+   "2026-10-18T08:00:29.082312+00:00",
+   "website",
+   ""
+  ],
+  [
+   "fc4c05b1a8ee4a238b7132ff51b269ae",
+   "contact",
+   "https://echo.example/contact",
+   "https://echo.example/contact",
+   "Contact us form",
+   "2026-10-18T08:00:29.082342+00:00",
+   "website",
+   ""
+  ],
+  [
+   "fc4c05b1a8ee4a238b7132ff51b269ae",
+   "contact",
+   "info@echo.example",
+   "https://echo.example/about",
+   "Write to info@echo.example",
+   "2026-10-18T08:00:29.082279+00:00",
+   "website",
+   ""
+  ],
+  [
+   "fc4c05b1a8ee4a238b7132ff51b269ae",
+   "contact",
+   "info@echo.example",
+   "https://echo.example/contact",
+   "Email: info@echo.example",
+   "2026-10-18T08:00:29.082279+00:00",
+   "website",
+   ""
+  ],
+  [
+   "fc4c05b1a8ee4a238b7132ff51b269ae",
+   "contact",
+   "info@echo.example",
+   "https://echo.example/contact",
+   "Email: info@echo.example",
+   "2026-10-18T08:00:29.077662+00:00",
+   "website",
+   ""
+  ],
+  [
+   "fc4c05b1a8ee4a238b7132ff51b269ae",
+   "category",
+   "Roofing supply store",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_11",
+   "Google Maps 来源类别：Roofing supply store；实际查询：roofing",
+   "2026-10-01T01:00:00+00:00",
+   "maps",
+   "roofing"
+  ],
+  [
+   "fc4c05b1a8ee4a238b7132ff51b269ae",
+   "name",
+   "Echo Roofing Wholesale",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_11",
+   "Google Maps 实际查询：roofing",
+   "2026-10-01T01:00:00+00:00",
+   "maps",
+   "roofing"
+  ],
+  [
+   "fc4c05b1a8ee4a238b7132ff51b269ae",
+   "address",
+   "11 Echo Ave, San Jose, CA 95112",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_11",
+   "Google Maps 实际查询：roofing",
+   "2026-10-01T01:00:00+00:00",
+   "maps",
+   "roofing"
+  ],
+  [
+   "fc4c05b1a8ee4a238b7132ff51b269ae",
+   "phone",
+   "'+1 408-555-0111",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_11",
+   "Google Maps 实际查询：roofing",
+   "2026-10-01T01:00:00+00:00",
+   "maps",
+   "roofing"
+  ],
+  [
+   "fc4c05b1a8ee4a238b7132ff51b269ae",
+   "website",
+   "https://echo.example",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_11",
+   "Google Maps 实际查询：roofing",
+   "2026-10-01T01:00:00+00:00",
+   "maps",
+   "roofing"
+  ]
+ ]
+}

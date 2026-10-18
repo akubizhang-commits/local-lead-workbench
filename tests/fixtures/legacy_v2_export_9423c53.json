@@ -1,0 +1,368 @@
+{
+ "Contacts": [
+  [
+   "company_id",
+   "name",
+   "role",
+   "email",
+   "url",
+   "kind",
+   "role_status",
+   "association_status",
+   "review_status",
+   "source_url",
+   "evidence",
+   "observed_at"
+  ],
+  [
+   "418c1548456f4c23b91b33f9c71b3ab4",
+   "Alice Agent",
+   "Purchasing Manager",
+   "alice@beta.example",
+   "",
+   "procurement",
+   "explicit",
+   "same_block",
+   "auto_recorded",
+   "https://beta.example/team",
+   "Alice Agent | Purchasing Manager | alice@beta.example",
+   "2026-10-18T08:00:28.861534+00:00"
+  ],
+  [
+   "f4b77019f0a14e7db966b7b9e352cfa2",
+   "",
+   "",
+   "info@alpha.example",
+   "",
+   "general",
+   "unknown",
+   "company_only",
+   "auto_recorded",
+   "https://alpha.example/contact",
+   "Email: info@alpha.example",
+   "2026-10-18T08:00:28.833665+00:00"
+  ]
+ ],
+ "Locations": [
+  [
+   "company_id",
+   "address",
+   "latitude",
+   "longitude",
+   "source_url",
+   "observed_at"
+  ],
+  [
+   "a73833fca1b4416698cad0c68450ae19",
+   "500 Fifth St, San Jose, CA 95111",
+   "37.305",
+   "'-121.88499999999999",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_5",
+   "2026-10-01T05:00:00+00:00"
+  ],
+  [
+   "56bc44d913e4495fa2d8f408aa124daf",
+   "400 Fourth St, San Jose, CA 95110",
+   "37.303999999999995",
+   "'-121.884",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_4",
+   "2026-10-01T04:00:00+00:00"
+  ],
+  [
+   "b3b9bdd8ebaf4b9db743aee1f802ec01",
+   "300 Third St, Campbell, CA 95008",
+   "37.303",
+   "'-121.883",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_3",
+   "2026-10-01T03:00:00+00:00"
+  ],
+  [
+   "418c1548456f4c23b91b33f9c71b3ab4",
+   "200 Second St, San Jose, CA 95113",
+   "37.302",
+   "'-121.88199999999999",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_2",
+   "2026-10-01T02:00:00+00:00"
+  ],
+  [
+   "f4b77019f0a14e7db966b7b9e352cfa2",
+   "100 First St, San Jose, CA 95112",
+   "37.300999999999995",
+   "'-121.881",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_1",
+   "2026-10-01T01:00:00+00:00"
+  ]
+ ],
+ "Sources": [
+  [
+   "company_id",
+   "field",
+   "value",
+   "source_url",
+   "evidence",
+   "observed_at",
+   "method",
+   "query"
+  ],
+  [
+   "a73833fca1b4416698cad0c68450ae19",
+   "category",
+   "Roofing contractor",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_5",
+   "Google Maps 来源类别：Roofing contractor；实际查询：metal roofing supply",
+   "2026-10-01T05:00:00+00:00",
+   "maps",
+   "metal roofing supply"
+  ],
+  [
+   "a73833fca1b4416698cad0c68450ae19",
+   "name",
+   "Epsilon Roofing Contractor",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_5",
+   "Google Maps 实际查询：metal roofing supply",
+   "2026-10-01T05:00:00+00:00",
+   "maps",
+   "metal roofing supply"
+  ],
+  [
+   "a73833fca1b4416698cad0c68450ae19",
+   "address",
+   "500 Fifth St, San Jose, CA 95111",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_5",
+   "Google Maps 实际查询：metal roofing supply",
+   "2026-10-01T05:00:00+00:00",
+   "maps",
+   "metal roofing supply"
+  ],
+  [
+   "56bc44d913e4495fa2d8f408aa124daf",
+   "category",
+   "Building materials store",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_4",
+   "Google Maps 来源类别：Building materials store；实际查询：metal roofing supply",
+   "2026-10-01T04:00:00+00:00",
+   "maps",
+   "metal roofing supply"
+  ],
+  [
+   "56bc44d913e4495fa2d8f408aa124daf",
+   "name",
+   "Delta Building Supply",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_4",
+   "Google Maps 实际查询：metal roofing supply",
+   "2026-10-01T04:00:00+00:00",
+   "maps",
+   "metal roofing supply"
+  ],
+  [
+   "56bc44d913e4495fa2d8f408aa124daf",
+   "address",
+   "400 Fourth St, San Jose, CA 95110",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_4",
+   "Google Maps 实际查询：metal roofing supply",
+   "2026-10-01T04:00:00+00:00",
+   "maps",
+   "metal roofing supply"
+  ],
+  [
+   "56bc44d913e4495fa2d8f408aa124daf",
+   "phone",
+   "'+1 408-555-0104",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_4",
+   "Google Maps 实际查询：metal roofing supply",
+   "2026-10-01T04:00:00+00:00",
+   "maps",
+   "metal roofing supply"
+  ],
+  [
+   "56bc44d913e4495fa2d8f408aa124daf",
+   "website",
+   "https://delta.example",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_4",
+   "Google Maps 实际查询：metal roofing supply",
+   "2026-10-01T04:00:00+00:00",
+   "maps",
+   "metal roofing supply"
+  ],
+  [
+   "b3b9bdd8ebaf4b9db743aee1f802ec01",
+   "category",
+   "Sheet metal contractor",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_3",
+   "Google Maps 来源类别：Sheet metal contractor；实际查询：metal roofing supply",
+   "2026-10-01T03:00:00+00:00",
+   "maps",
+   "metal roofing supply"
+  ],
+  [
+   "b3b9bdd8ebaf4b9db743aee1f802ec01",
+   "name",
+   "Gamma Sheet Metal",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_3",
+   "Google Maps 实际查询：metal roofing supply",
+   "2026-10-01T03:00:00+00:00",
+   "maps",
+   "metal roofing supply"
+  ],
+  [
+   "b3b9bdd8ebaf4b9db743aee1f802ec01",
+   "address",
+   "300 Third St, Campbell, CA 95008",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_3",
+   "Google Maps 实际查询：metal roofing supply",
+   "2026-10-01T03:00:00+00:00",
+   "maps",
+   "metal roofing supply"
+  ],
+  [
+   "b3b9bdd8ebaf4b9db743aee1f802ec01",
+   "phone",
+   "'+1 408-555-0103",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_3",
+   "Google Maps 实际查询：metal roofing supply",
+   "2026-10-01T03:00:00+00:00",
+   "maps",
+   "metal roofing supply"
+  ],
+  [
+   "b3b9bdd8ebaf4b9db743aee1f802ec01",
+   "website",
+   "https://gamma.example",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_3",
+   "Google Maps 实际查询：metal roofing supply",
+   "2026-10-01T03:00:00+00:00",
+   "maps",
+   "metal roofing supply"
+  ],
+  [
+   "418c1548456f4c23b91b33f9c71b3ab4",
+   "contact",
+   "alice@beta.example",
+   "https://beta.example/team",
+   "Alice Agent | Purchasing Manager | alice@beta.example",
+   "2026-10-18T08:00:28.861534+00:00",
+   "website",
+   ""
+  ],
+  [
+   "418c1548456f4c23b91b33f9c71b3ab4",
+   "category",
+   "Metal supplier",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_2",
+   "Google Maps 来源类别：Metal supplier；实际查询：metal roofing supply",
+   "2026-10-01T02:00:00+00:00",
+   "maps",
+   "metal roofing supply"
+  ],
+  [
+   "418c1548456f4c23b91b33f9c71b3ab4",
+   "name",
+   "Beta Metals",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_2",
+   "Google Maps 实际查询：metal roofing supply",
+   "2026-10-01T02:00:00+00:00",
+   "maps",
+   "metal roofing supply"
+  ],
+  [
+   "418c1548456f4c23b91b33f9c71b3ab4",
+   "address",
+   "200 Second St, San Jose, CA 95113",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_2",
+   "Google Maps 实际查询：metal roofing supply",
+   "2026-10-01T02:00:00+00:00",
+   "maps",
+   "metal roofing supply"
+  ],
+  [
+   "418c1548456f4c23b91b33f9c71b3ab4",
+   "phone",
+   "'+1 408-555-0102",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_2",
+   "Google Maps 实际查询：metal roofing supply",
+   "2026-10-01T02:00:00+00:00",
+   "maps",
+   "metal roofing supply"
+  ],
+  [
+   "418c1548456f4c23b91b33f9c71b3ab4",
+   "website",
+   "https://beta.example",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_2",
+   "Google Maps 实际查询：metal roofing supply",
+   "2026-10-01T02:00:00+00:00",
+   "maps",
+   "metal roofing supply"
+  ],
+  [
+   "f4b77019f0a14e7db966b7b9e352cfa2",
+   "contact",
+   "info@alpha.example",
+   "https://alpha.example/contact",
+   "Email: info@alpha.example",
+   "2026-10-18T08:00:28.833665+00:00",
+   "website",
+   ""
+  ],
+  [
+   "f4b77019f0a14e7db966b7b9e352cfa2",
+   "category",
+   "Roofing supply store",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_1",
+   "Google Maps 来源类别：Roofing supply store；实际查询：metal roofing supply",
+   "2026-10-01T01:00:00+00:00",
+   "maps",
+   "metal roofing supply"
+  ],
+  [
+   "f4b77019f0a14e7db966b7b9e352cfa2",
+   "name",
+   "Alpha Roofing Supply",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_1",
+   "Google Maps 实际查询：metal roofing supply",
+   "2026-10-01T01:00:00+00:00",
+   "maps",
+   "metal roofing supply"
+  ],
+  [
+   "f4b77019f0a14e7db966b7b9e352cfa2",
+   "address",
+   "100 First St, San Jose, CA 95112",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_1",
+   "Google Maps 实际查询：metal roofing supply",
+   "2026-10-01T01:00:00+00:00",
+   "maps",
+   "metal roofing supply"
+  ],
+  [
+   "f4b77019f0a14e7db966b7b9e352cfa2",
+   "phone",
+   "'+1 408-555-0101",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_1",
+   "Google Maps 实际查询：metal roofing supply",
+   "2026-10-01T01:00:00+00:00",
+   "maps",
+   "metal roofing supply"
+  ],
+  [
+   "f4b77019f0a14e7db966b7b9e352cfa2",
+   "website",
+   "https://alpha.example",
+   "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_1",
+   "Google Maps 实际查询：metal roofing supply",
+   "2026-10-01T01:00:00+00:00",
+   "maps",
+   "metal roofing supply"
+  ],
+  [
+   "f4b77019f0a14e7db966b7b9e352cfa2",
+   "phone",
+   "'+1 408-555-0199",
+   "https://alpha.example/contact",
+   "Phone: +1 408-555-0199",
+   "2026-10-18T08:00:28.833392+00:00",
+   "website",
+   ""
+  ]
+ ]
+}
