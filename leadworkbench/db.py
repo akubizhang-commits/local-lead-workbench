@@ -871,25 +871,29 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
 
     def contact_records(self, con, company_id):
         """Current identities with source snapshots; attribution history stays separate."""
-        records = []
-        for row in con.execute("""SELECT ct.*,mc.phone manual_phone,mc.contact_id IS NOT NULL manual FROM contacts ct
-                LEFT JOIN manual_contacts mc ON mc.contact_id=ct.id WHERE ct.company_id=?""", (company_id,)).fetchall():
-            current = dict(row)
-            manual, phone = current.pop("manual"), current.pop("manual_phone")
-            if manual:
-                current.update(origin="manual", phone=phone or "")
-            decision = con.execute("SELECT adoption_status FROM contact_decisions WHERE contact_id=?", (current["id"],)).fetchone()
-            current["adoption_status"] = decision[0] if decision else ("excluded" if current["review_status"] == "reject" else "automatic")
-            records.append(current)
-            versions = con.execute("SELECT payload FROM contact_versions WHERE contact_id=? ORDER BY observed_at", (current["id"],)).fetchall()
-            for version in versions:
-                payload = json.loads(version[0])
-                # Never attach Alex's phone/job to Bob merely because they shared email.
-                keys = ("name", "role", "email", "kind", "role_status", "association_status")
-                if all((payload.get(k) or "") == (current.get(k) or "") for k in keys):
-                    records.append({**current, **{k:payload.get(k) or current.get(k) for k in
-                                    ("source_url","evidence","observed_at")}})
-        return records
+        from .contact_projection import merge_versions
+        rows = []
+        for row in con.execute("""SELECT ct.*,mc.phone manual_phone,mc.contact_id IS NOT NULL manual,d.adoption_status
+                FROM contacts ct LEFT JOIN manual_contacts mc ON mc.contact_id=ct.id
+                LEFT JOIN contact_decisions d ON d.contact_id=ct.id WHERE ct.company_id=? ORDER BY ct.rowid""",
+                               (company_id,)).fetchall():
+            rows.append(self._contact_row(row))
+        versions = {}
+        for version in con.execute("""SELECT v.contact_id,v.payload FROM contact_versions v JOIN contacts ct
+                ON ct.id=v.contact_id WHERE ct.company_id=? ORDER BY v.contact_id,v.observed_at,v.rowid""", (company_id,)):
+            versions.setdefault(version[0], []).append(json.loads(version[1]))
+        return merge_versions(rows, versions)
+
+    @staticmethod
+    def _contact_row(row):
+        """contacts row joined with manual_contacts/contact_decisions -> projection dict."""
+        current = dict(row)
+        manual, phone = current.pop("manual"), current.pop("manual_phone")
+        if manual:
+            current.update(origin="manual", phone=phone or "")
+        decision = current.pop("adoption_status")
+        current["adoption_status"] = decision or ("excluded" if current["review_status"] == "reject" else "automatic")
+        return current
 
     def reclassify_contacts(self, company_id=None):
         """Archive demonstrably invalid extraction, keeping evidence and audit history."""

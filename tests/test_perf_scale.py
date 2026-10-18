@@ -81,9 +81,16 @@ def test_csv_export_budget(store):
     assert seconds < CSV_BUDGET
 
 
+def test_entries_csv_export_budget(store):
+    seconds = best_of(lambda: export_data(store, "csv", "entries"), 1 if not FULL else 3)
+    RESULTS["csv_entries"] = seconds
+    assert seconds < CSV_BUDGET
+
+
 def test_xlsx_export_recorded(store):
     # Recorded only (decision 1: XLSX is not a hard budget).
     RESULTS["xlsx"] = best_of(lambda: export_data(store, "xlsx"), 3 if FULL else 1)
+    RESULTS["xlsx_entries"] = best_of(lambda: export_data(store, "xlsx", "entries"), 3 if FULL else 1)
 
 
 def test_page_with_exclusion_rules(store):

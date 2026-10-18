@@ -84,3 +84,16 @@ def test_incorrect_person_preserves_actual_public_mailbox(tmp_path):
     assert contacts[0]['email']=='alice@example.org'
     assert contacts[0]['name']=='' and contacts[0]['kind']=='general'
     assert contacts[0]['association_status']=='company_only'
+
+
+def test_merge_versions_attaches_only_the_same_identity():
+    from leadworkbench.contact_projection import merge_versions
+    bob = dict(id='k', name='Bob Buyer', role='Buyer', email='team@x.example', kind='procurement',
+               role_status='explicit', association_status='same_block', source_url='https://x.example/b',
+               evidence='Bob', observed_at='2')
+    alex = {**bob, 'name': 'Alex Seller', 'role': 'Sales Manager', 'kind': 'general',
+            'evidence': 'Alex | Phone: +1 408 555 0188', 'source_url': 'https://x.example/a', 'observed_at': '1'}
+    again = {**bob, 'source_url': 'https://x.example/c', 'evidence': 'Bob again', 'observed_at': '3'}
+    records = merge_versions([bob], {'k': [alex, again]})
+    assert [r['source_url'] for r in records] == ['https://x.example/b', 'https://x.example/c']
+    assert all('0188' not in r['evidence'] for r in records)

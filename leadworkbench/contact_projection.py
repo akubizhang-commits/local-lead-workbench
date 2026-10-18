@@ -98,3 +98,22 @@ def group_contact_records(records, website='', *, include_excluded=False):
         if record.get('review_status') == 'pending':
             group['review_status'] = 'pending'
     return list(groups.values())
+
+
+VERSION_IDENTITY = ('name', 'role', 'email', 'kind', 'role_status', 'association_status')
+
+
+def merge_versions(rows, versions):
+    """Current contacts plus earlier observations of the *same* identity as extra sources.
+
+    ``versions`` maps contact_id to payload dicts ordered by observation time. A
+    version is attached only when all identity keys match, so Alex's phone or job
+    never appears under Bob just because they shared a mailbox."""
+    records = []
+    for current in rows:
+        records.append(current)
+        for payload in versions.get(current['id'], ()):
+            if all((payload.get(k) or '') == (current.get(k) or '') for k in VERSION_IDENTITY):
+                records.append({**current, **{k: payload.get(k) or current.get(k)
+                                              for k in ('source_url', 'evidence', 'observed_at')}})
+    return records

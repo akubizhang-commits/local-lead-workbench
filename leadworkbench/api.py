@@ -683,18 +683,20 @@ def create_app(data_dir=None, *, allowed_hosts=None):
         return {"ok": True}
 
     @app.get("/api/exports")
-    def export(format: Literal["csv", "xlsx"] = "csv", q: str = "", status: str = "", type: str = "",
+    def export(format: Literal["csv", "xlsx"] = "csv", layout: Literal["companies", "entries"] = "companies",
+               q: str = "", status: str = "", type: str = "",
                market_id: str = "", run_id: str = "",
                contact: Literal["", "email", "procurement"] = "",
                sort: Literal["newest", "procurement", "email", "updated", "tier"] = "newest",
                segment: Literal["", "new", "existing", "changed", "not_seen"] = "",
                category: CategoryFilter = [], excluded: Excluded = "hide", best_tier: BestTier = ""):
-        output = export_data(store, format, q=q, status=status, type=type,
+        output = export_data(store, format, layout, q=q, status=status, type=type,
                              market_id=market_id, run_id=run_id, segment=segment, contact=contact, sort=sort,
                              category=category, excluded=excluded, best_tier=best_tier)
         return Response(output, media_type="text/csv; charset=utf-8" if format == "csv" else
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        headers={"Content-Disposition": f'attachment; filename="leads.{format}"'})
+                        headers={"Content-Disposition": 'attachment; filename="'
+                                 + ("contact-entries" if layout == "entries" else "leads") + f'.{format}"'})
 
     dist = ROOT / "frontend" / "dist"
     if (dist / "assets").is_dir():
