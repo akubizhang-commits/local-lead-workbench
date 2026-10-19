@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { requestIdSuffix } from "./errors";
 import { api, resetSession } from "./api";
 import { CompanyForm, TaskForm } from "./forms";
 import { date, filtersQuery, type Filters } from "./helpers";
@@ -129,7 +130,8 @@ export default function App() {
         (e as Error).message +
           (conflict
             ? "。资料已变化，请刷新后重新选择或编辑；本次操作未重试。"
-            : ""),
+            : "") +
+          requestIdSuffix(e),
       );
       if (conflict) {
         setVersion((v) => v + 1);

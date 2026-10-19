@@ -39,7 +39,11 @@ export function CompanyDetailPage({
 }) {
   const [adding, setAdding] = useState(false);
   return selected ? (
-    <Resource {...detail} retry={refresh}>
+    <Resource
+      {...detail}
+      retry={refresh}
+      notFoundAction={{ label: "返回企业库", onClick: () => setView("companies") }}
+    >
       {detail.data &&
         (account ? (
           <SocialPanel
