@@ -9,6 +9,7 @@ from pathlib import Path
 import signal
 import sqlite3
 import sys
+import threading
 import json
 import time
 from datetime import datetime, timezone
@@ -16,7 +17,17 @@ from datetime import datetime, timezone
 from .db import Store, now
 from .sources.website import enrich_website
 
+_HEALTH_LOCK = threading.Lock()
+
+
 def worker_health(directory):
+    # Two API threads probing worker-single.lock at once would see each other's
+    # flock and report a dead worker as alive; probe one at a time (P1-1).
+    with _HEALTH_LOCK:
+        return _worker_health(directory)
+
+
+def _worker_health(directory):
     try:
         payload = json.loads((Path(directory) / "worker-heartbeat.json").read_text())
         age = (datetime.now(timezone.utc) - datetime.fromisoformat(payload["last_seen"])).total_seconds()

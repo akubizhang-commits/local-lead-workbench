@@ -270,16 +270,29 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             raise RuntimeError("_refresh_facets called inside a write transaction")
         if not self._facets_enabled:
             return
-        with self.connect() as con:
-            if not con.execute("SELECT 1 FROM contact_facets_dirty LIMIT 1").fetchone():
-                return
-            while True:
-                con.execute("BEGIN IMMEDIATE")
-                done = self._refresh_facets_locked(con, limit=2000)
-                con.commit()
-                if done < 2000:
+        # Best effort (P1-1): a read request must not fail because a writer holds
+        # the lock; it answers with the current facets and the next read catches up.
+        try:
+            with self.connect() as con:
+                if not con.execute("SELECT 1 FROM contact_facets_dirty LIMIT 1").fetchone():
                     return
+                while True:
+                    self._begin(con)
+                    done = self._refresh_facets_locked(con, limit=2000)
+                    con.commit()
+                    if done < 2000:
+                        return
+        except sqlite3.OperationalError as exc:
+            from .maintenance import _busy
+            if not _busy(exc):
+                raise
+            log.warning("facet refresh skipped: database busy", extra={"event": "facet_refresh_busy"})
 
+    @staticmethod
+    def _begin(con):
+        """The single BEGIN IMMEDIATE entry with bounded retry (design §7.2)."""
+        from .maintenance import begin_immediate
+        begin_immediate(con)
     @staticmethod
     def row(row):
         if row is None:
@@ -342,7 +355,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         """Idempotently fold legacy same-value pending field reviews into one review each."""
         from .market_store import semantic_value
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             con.execute("""INSERT OR IGNORE INTO review_evidence
                 SELECT r.id,COALESCE(r.fingerprint,r.id),r.source_url,r.evidence,COALESCE(r.created_at,'')
                 FROM reviews r WHERE r.kind='field_update'
@@ -509,7 +522,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             raise Invalid("自动发现结果缺少来源标识、链接或名称")
         timestamp = record.get("observed_at") or now()
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             link = con.execute("SELECT company_id FROM listings WHERE source_key=?", (record["source_key"],)).fetchone()
             if link:
                 id = link[0]
@@ -548,7 +561,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         if status is not None and status not in {"candidate", "verified", "not_fit", "do_not_contact"}:
             raise Invalid("无效状态")
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             company = self.row(con.execute("SELECT * FROM companies WHERE id=?", (id,)).fetchone())
             if company["revision"] != revision:
                 raise Conflict("资料已更新，请刷新后重试")
@@ -583,7 +596,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         if not companies or len(companies) > 200 or len({c["id"] for c in companies}) != len(companies):
             raise Invalid("请选择1至200家不重复企业")
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             rows = []
             for item in companies:
                 row = self.row(con.execute("SELECT * FROM companies WHERE id=?", (item["id"],)).fetchone())
@@ -599,7 +612,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         if payload.get("status") not in {"completed", "partial"}:
             return
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             if self._facets_enabled:
                 self._refresh_facets_locked(con)
             before = self._entry_keys(con, id)
@@ -832,7 +845,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         fingerprint = hashlib.sha256(encode(["manual", id, email or phone or url, name]).encode()).hexdigest()
         stamp = now()
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             company = self.row(con.execute("SELECT * FROM companies WHERE id=?", (id,)).fetchone())
             if company["revision"] != revision:
                 raise Conflict("资料已更新，请刷新后重试")
@@ -903,7 +916,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         archived = 0
         channels_preserved = 0
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             rows = con.execute("""SELECT * FROM contacts WHERE review_status NOT IN ('reject','invalid','superseded','accept','pending')
                                AND NOT EXISTS (SELECT 1 FROM contact_decisions d WHERE d.contact_id=contacts.id
                                                AND d.adoption_status IN ('excluded','accepted'))"""
@@ -1000,7 +1013,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             raise Invalid("无效审核决定")
         stale = False
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             r = self.row(con.execute("SELECT * FROM reviews WHERE id=?", (id,)).fetchone())
             if r["status"] != "pending":
                 raise Conflict("此记录已审核")
@@ -1113,7 +1126,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
     def start_task(self, id):
         task = self.task(id)
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             return self._start(con, task=task)
 
     def refresh(self, id):
@@ -1123,7 +1136,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         if not company["website"]:
             raise Invalid("企业没有可核验官网")
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             return self._start(con, company_id=id)
 
     def runs(self):
@@ -1153,7 +1166,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
 
     def control(self, id, action):
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             run = self.row(con.execute("SELECT * FROM runs WHERE id=?", (id,)).fetchone())
             state = run["status"]
             if action == "pause" and state in {"queued", "running"}:
@@ -1215,7 +1228,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
 
     def claim_item(self, run_id, *, pace_maps=False, stages=None):
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             run = self.row(con.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone())
             if run["status"] not in {"queued", "running"}:
                 return None
@@ -1298,7 +1311,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
 
     def finalize(self, id):
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             run = self.row(con.execute("SELECT * FROM runs WHERE id=?", (id,)).fetchone())
             if run["status"] not in {"queued", "running"}:
                 return
@@ -1403,7 +1416,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
     def dispatch_due(self):
         timestamp = now()
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             for row in list(con.execute("SELECT * FROM schedules WHERE enabled=1 AND next_due_at<=?", (timestamp,))):
                 s = self.row(row)
                 if s["company_id"]:

@@ -255,7 +255,7 @@ def test_new_mutations_require_local_token_and_same_origin(api, method, url):
 
 
 @pytest.mark.parametrize("method,suffix,store_method", [
-    ("patch", "social-settings", "set_task_social_settings"),
+    ("patch", "social-settings", "patch_task_social_settings"),
     ("post", "social", "start_market_social"),
 ])
 def test_store_conflicts_use_existing_api_response(api, monkeypatch, method, suffix, store_method):

@@ -3,6 +3,7 @@ import json
 import math
 import time
 from urllib.parse import urlsplit
+from .maintenance import begin_immediate
 
 DDL = """
 CREATE TABLE IF NOT EXISTS website_host_gates(
@@ -21,7 +22,10 @@ def host_key(url):
 def migrate(con):
     """Only bootstrap still-active legacy gates when the shared table is new."""
     owns_transaction = not con.in_transaction
-    con.execute("BEGIN IMMEDIATE" if owns_transaction else "SAVEPOINT website_policy_bootstrap")
+    if owns_transaction:
+        begin_immediate(con)
+    else:
+        con.execute("SAVEPOINT website_policy_bootstrap")
     try:
         _migrate_locked(con)
     except BaseException:
@@ -98,7 +102,7 @@ class WebsiteAccessPolicy:
         if not host:
             return
         with self.store.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            begin_immediate(con)
             row = con.execute("SELECT gate FROM website_host_gates WHERE host=?", (host,)).fetchone()
             old = json.loads(row[0]) if row else {}
             # An observed manual restriction is cleared only by explicit retry.

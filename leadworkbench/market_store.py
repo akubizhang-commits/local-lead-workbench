@@ -134,7 +134,7 @@ class MarketStoreMixin:
 
     def _migrate_market(self, con):
         """One transaction, including legacy membership backfill and version bump."""
-        con.execute("BEGIN IMMEDIATE")
+        self._begin(con)
         for statement in MIGRATION.split(";"):
             if statement.strip():
                 con.execute(statement)
@@ -180,7 +180,7 @@ class MarketStoreMixin:
         payload = validate_selection(payload)
         key = market_key({**payload, "country": payload.get("country") or "US"})
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             prior = con.execute("SELECT task_id FROM market_keys WHERE identity=?", (key,)).fetchone()
             legacy_keys = []
             # Reuse a pre-catalogue market only if the state's place name is
@@ -336,7 +336,7 @@ class MarketStoreMixin:
             raise Invalid("自动发现结果缺少来源标识、链接或名称")
         timestamp = record.get("observed_at") or stamp()
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             market = self._market_run(con, run_id)
             if not market or market["market_id"] != task_id:
                 raise Invalid("市场与轮次不匹配")
@@ -485,7 +485,7 @@ class MarketStoreMixin:
 
     def save_market_plan(self, run_id, plan):
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             if not self._market_run(con, run_id):
                 raise Invalid("不是市场轮次")
             con.execute("UPDATE market_runs SET plan=? WHERE run_id=?", (canonical(plan), run_id))
@@ -500,7 +500,7 @@ class MarketStoreMixin:
 
     def append_market_jobs(self, run_id, jobs):
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             return self._append_market_jobs(con, run_id, jobs)
 
     def count_market_jobs(self, run_id):
@@ -519,12 +519,12 @@ class MarketStoreMixin:
 
     def record_market_unresolved(self, run_id, reason):
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             self._market_unresolved(con, run_id, reason)
 
     def record_market_exhausted(self, run_id, item_id, reason):
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             con.execute("""CREATE TABLE IF NOT EXISTS market_exhausted_items(
                 item_id TEXT PRIMARY KEY REFERENCES work_items(id),reason TEXT NOT NULL)""")
             con.execute("INSERT OR REPLACE INTO market_exhausted_items VALUES(?,?)", (item_id, reason))
@@ -625,7 +625,7 @@ class MarketStoreMixin:
         from .db import Conflict
         from .market_plan import INCOMPLETE_PREFIX
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             run = self.row(con.execute("SELECT * FROM runs WHERE id=?", (id,)).fetchone())
             market = self._market_run(con, id)
             if not market:
@@ -1055,7 +1055,7 @@ class MarketStoreMixin:
         if not key:
             raise Invalid("排除值不能为空")
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             if scope == "market" and not con.execute("SELECT 1 FROM tasks WHERE id=?", (market_id,)).fetchone():
                 raise NotFound("市场不存在")
             prior = con.execute("""SELECT * FROM exclusion_rules WHERE scope=? AND COALESCE(market_id,'')=?
@@ -1075,7 +1075,7 @@ class MarketStoreMixin:
 
     def delete_exclusion_rule(self, id):
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             if not con.execute("DELETE FROM exclusion_rules WHERE id=?", (id,)).rowcount:
                 raise NotFound("记录不存在")
 

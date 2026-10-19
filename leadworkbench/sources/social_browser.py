@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import threading
 from urllib.parse import urljoin,urlsplit
 from bs4 import BeautifulSoup
 from ..social_projection import social_target as classify_link
@@ -14,6 +15,8 @@ from .social_discovery import parse_public_profile, page_gate
 
 PLATFORMS={'instagram':'https://www.instagram.com/','facebook':'https://www.facebook.com/','x':'https://x.com/'}
 SESSIONS={}
+# Whole open/close/status bodies run under one lock: API requests are concurrent (P1-1).
+_SESSIONS_LOCK=threading.RLock()
 
 class ProfileBusy(RuntimeError):
  """Only an actual profile lock conflict, not a browser/runtime failure."""
@@ -34,10 +37,14 @@ def profile_lock(directory,platform):
   finally:fcntl.flock(f,fcntl.LOCK_UN)
 
 def session_status(directory,platform):
+ with _SESSIONS_LOCK:return _session_status(directory,platform)
+def _session_status(directory,platform):
  p=SESSIONS.get((str(directory),platform))
  return {'state':'open' if p and p.poll() is None else 'closed','message':'窗口打开不代表已登录；关闭后采集可复用该专用配置目录'}
 
 def open_session(directory,platform):
+ with _SESSIONS_LOCK:return _open_session(directory,platform)
+def _open_session(directory,platform):
  import importlib.util
  if platform not in PLATFORMS:raise ValueError('不支持的平台')
  if not importlib.util.find_spec('playwright'):raise ValueError('尚未安装浏览器依赖，请运行 scripts/install_social.sh')
@@ -52,6 +59,8 @@ def open_session(directory,platform):
  return {'status':'open','message':'已启动专用浏览器，请手动登录；完成后点击关闭登录窗口，再开始采集'}
 
 def close_session(directory,platform):
+ with _SESSIONS_LOCK:return _close_session(directory,platform)
+def _close_session(directory,platform):
  p=SESSIONS.pop((str(directory),platform),None)
  if p and p.poll() is None:
   p.terminate()

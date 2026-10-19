@@ -10,7 +10,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from starlette.concurrency import run_in_threadpool
+import json
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -49,6 +51,29 @@ def domain_response(exc: DomainError):
     headers = {"Retry-After": str(exc.retry_after)} if isinstance(exc, Busy) else None
     body = {"detail": str(exc), "code": exc.code, "request_id": REQUEST_ID.get(), **exc.extra}
     return JSONResponse(body, status_code=exc.status, headers=headers)
+
+
+ARRAY_BATCH = 500
+
+
+def json_array(rows):
+    """Large array responses: read everything first, serialise in batches that yield
+    the GIL, then stream ready-made strings. The body generator never touches the
+    store, so sending it after the gate is released cannot overlap a restore (§7.6)."""
+    chunks = []
+    for start in range(0, len(rows), ARRAY_BATCH):
+        chunks.append(",".join(json.dumps(row, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+                               for row in rows[start:start + ARRAY_BATCH]))
+        time.sleep(0)
+    return StreamingResponse(_join_array(chunks), media_type="application/json",
+                             headers={"X-Total-Count": str(len(rows))})
+
+
+def _join_array(chunks):
+    yield "["
+    for index, chunk in enumerate(chunks):
+        yield ("," if index and chunk else "") + chunk
+    yield "]"
 
 
 def unavailable_state(exc, data_dir):
@@ -372,8 +397,10 @@ def create_app(data_dir=None, *, allowed_hosts=None):
     app.state.store = store
     token = secrets.token_urlsafe(40)
     hosts = allowed_hosts or {"127.0.0.1", "localhost", "::1"}
-    api_lock = asyncio.Lock()
-
+    from .maintenance import MaintenanceGate
+    gate = app.state.gate = MaintenanceGate()
+    # Fast requests regain the GIL sooner while a CPU-heavy one runs (§7.6, step 1).
+    sys.setswitchinterval(0.001)
     def unhandled(exc):
         """Storage errors get their code; anything else is a 500 with a request id (§5.5)."""
         classified = classify_storage_error(exc, app.state.data_dir)
@@ -418,14 +445,19 @@ def create_app(data_dir=None, *, allowed_hosts=None):
         unavailable = app.state.unavailable
         if api and unavailable and request.url.path != "/api/session":
             return error_response(503, unavailable[0], unavailable[1])
-        # One local user: serialize API calls so restore cannot race another
-        # API edit. Worker additionally shares the operation file lock.
+        # Requests run concurrently; only restoring a backup is exclusive (P1-1).
+        # The worker additionally shares the operation file lock.
+        path, method = request.url.path, request.method
+        exempt = path == "/api/session" or (method == "POST" and path == "/api/social/probe")
         try:
-            if api:
-                async with api_lock:
+            if api and not exempt:
+                entry = gate.exclusive() if (method == "POST" and path == "/api/backups/restore") else gate.shared()
+                async with entry:
                     response = await call_next(request)
             else:
                 response = await call_next(request)
+        except DomainError as exc:
+            response = domain_response(exc)
         except Exception as exc:
             response = unhandled(exc)
         if api and unavailable:
@@ -498,7 +530,7 @@ def create_app(data_dir=None, *, allowed_hosts=None):
     def resume_maps():
         from .maps_policy import resume, status
         with store.connect() as con:
-            con.execute('BEGIN IMMEDIATE')
+            store._begin(con)
             try:
                 resume(con)
             except ValueError as exc:
@@ -527,11 +559,8 @@ def create_app(data_dir=None, *, allowed_hosts=None):
 
     @app.patch("/api/tasks/{id}/social-settings")
     def task_social_settings(id: str, body: TaskSocialSettingsInput):
-        task = store.task(id)
-        settings = {key: task[key] for key in TaskSocialSettingsInput.model_fields}
-        settings.update(body.model_dump(exclude_unset=True))
-        return store.set_task_social_settings(id, settings)
-
+        # Read, merge and write in one transaction: concurrent partial edits must not lose fields.
+        return store.patch_task_social_settings(id, body.model_dump(exclude_unset=True))
     @app.post("/api/tasks/{id}/social")
     def task_social_start(id: str, body: MarketSocialRunInput):
         return store.start_market_social(
@@ -575,8 +604,7 @@ def create_app(data_dir=None, *, allowed_hosts=None):
     @app.get("/api/companies")
     def companies(q: str = "", status: str = "", type: str = "", category: CategoryFilter = [],
                   excluded: Excluded = "hide"):
-        return store.companies(q, status, type, category=category, excluded=excluded)
-
+        return json_array(store.companies(q, status, type, category=category, excluded=excluded))
     @app.get("/api/company-page")
     def company_page(q: str = "", status: str = "", type: str = "", market_id: str = "",
                      run_id: str = "", segment: Literal["", "new", "existing", "changed", "not_seen"] = "",
@@ -674,7 +702,10 @@ def create_app(data_dir=None, *, allowed_hosts=None):
     @app.post("/api/social/probe")
     async def social_probe():
         from .sources.social_discovery import search_searx
-        result = await search_searx(store.social_settings()["searxng_url"], '"apparel" site:instagram.com')
+        # Only the settings read enters the gate (in the thread pool); the network wait does not.
+        async with gate.shared():
+            settings = await run_in_threadpool(store.social_settings)
+        result = await search_searx(settings["searxng_url"], '"apparel" site:instagram.com')
         return {"status": result["status"], "message": result["message"]}
 
     @app.post("/api/social/runs")
@@ -719,8 +750,7 @@ def create_app(data_dir=None, *, allowed_hosts=None):
 
     @app.get("/api/reviews")
     def reviews():
-        return store.reviews()
-
+        return json_array(store.reviews())
     @app.post("/api/reviews/{id}/decision")
     def decision(id: str, body: Decision):
         result = store.review_decision(id, body.decision)

@@ -40,7 +40,7 @@ class SocialStoreMixin(SocialDiscoveryStoreMixin):
         CREATE TABLE IF NOT EXISTS social_migrations(name TEXT PRIMARY KEY);
         ''')
         self._migrate_social_discovery(con)
-        con.execute("BEGIN IMMEDIATE")
+        self._begin(con)
         if not con.execute("SELECT 1 FROM social_migrations WHERE name='legacy_links_v1'").fetchone():
             for c in con.execute('SELECT id FROM companies WHERE merged_into IS NULL').fetchall():
                 self._sync_social(con,c['id'])
@@ -78,12 +78,15 @@ class SocialStoreMixin(SocialDiscoveryStoreMixin):
                 self._save_social(con,cid,url,'','历史链接；缺少字段级来源，需核对','legacy',company['created_at'])
 
     def sync_social(self,cid):
-        with self.connect() as con: self._sync_social(con,cid)
+        with self.connect() as con:
+            self._begin(con)
+            self._sync_social(con,cid)
         return self.social_detail(cid)
 
     def add_social(self,cid,url,evidence):
         if classify_link(url)['kind']=='excluded': raise Invalid('请输入支持的平台账号或帖子链接；登录、帮助和分享页面不能作为账号')
         with self.connect() as con:
+            self._begin(con)
             if not con.execute('SELECT 1 FROM companies WHERE id=? AND merged_into IS NULL',(cid,)).fetchone(): raise NotFound("企业不存在或已合并")
             return self._save_social(con,cid,url,'',evidence,'manual',stamp())
 
@@ -92,7 +95,7 @@ class SocialStoreMixin(SocialDiscoveryStoreMixin):
             raise Invalid('无效的归属决定')
         if status=='confirmed' and scope=='unknown': raise Invalid('确认时请选择品牌、门店、员工或第三方范围')
         with self.connect() as con:
-            con.execute('BEGIN IMMEDIATE')
+            self._begin(con)
             row=con.execute('SELECT * FROM company_social WHERE company_id=? AND entity_id=?',(cid,eid)).fetchone()
             if not row: raise NotFound("社媒记录不存在")
             if revision is not None and revision!=row['revision']:
@@ -108,7 +111,7 @@ class SocialStoreMixin(SocialDiscoveryStoreMixin):
         if state not in {'draft','contacted','replied','closed'}: raise Invalid('无效跟进状态')
         if not note.strip() or len(note)>5000: raise Invalid('请填写草稿或跟进内容（最多5000字）')
         with self.connect() as con:
-            con.execute('BEGIN IMMEDIATE')
+            self._begin(con)
             row=con.execute('''SELECT cs.status,c.status company_status FROM company_social cs JOIN companies c ON c.id=cs.company_id
                 WHERE cs.company_id=? AND cs.entity_id=?''',(cid,eid)).fetchone()
             if not row: raise NotFound("社媒记录不存在")

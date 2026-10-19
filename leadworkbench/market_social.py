@@ -44,8 +44,20 @@ class MarketSocialMixin:
     def set_task_social_settings(self, task_id, payload):
         value = options(payload)
         with self.connect() as con:
+            self._begin(con)
             if not con.execute("SELECT 1 FROM tasks WHERE id=?", (task_id,)).fetchone():
                 raise NotFound("市场不存在")
+            con.execute("INSERT INTO task_social_settings VALUES(?,?) ON CONFLICT(task_id) DO UPDATE SET payload=excluded.payload",
+                        (task_id, json.dumps(value)))
+        return self.task(task_id)
+
+    def patch_task_social_settings(self, task_id, changes):
+        """Merge partial changes into the stored settings inside one write transaction."""
+        with self.connect() as con:
+            self._begin(con)
+            if not con.execute("SELECT 1 FROM tasks WHERE id=?", (task_id,)).fetchone():
+                raise NotFound("记录不存在")
+            value = options({**self._task_social_options(con, task_id), **changes})
             con.execute("INSERT INTO task_social_settings VALUES(?,?) ON CONFLICT(task_id) DO UPDATE SET payload=excluded.payload",
                         (task_id, json.dumps(value)))
         return self.task(task_id)
@@ -149,7 +161,7 @@ class MarketSocialMixin:
         connections=load_connections(self.directory)
         search_endpoint=self.social_settings()["searxng_url"] if platform=="searxng" else None
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             resume(con, platform)
             hosts=sorted({host.removeprefix("www.") for host,name in HOSTS.items() if name==platform})
             if hosts:
@@ -178,7 +190,7 @@ class MarketSocialMixin:
         task = self.task(task_id)
         cfg = options(dict(auto_social=True, social_platforms=list(PLATFORMS) if platforms is None else platforms, social_read_posts=read_posts))
         with self.connect() as con:
-            con.execute("BEGIN IMMEDIATE")
+            self._begin(con)
             companies = [r[0] for r in con.execute("""SELECT c.id FROM market_memberships m JOIN companies c ON c.id=m.company_id
                 WHERE m.market_id=? AND c.merged_into IS NULL AND c.status!='do_not_contact'""", (task_id,))]
             if not companies:

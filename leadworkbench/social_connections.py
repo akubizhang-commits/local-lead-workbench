@@ -2,6 +2,7 @@
 import importlib.util
 import json
 import os
+import threading
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -37,7 +38,10 @@ def public_connections(directory):
  'dependencies':{k:importlib.util.find_spec(v) is not None for k,v in [('browser','playwright'),('instaloader','instaloader')]},
  'sessions':{p:session_status(directory,p) for p in ('instagram','facebook','x')}}
 
+_SAVE_LOCK=threading.Lock()
 def save_connections(directory,values):
+ with _SAVE_LOCK:return _save_connections(directory,values)
+def _save_connections(directory,values):
  data=load_connections(directory)
  data.update({k:v for k,v in values.items() if k in DEFAULTS})
  data['proxy_url']=validate_proxy(data['proxy_url'])

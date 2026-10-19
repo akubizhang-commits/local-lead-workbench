@@ -73,7 +73,7 @@ class SocialDiscoveryStoreMixin:
         settings['platform_search']=platform_search
         settings['profile_only']=profile_only
         with self.connect() as con:
-            con.execute('BEGIN IMMEDIATE')
+            self._begin(con)
             sample=self.social_pilot_sample(con) if pilot else []
             ids=[r['id'] for r in sample] if pilot else list(dict.fromkeys(company_ids or []))
             if not ids or len(ids)>20:raise Invalid('请选择1–20家企业；试点自动分层选取最多20家')
@@ -176,7 +176,7 @@ class SocialDiscoveryStoreMixin:
 
     def claim_social_item(self):
         with self.connect() as con:
-            con.execute('BEGIN IMMEDIATE')
+            self._begin(con)
             # Respect refusal decided after the job was queued.
             con.execute('''UPDATE social_work SET state='cancelled',result='{"message":"企业已拒绝联系或合并"}'
                 WHERE state='pending' AND company_id IN (SELECT id FROM companies WHERE status='do_not_contact' OR merged_into IS NOT NULL)''')
@@ -233,7 +233,7 @@ class SocialDiscoveryStoreMixin:
 
     def finish_social_item(self,item_id,result,claim_token=None):
         with self.connect() as con:
-            con.execute('BEGIN IMMEDIATE')
+            self._begin(con)
             item=con.execute('SELECT * FROM social_work WHERE id=?',(item_id,)).fetchone()
             if not item:raise NotFound("社媒记录不存在")
             run=con.execute('SELECT status,settings FROM social_runs WHERE id=?',(item['run_id'],)).fetchone()
@@ -321,7 +321,7 @@ class SocialDiscoveryStoreMixin:
 
     def cancel_social_run(self,rid):
         with self.connect() as con:
-            con.execute('BEGIN IMMEDIATE')
+            self._begin(con)
             if not con.execute('SELECT 1 FROM social_runs WHERE id=?',(rid,)).fetchone():raise NotFound("社媒记录不存在")
             if self._social_parent(con,rid):raise Invalid('请在市场任务中取消本轮，统一控制官网和社媒工作')
             con.execute("UPDATE social_runs SET status='cancelled',finished_at=? WHERE id=? AND status IN ('queued','running')",(timestamp(),rid))

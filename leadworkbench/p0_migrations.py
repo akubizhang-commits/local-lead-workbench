@@ -244,7 +244,7 @@ def migrate_p0(store, con):
     for id, step in MIGRATIONS:
         while True:
             start = time.perf_counter()
-            con.execute("BEGIN IMMEDIATE")
+            store._begin(con)
             try:
                 if con.execute("SELECT 1 FROM schema_migrations WHERE id=?", (id,)).fetchone():
                     con.rollback()
