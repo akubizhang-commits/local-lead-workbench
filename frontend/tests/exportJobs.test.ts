@@ -90,6 +90,50 @@ test("failed and interrupted jobs offer re-export with the same parameters",asyn
  }finally{await h.cleanup();}
 });
 
+test("a failed poll is retried and the error clears once polling recovers",async()=>{
+ const h=await setupDOM();
+ let fail=true;
+ let job:any={...base};
+ globalThis.fetch=async(input)=>{const url=String(input);
+  if(url==="/api/session")return json({token:"t"});
+  if(url.startsWith("/api/export-jobs?"))return json([job]);
+  if(url===`/api/export-jobs/${base.id}`){
+   if(fail)return json({detail:"本地服务出错，请重试",code:"internal",request_id:"req_y"},500);
+   return json(job);}
+  throw new Error("unexpected "+url);};
+ try{
+  await mount(h);
+  await h.act(async()=>{await new Promise(r=>setTimeout(r,80));});
+  assert.ok(document.querySelector('[role="alert"]'));
+  fail=false;
+  job={...job,status:"succeeded",phase:"done",size_bytes:2048,finished_at:"2026-10-18T00:00:05Z"};
+  await h.act(async()=>{await new Promise(r=>setTimeout(r,150));});
+  assert.match(document.body.textContent||"",/导出完成：联系入口 XLSX/);
+  assert.ok([...document.querySelectorAll("button")].some(b=>b.textContent==="下载文件"));
+  assert.equal(document.querySelector('[role="alert"]'),null);
+ }finally{await h.cleanup();}
+});
+
+test("re-export errors other than busy are shown",async()=>{
+ const h=await setupDOM();
+ const failed={...base,status:"failed",phase:"done",error:{code:"disk_full",message:"磁盘空间不足，导出未完成。请清理磁盘后重新导出。"}};
+ globalThis.fetch=async(input,init)=>{const url=String(input);
+  if(url==="/api/session")return json({token:"t"});
+  if(url==="/api/export-jobs"&&init?.method==="POST")return json({detail:"数据目录不可写",code:"readonly_storage",request_id:"req_z"},507);
+  if(url.startsWith("/api/export-jobs?"))return json([failed]);
+  throw new Error("unexpected "+url);};
+ const unhandled:unknown[]=[];
+ const onUnhandled=(e:unknown)=>unhandled.push(e);
+ process.on("unhandledRejection",onUnhandled);
+ try{
+  await mount(h);
+  const retry=[...document.querySelectorAll("button")].find(b=>b.textContent==="重新导出") as HTMLButtonElement;
+  await h.act(async()=>{retry.click();await new Promise(r=>setTimeout(r,30));});
+  assert.ok(document.querySelector('[role="alert"]')?.textContent);
+  assert.equal(unhandled.length,0);
+ }finally{process.off("unhandledRejection",onUnhandled);await h.cleanup();}
+});
+
 test("exportBody keeps only non-empty filters",async()=>{
  const {exportBody}=await import("../src/ExportJobs.tsx");
  assert.deepEqual(exportBody({q:"",status:"",type:"",category:["Metal supplier",""],excluded:"",best_tier:"named_role"},"csv","entries"),

@@ -90,18 +90,29 @@ export function useExportJobs(pollMs = 1000) {
     return () => { mounted.current = false; };
   }, []);
   const active = jobs.find(live);
+  // Bumped after a failed poll so the effect schedules the next one even though `jobs` did not change.
+  const [pollFailures, setPollFailures] = useState(0);
   useEffect(() => {
     if (!active) return;
     const timer = setTimeout(async () => {
       try {
         const job = await api<ExportJob>(`/export-jobs/${active.id}`);
-        if (mounted.current) merge(job);
+        if (mounted.current) {
+          merge(job);
+          if (pollFailures) {
+            setPollFailures(0);
+            setError("");
+          }
+        }
       } catch (e) {
-        if (mounted.current) setError(e instanceof Error ? e.message : String(e));
+        if (mounted.current) {
+          setError(e instanceof Error ? e.message : String(e));
+          setPollFailures((n) => n + 1);
+        }
       }
     }, pollMs);
     return () => clearTimeout(timer);
-  }, [active, pollMs, merge]);
+  }, [active, pollMs, merge, pollFailures]);
   async function start(body: Record<string, unknown>) {
     setNotice("");
     setError("");
@@ -117,6 +128,14 @@ export function useExportJobs(pollMs = 1000) {
       setJobs(list);
       if (jobId && !list.some((j) => j.id === jobId)) merge(await api<ExportJob>(`/export-jobs/${jobId}`));
       return false;
+    }
+  }
+  /** "重新导出": like start(), but other errors are shown instead of being left unhandled. */
+  async function restart(body: Record<string, unknown>) {
+    try {
+      await start(body);
+    } catch (e) {
+      if (mounted.current) setError(e instanceof Error ? e.message : String(e));
     }
   }
   async function cancel(job: ExportJob) {
@@ -136,7 +155,7 @@ export function useExportJobs(pollMs = 1000) {
       setError(e instanceof Error ? e.message : String(e));
     }
   }
-  return { jobs, active, notice, error, cancelling, start, cancel, fetchFile };
+  return { jobs, active, notice, error, cancelling, start, restart, cancel, fetchFile };
 }
 
 export type ExportJobsState = ReturnType<typeof useExportJobs>;
@@ -171,7 +190,7 @@ export function ExportJobsPanel({ state, exportDays = 7 }: { state: ExportJobsSt
                 {live(job) && <button disabled={!!cancelling[job.id]} onClick={() => void state.cancel(job)}>取消</button>}
                 {job.status === "succeeded" && <button className="primary" onClick={() => void state.fetchFile(job)}>下载文件</button>}
                 {(job.status === "failed" || job.status === "cancelled") && (
-                  <button disabled={!!state.active} onClick={() => void state.start({ ...job.filters, format: job.format, layout: job.layout })}>重新导出</button>
+                  <button disabled={!!state.active} onClick={() => void state.restart({ ...job.filters, format: job.format, layout: job.layout })}>重新导出</button>
                 )}
               </div>
             </li>
