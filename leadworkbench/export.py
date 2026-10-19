@@ -82,7 +82,8 @@ def _collect(store, con, filters, *, observations):
     query = store._company_query(con, filters.get("q", ""), filters.get("status", ""), filters.get("type", ""),
                                  filters.get("market_id", ""), filters.get("run_id", ""), filters.get("segment", ""),
                                  filters.get("contact", ""), filters.get("category", ()),
-                                 filters.get("excluded", "hide"), filters.get("best_tier", ""))
+                                 filters.get("excluded", "hide"), filters.get("best_tier", ""),
+                                 filters.get("actual_city", ""), filters.get("nearby", ""))
     keyed = store._company_ids(con, query, filters.get("sort", "newest"))
     companies = [c for c in store._company_rows(con, keyed, query) if c["status"] != "do_not_contact"]
     con.execute("CREATE TEMP TABLE IF NOT EXISTS export_ids(id TEXT PRIMARY KEY, ord INTEGER)")
@@ -265,7 +266,11 @@ def _companies_layout(data, format, by_market, hooks=None):
 
 
 def _company_columns(data, company):
-    city = city_from_address(company.get("address"), company.get("country"))
+    if "actual_city" in company:
+        # Read from company_cities (same parse as city_from_address, design §5.3).
+        city = company["actual_city"] if company["actual_city_basis"] == "address" else None
+    else:
+        city = city_from_address(company.get("address"), company.get("country"))
     market = data.get("market_name") if data["market_id"] else "、".join(data["markets"].get(company["id"], []))
     types = "、".join(business_type_label(t) for t in company.get("business_types") or []) or "、".join(
         dict.fromkeys(business_type_label(h["business_type"], hint=True) for h in company.get("type_hints") or []))

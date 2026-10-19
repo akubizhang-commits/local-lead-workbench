@@ -63,6 +63,13 @@ def test_company_page_budget(store, name):
     assert seconds < PAGE_BUDGET, (name, seconds)
 
 
+def test_nearby_page_budget(store):
+    # P1-18: the nearby filter joins company_cities; one page stays under 1 s even on the 5k database.
+    seconds = best_of(lambda: store.company_page(page=1, page_size=50, nearby="only"))
+    RESULTS["page_nearby"] = seconds
+    assert seconds < 1.0, seconds
+
+
 def test_market_tier_stats_budget(store):
     seconds = best_of(store.tasks)
     RESULTS["tasks_tier_stats"] = seconds

@@ -707,6 +707,7 @@ class MarketStoreMixin:
         task["legacy_terms"] = [] if task.get("keywords") else sorted(
             {term for kind in task.get("company_types") or [] for term in TYPE_QUERIES.get(kind, ())})
         task["market_stats"] = self._market_stats(con, task["id"], run_id)
+        task["market_stats"]["nearby"] = self._market_nearby(con, task["id"]) if self._cities_enabled else 0
         task["round_summary"] = self._round_summary(con, task["id"])
         if not tier_stats or task["id"] not in tier_stats:
             tier_stats = self._market_tier_stats(con, [task["id"]])
@@ -725,8 +726,39 @@ class MarketStoreMixin:
             task["latest_run"]["coverage"] = task["coverage"]
         return task
 
+    def _city_context(self, con, market_id):
+        """Nearby rule of a market: {"municipality": bool, "keys": sorted target-city names} (design §5.2, D4)."""
+        from .company_cities import target_city_keys
+        task = con.execute("SELECT city FROM tasks WHERE id=?", (market_id,)).fetchone()
+        row = con.execute("SELECT payload FROM task_geography WHERE task_id=?", (market_id,)).fetchone()
+        try:
+            geography = json.loads(row[0]) if row else {}
+        except ValueError:
+            geography = {}
+        if geography.get("scope") == "whole_municipality":
+            return {"municipality": True, "keys": []}
+        return {"municipality": False,
+                "keys": sorted(target_city_keys(task["city"] if task else "", geography.get("official_name")))}
+    @staticmethod
+    def _nearby_sql(context):
+        """SQL flag (0/1) over the cy alias; a missing company_cities row counts as not parsed."""
+        if context is None:
+            return "(cy.nearby_global IS 1)", []
+        if context["municipality"] or not context["keys"]:
+            return "0", []
+        return f"(cy.parsed IS 1 AND cy.city_key NOT IN ({','.join('?' * len(context['keys']))}))", list(context["keys"])
+    @staticmethod
+    def _nearby_value(context, city_row):
+        """Python twin of _nearby_sql for one company_cities row (dict) or None."""
+        if not city_row:
+            return False
+        if context is None:
+            return bool(city_row["nearby_global"])
+        if context["municipality"] or not context["keys"]:
+            return False
+        return bool(city_row["parsed"]) and city_row["city_key"] not in context["keys"]
     def _company_query(self, con, q, status, type, market_id, run_id, segment, contact="", category=(),
-                       excluded="hide", best_tier=""):
+                       excluded="hide", best_tier="", actual_city="", nearby=""):
         """Pure-SQL filters shared by the list, the legacy list, exports and category counts.
 
         Exclusion rules are materialized once into temp.excluded_ids for this connection."""
@@ -742,6 +774,10 @@ class MarketStoreMixin:
         from .contact_tiers import TIER_RANK
         if best_tier and best_tier not in TIER_RANK:
             raise Invalid("无效入口等级")
+        if nearby not in {"", "only", "hide"}:
+            raise Invalid("无效邻近城市筛选")
+        if not isinstance(actual_city, str) or len(actual_city) > 120:
+            raise Invalid("实际城市筛选最多 120 个字符")
         if market_id and not con.execute("SELECT 1 FROM tasks WHERE id=?", (market_id,)).fetchone():
             raise NotFound("市场不存在")
         selected = con.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone() if run_id else None
@@ -809,6 +845,16 @@ class MarketStoreMixin:
             clauses.append(f"""COALESCE((SELECT min(f.tier_rank) FROM {USABLE_FROM} WHERE f.company_id=c.id
                 AND {usable_contact_sql()}), {COMPANY_RANK_SQL})=?""")
             params.append(TIER_RANK[best_tier])
+        city_context = self._city_context(con, market_id) if market_id else None
+        if actual_city or nearby:
+            joins += " LEFT JOIN company_cities cy ON cy.company_id=c.id"
+        if actual_city:
+            clauses.append("cy.parsed IS 1 AND cy.city_key=?")
+            params.append(normalized(actual_city))
+        if nearby:
+            flag, flag_params = self._nearby_sql(city_context)
+            clauses.append(flag if nearby == "only" else f"NOT {flag}")
+            params.extend(flag_params)
         scope = market_id or ""
         rules = self._materialize_exclusions(con, [scope])
         exclusion, exclusion_params = "", []
@@ -818,7 +864,8 @@ class MarketStoreMixin:
             exclusion_params = [scope]
         return dict(joins=joins, base=" AND ".join(clauses), where=" AND ".join(clauses) + exclusion,
                     columns=columns, join_params=join_params, base_params=params,
-                    params=params + exclusion_params, market_id=market_id, scope=scope, rules=rules)
+                    params=params + exclusion_params, market_id=market_id, scope=scope, rules=rules,
+                    city_context=city_context)
 
     def _materialize_exclusions(self, con, market_ids):
         """Fill temp.excluded_ids(market_id, company_id, rule_id) for each scope; '' = not by market.
@@ -935,6 +982,7 @@ class MarketStoreMixin:
         """Stage 2: full rows for at most a page of ids, one batched query per kind of data."""
         result = []
         scope = query["scope"] if query and query["rules"] else None
+        city_context = query.get("city_context") if query else None
         names = {r["id"]: r["name"] for r in con.execute("SELECT id,name FROM tasks")}
         for start in range(0, len(keyed), 500):
             chunk = keyed[start:start + 500]
@@ -974,8 +1022,10 @@ class MarketStoreMixin:
                 f"""SELECT target,state,result FROM (SELECT w.target,w.state,w.result,ROW_NUMBER() OVER (
                     PARTITION BY w.target ORDER BY r.created_at DESC,w.rowid DESC) rn FROM work_items w
                     JOIN runs r ON r.id=w.run_id WHERE w.stage='refresh' AND w.target IN ({marks})) WHERE rn=1""", ids)}
+            cities = self._city_rows(con, list(companies.values()))
             for row in chunk:
                 item = companies[row["id"]]
+                self._city_fields(item, cities.get(row["id"]), city_context)
                 counts = stats.get(row["id"], {})
                 self._tier_fields(item, counts, scans.get(row["id"]))
                 item.update(contact_count=counts.get("contact_count", 0), email_count=counts.get("email_count", 0),
@@ -995,6 +1045,25 @@ class MarketStoreMixin:
                 result.append(item)
         return result
 
+    def _city_rows(self, con, companies):
+        """{company_id: company_cities row}; rows missing (refresh skipped) are computed, never written."""
+        from .company_cities import compute_rows
+        ids = [c["id"] for c in companies]
+        if not ids or not getattr(self, "_cities_enabled", False):
+            return {}
+        rows = {r["company_id"]: dict(r) for r in con.execute(
+            f"SELECT * FROM company_cities WHERE company_id IN ({','.join('?' * len(ids))})", ids)}
+        missing = [c for c in companies if c["id"] not in rows]
+        keys = ("company_id", "city", "city_key", "target_keys", "target_scope", "nearby_global", "parsed")
+        for values in compute_rows(con, missing) if missing else ():
+            rows[values[0]] = dict(zip(keys, values))
+        return rows
+    def _city_fields(self, item, city_row, context):
+        parsed = bool(city_row and city_row["parsed"])
+        item.update(actual_city=city_row["city"] if parsed else item.get("city") or "",
+                    actual_city_basis="address" if parsed else "target",
+                    nearby=self._nearby_value(context, city_row))
+        return item
     @staticmethod
     def _tier_fields(item, counts, scan):
         from .contact_tiers import RANK_TIER, TIER_LABEL, company_best_rank, gap_reason
@@ -1037,7 +1106,7 @@ class MarketStoreMixin:
         return result
 
     def company_page(self, q="", status="", type="", market_id="", run_id="", segment="", page=1, page_size=50,
-                     contact="", sort="newest", category=(), excluded="hide", best_tier=""):
+                     contact="", sort="newest", category=(), excluded="hide", best_tier="", actual_city="", nearby=""):
         if isinstance(page, bool) or not isinstance(page, int) or page < 1:
             raise Invalid("无效页码")
         if isinstance(page_size, bool) or not isinstance(page_size, int) or not 1 <= page_size <= 1000:
@@ -1046,7 +1115,7 @@ class MarketStoreMixin:
         self._refresh_facets()
         with self.connect() as con:
             query = self._company_query(con, q, status, type, market_id, run_id, segment, contact, category, excluded,
-                                        best_tier)
+                                        best_tier, actual_city, nearby)
             total = self._company_total(con, query)
             keyed = self._company_ids(con, query, sort, page_size, (page - 1) * page_size)
             items = self._company_rows(con, keyed, query)
@@ -1063,6 +1132,25 @@ class MarketStoreMixin:
             keyed = self._company_ids(con, query, sort, max_rows)
             return self._company_rows(con, keyed, query)
 
+    def company_cities(self, market_id="", excluded="hide"):
+        """Actual cities with company counts under the market/exclusion scope (max 200, design §5.3)."""
+        self._refresh_facets()
+        with self.connect() as con:
+            query = self._company_query(con, "", "", "", market_id, "", "", "", (), excluded)
+            flag, flag_params = self._nearby_sql(query["city_context"])
+            rows = con.execute(f"""SELECT cy.city_key,max(cy.city) city,count(DISTINCT c.id) count,max({flag}) nearby
+                FROM companies c{query["joins"]} JOIN company_cities cy ON cy.company_id=c.id
+                WHERE cy.parsed=1 AND {query["where"]} GROUP BY cy.city_key ORDER BY count DESC,cy.city_key LIMIT 200""",
+                               flag_params + query["join_params"] + query["params"]).fetchall()
+        return [dict(city=r["city"], city_key=r["city_key"], count=r["count"], nearby=bool(r["nearby"])) for r in rows]
+    def _market_nearby(self, con, market_id):
+        """Market members in a nearby city; same scope as market_stats.total (exclusions not applied)."""
+        flag, flag_params = self._nearby_sql(self._city_context(con, market_id))
+        if flag == "0":
+            return 0
+        return con.execute(f"""SELECT count(*) FROM market_memberships m JOIN companies c ON c.id=m.company_id
+            JOIN company_cities cy ON cy.company_id=c.id WHERE m.market_id=? AND c.merged_into IS NULL AND {flag}""",
+                           [market_id, *flag_params]).fetchone()[0]
     def company_categories(self, market_id="", excluded="hide"):
         """Source categories with company counts under the market/exclusion scope (max 200)."""
         with self.connect() as con:

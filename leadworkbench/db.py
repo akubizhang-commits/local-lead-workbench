@@ -161,6 +161,7 @@ PRAGMA user_version=1;
 
 class Store(MarketAdminMixin, MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMixin):
     _facets_enabled = False
+    _cities_enabled = False
 
     def __init__(self, directory: Path | str, *, migrate=True):
         self._local = threading.local()
@@ -177,6 +178,8 @@ class Store(MarketAdminMixin, MarketSocialMixin, RunActivityMixin, MarketStoreMi
             migrations.migrate(self, con)
             self._facets_enabled = bool(con.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='contact_facets'").fetchone())
+            self._cities_enabled = bool(con.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='company_cities'").fetchone())
         self.path.chmod(0o600)
 
     def _open_ready(self):
@@ -189,6 +192,8 @@ class Store(MarketAdminMixin, MarketSocialMixin, RunActivityMixin, MarketStoreMi
                 raise SchemaNotReady()
             self._facets_enabled = bool(con.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='contact_facets'").fetchone())
+            self._cities_enabled = bool(con.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='company_cities'").fetchone())
 
     def _audit_ddl(self, con):
         """0006: the audit side tables (one statement at a time, no implicit COMMIT)."""
@@ -275,23 +280,28 @@ class Store(MarketAdminMixin, MarketSocialMixin, RunActivityMixin, MarketStoreMi
         con.executemany("DELETE FROM company_cities_dirty WHERE company_id=?", [(i,) for i in dirty])
         return len(dirty)
     def _refresh_facets(self):
-        """Read entry points call this before opening their own read connection."""
+        """Read entry points call this before opening their own read connection.
+        Refreshes both derived tables: contact_facets and company_cities (design §5.2)."""
         if getattr(self._local, "depth", 0) > 0:
             raise RuntimeError("_refresh_facets called inside a write transaction")
-        if not self._facets_enabled:
+        derived = [(dirty, refresh) for enabled, dirty, refresh in (
+            (self._facets_enabled, "contact_facets_dirty", self._refresh_facets_locked),
+            (self._cities_enabled, "company_cities_dirty", self._refresh_cities_locked)) if enabled]
+        if not derived:
             return
         # Best effort (P1-1): a read request must not fail because a writer holds
-        # the lock; it answers with the current facets and the next read catches up.
+        # the lock; it answers with the current rows and the next read catches up.
         try:
             with self.connect() as con:
-                if not con.execute("SELECT 1 FROM contact_facets_dirty LIMIT 1").fetchone():
-                    return
-                while True:
-                    self._begin(con)
-                    done = self._refresh_facets_locked(con, limit=2000)
-                    con.commit()
-                    if done < 2000:
-                        return
+                for dirty, refresh in derived:
+                    if not con.execute(f"SELECT 1 FROM {dirty} LIMIT 1").fetchone():
+                        continue
+                    while True:
+                        self._begin(con)
+                        done = refresh(con, limit=2000)
+                        con.commit()
+                        if done < 2000:
+                            break
         except sqlite3.OperationalError as exc:
             from .maintenance import _busy
             if not _busy(exc):
@@ -446,6 +456,7 @@ class Store(MarketAdminMixin, MarketSocialMixin, RunActivityMixin, MarketStoreMi
         company["operating_status"] = row["value"] if row else "unknown"
         company["operating_source_url"] = row["source_url"] if row else ""
         company["operating_observed_at"] = row["observed_at"] if row else ""
+        self._city_fields(company, self._city_rows(con, [company]).get(company["id"]), None)
         company["categories"] = [r[0] for r in con.execute(
             "SELECT category FROM company_categories WHERE company_id=? ORDER BY last_seen DESC,category", (company["id"],))]
         names = {r[0]: r[1] for r in con.execute("SELECT id,name FROM tasks")}

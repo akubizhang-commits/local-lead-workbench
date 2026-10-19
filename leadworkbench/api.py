@@ -326,6 +326,8 @@ class ExportJobInput(Input):
     excluded: Literal["hide", "only", "include"] = "hide"
     best_tier: Literal["", "named_procurement", "named_role", "named_unknown", "department_email", "general_email",
                        "form_phone", "company_phone", "none"] = ""
+    actual_city: str = Field(default="", max_length=120)
+    nearby: Literal["", "only", "hide"] = ""
 
 
 class ScheduleInput(Input):
@@ -773,10 +775,17 @@ def create_app(data_dir=None, *, allowed_hosts=None):
                      contact: Literal["", "email", "procurement"] = "",
                      sort: Literal["newest", "procurement", "email", "updated", "tier"] = "newest",
                      page: int = Query(default=1, ge=1), page_size: int = Query(default=50, ge=1, le=200),
-                     category: CategoryFilter = [], excluded: Excluded = "hide", best_tier: BestTier = ""):
+                     category: CategoryFilter = [], excluded: Excluded = "hide", best_tier: BestTier = "",
+                     actual_city: str = Query(default="", max_length=120),
+                     nearby: Literal["", "only", "hide"] = ""):
         return store.company_page(q=q, status=status, type=type, market_id=market_id,
                                   run_id=run_id, segment=segment, contact=contact, sort=sort, page=page, page_size=page_size,
-                                  category=category, excluded=excluded, best_tier=best_tier)
+                                  category=category, excluded=excluded, best_tier=best_tier,
+                                  actual_city=actual_city, nearby=nearby)
+
+    @app.get("/api/company-cities")
+    def company_cities(market_id: str = "", excluded: Excluded = "hide"):
+        return store.company_cities(market_id=market_id, excluded=excluded)
 
     @app.get("/api/company-categories")
     def company_categories(market_id: str = "", excluded: Excluded = "hide"):
