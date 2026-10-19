@@ -281,6 +281,10 @@ async def serve(directory):
                         log.exception("worker loop failed", extra={"event": "worker_loop_error"})
                         if failures >= LOOP_MAX_FAILURES:
                             raise SystemExit(70) from exc
+                    # Same invariant as the normal path: release worker.lock once no
+                    # lane runs, so a restore can proceed while the error persists.
+                    if op.held and await scheduler.idle(grace=worker_scheduler.IDLE_GRACE_SECONDS):
+                        op.release()
                     await asyncio.sleep(LOOP_BACKOFF[min(failures - 1, len(LOOP_BACKOFF) - 1)])
                     continue
                 if failures:

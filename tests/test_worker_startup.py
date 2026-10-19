@@ -93,6 +93,44 @@ async def test_loop_survives_storage_error_and_clears_problem(tmp_path, monkeypa
             await task
 
 
+class CorruptStore(FakeStore):
+    def dispatch_due(self):
+        self.dispatches += 1
+        raise sqlite3.DatabaseError("file is not a database")
+
+
+class IdleScheduler(FakeScheduler):
+    async def idle(self, grace):
+        return True
+
+
+async def test_persistent_storage_error_releases_worker_lock(tmp_path, monkeypatch):
+    store = CorruptStore()
+    monkeypatch.setattr(worker, "Store", lambda directory: store)
+    monkeypatch.setattr(worker_scheduler, "ParallelWorkScheduler", IdleScheduler)
+    task = asyncio.create_task(worker.serve(tmp_path))
+    restore = worker.OperationLock(tmp_path)
+    try:
+        acquired = False
+        for _ in range(500):
+            await asyncio.sleep(0.01)
+            if store.dispatches >= 1 and restore.try_acquire():
+                acquired = True
+                break
+        assert acquired, "worker.lock stayed held while dispatch_due kept failing"
+        # While the restore holds the lock the worker stops dispatching.
+        seen = store.dispatches
+        await asyncio.sleep(0.2)
+        assert store.dispatches == seen
+        assert not task.done()
+    finally:
+        restore.close()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        worker.set_problem(tmp_path)
+
+
 async def test_heartbeat_carries_problem(tmp_path):
     worker.set_problem(tmp_path, worker.STARTING)
     try:
