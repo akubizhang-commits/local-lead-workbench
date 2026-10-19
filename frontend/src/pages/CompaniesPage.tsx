@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { api, download } from "../api";
+import { api } from "../api";
+import { EXPORT_BUSY, EXPORT_DISABLED, ExportJobsPanel, exportBody, useExportJobs } from "../ExportJobs";
 import { batchStatusPayload } from "../companyEdits";
 import { CompanyStatus, StatusOptions } from "../CompanyStatus";
-import { date, exportUrl, filtersQuery, hintLabel, tierClass, TIERS, type Filters } from "../helpers";
+import { date, filtersQuery, hintLabel, tierClass, TIERS, type Filters } from "../helpers";
 import { CategoryFilter } from "../CategoryFilter";
 import { ExclusionRules } from "../ExclusionRules";
 import { useResource } from "../hooks";
@@ -104,7 +105,7 @@ export function CompaniesPage({
   >({});
   const [batchStatus, setBatchStatus] = useState("candidate");
   const [showRules, setShowRules] = useState(false);
-  const [exporting, setExporting] = useState("");
+  const exports = useExportJobs();
   useEffect(() => {
     setDraftQuery(filters.q);
     setSelection({});
@@ -262,31 +263,26 @@ export function CompaniesPage({
           共 {companies.data?.total ?? "—"} 家 · 每页 50 家
         </span>
         <div className="actions">
-          {EXPORTS.map(([key, title, format, layout, file]) => (
+          {exports.active && <span className="export-disabled">{EXPORT_DISABLED}</span>}
+          {EXPORTS.map(([key, title, format, layout]) => (
             <button
               className={key === "entries-csv" ? "primary" : undefined}
-              disabled={busy || !!exporting || companies.loading || !!companies.error}
+              disabled={busy || !!exports.active || companies.loading || !!companies.error}
               key={key}
               onClick={() =>
-                act(async () => {
-                  setExporting(key);
-                  try {
-                    return await download(
-                      exportUrl(filters, format, layout),
-                      `${file}-${new Date().toISOString().slice(0, 10)}.${format}`,
-                    );
-                  } finally {
-                    setExporting("");
-                  }
-                }, "导出文件已下载")
+                act(
+                  () => exports.start(exportBody(filters, format, layout)),
+                  (started) => (started ? "导出已在后台开始，完成后可在下方下载" : EXPORT_BUSY),
+                )
               }
             >
               <Icon name="download" size={16} />
-              {exporting === key ? "正在生成文件…" : title}
+              {title}
             </button>
           ))}
         </div>
       </div>
+      <ExportJobsPanel state={exports} />
       {!!Object.keys(selection).length && <div className="batch-toolbar" aria-label="批量客户匹配状态">
         <span>已选 {Object.keys(selection).length} 家（仅当前页）</span>
         <label>

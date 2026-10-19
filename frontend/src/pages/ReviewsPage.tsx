@@ -1,7 +1,8 @@
+import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useResource } from "../hooks";
 import { ReviewList, isContactChange } from "../ReviewList";
-import type { Review } from "../types";
+import type { ReviewPage } from "../types";
 import { Empty } from "../ui";
 
 import { Resource } from "../Resource";
@@ -13,6 +14,7 @@ export function decisionNotice(base: string) {
     return closed ? `${base}，已同时关闭 ${closed} 条相同建议` : base;
   };
 }
+export const REVIEW_PAGE_SIZE = 20;
 export function ReviewsPage({
   version,
   busy,
@@ -26,12 +28,28 @@ export function ReviewsPage({
   refresh: () => void;
   openCompany: (id: string) => void;
 }) {
-  const reviews = useResource<Review[]>("/reviews", version);
+  const [page, setPage] = useState(1);
+  const reviews = useResource<ReviewPage>(`/reviews?page=${page}&page_size=${REVIEW_PAGE_SIZE}`, version);
+  const data = reviews.data;
+  const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
+  // Deciding the last item of a later page leaves it empty: go back one page.
+  useEffect(() => {
+    if (data && !data.items.length && page > 1) setPage((p) => Math.max(1, p - 1));
+  }, [data, page]);
   return (
     <Resource {...reviews} retry={refresh}>
-      {reviews.data?.length ? (
+      {data && data.total > 0 && (
+        <nav className="review-pagination" aria-label="审核分页">
+          <span className="muted">共 {data.total} 条待审核 · 第 {page} / {pages} 页</span>
+          <div className="actions">
+            <button disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>上一页</button>
+            <button disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>下一页</button>
+          </div>
+        </nav>
+      )}
+      {data?.items.length ? (
         <ReviewList
-          reviews={reviews.data}
+          reviews={data.items}
           busy={busy}
           onOpen={openCompany}
           onDecision={(r, decision) =>

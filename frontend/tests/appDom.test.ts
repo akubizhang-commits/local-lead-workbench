@@ -212,17 +212,20 @@ test("real DOM: batch conflict is not retried, clears selected revisions and lea
     await h.cleanup();
   }
 });
-test('export buttons: entries first, busy label blocks repeat clicks, footnote explains the layout',async()=>{
+test('export buttons: entries first, a running job blocks repeat clicks, footnote explains the layout',async()=>{
  const h=await setupDOM();
- const requests:string[]=[];
- let release:()=>void=()=>{};
- globalThis.fetch=async(input)=>{const url=String(input);requests.push(url);
-  if(url==='/api/session')return new Response(JSON.stringify({token:'t'}),{headers:{'Content-Type':'application/json'}});
-  if(url.startsWith('/api/exports')){await new Promise<void>(r=>{release=r;});return new Response('x');}
+ const posts:{path:string;body:any}[]=[];
+ let job:any=null;
+ globalThis.fetch=async(input,init)=>{const url=String(input);const method=init?.method||'GET';
+  const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}});
+  if(url==='/api/session')return json({token:'t'});
+  if(url==='/api/export-jobs'&&method==='POST'){const body=JSON.parse(String(init!.body));posts.push({path:url,body});
+   job={id:'j'.repeat(32),status:'running',phase:'building',format:body.format,layout:body.layout,filters:body,label:'联系入口 CSV',processed:1,total:4,rows:0,file_name:'联系入口-2026-10-18.csv',size_bytes:null,created_at:'2026-10-18T00:00:00Z',started_at:'2026-10-18T00:00:00Z',finished_at:null,error:null};
+   return json(job,202);}
+  if(url.startsWith('/api/export-jobs?'))return json(job?[job]:[]);
+  if(url.startsWith('/api/export-jobs/'))return json(job);
   const body=url.startsWith('/api/company-page')?{items:[],total:0,page:1,page_size:50,excluded_total:0}:[];
-  return new Response(JSON.stringify(body),{headers:{'Content-Type':'application/json'}});};
- Object.assign(window.URL,{createObjectURL:()=>'blob:x',revokeObjectURL:()=>{}});
- window.HTMLAnchorElement.prototype.click=()=>{}; // jsdom cannot navigate to a blob download
+  return json(body);};
  try {
   const {CompaniesPage,EXPORT_FOOTNOTE}=await import('../src/pages/CompaniesPage.tsx');
   const {defaultFilters}=await import('../src/navigation.ts');
@@ -235,12 +238,16 @@ test('export buttons: entries first, busy label blocks repeat clicks, footnote e
   assert.deepEqual(buttons().map(b=>b.textContent),['导出联系入口 CSV','导出联系入口 XLSX','导出企业表 CSV']);
   assert.ok(buttons()[0].classList.contains('primary'));
   assert.equal(document.querySelector('.footnote')!.textContent,EXPORT_FOOTNOTE);
-  await h.act(async()=>{buttons()[0].click();await new Promise(r=>setTimeout(r,30));});
-  assert.equal(buttons()[0].textContent,'正在生成文件…');
+  await h.act(async()=>{buttons()[0].click();await pending;await new Promise(r=>setTimeout(r,30));});
+  assert.equal(posts.length,1);
+  assert.equal(posts[0].body.layout,'entries');assert.equal(posts[0].body.format,'csv');
+  assert.deepEqual(posts[0].body.category,['Metal supplier']);assert.equal(posts[0].body.best_tier,'named_role');
   assert.ok(buttons().every(b=>b.disabled));
-  const exportRequest=requests.find(u=>u.startsWith('/api/exports'))!;
-  assert.match(exportRequest,/layout=entries/);assert.match(exportRequest,/category=Metal\+supplier/);assert.match(exportRequest,/best_tier=named_role/);
-  await h.act(async()=>{release();await pending;await new Promise(r=>setTimeout(r,10));});
-  assert.equal(buttons()[0].textContent,'导出联系入口 CSV');
+  assert.match(document.querySelector('.section-title .actions')!.textContent||'',/正在生成导出文件/);
+  assert.match(document.querySelector('.export-jobs')!.textContent||'',/已处理 1 \/ 4 家企业/);
+  job={...job,status:'succeeded',phase:'done',processed:4,size_bytes:2048,finished_at:'2026-10-18T00:00:03Z'};
+  await h.act(async()=>{await new Promise(r=>setTimeout(r,1100));});
+  assert.ok(buttons().every(b=>!b.disabled));
+  assert.ok([...document.querySelectorAll('.export-jobs button')].some(b=>b.textContent==='下载文件'));
  } finally {await h.cleanup();}
 });
