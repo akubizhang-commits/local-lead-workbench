@@ -169,7 +169,8 @@ def _contact_proposals(store, con):
     legacy = con.execute("""SELECT count(*) FROM reviews WHERE kind='contact' AND status='pending'
         AND COALESCE(old_value,'') NOT IN ('','{}')""").fetchone()[0]
     if legacy:
-        log.info("P0：%d 条旧版待审核联系人冲突保持原样，等待用户在审核页处理", legacy)
+        log.info("P0：%d 条旧版待审核联系人冲突保持原样，等待用户在审核页处理", legacy,
+                 extra={"event": "legacy_conflicts_kept"})
 
 
 REPAIR_CANDIDATES = """SELECT r.*,c.review_status contact_status FROM reviews r JOIN contacts c ON c.id=r.new_value
@@ -216,7 +217,7 @@ def _repair_rejected(store, con):
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='contact_facets'").fetchone():
         store._refresh_facets_locked(con)
     log.warning("restored %d contacts wrongly excluded by rejected change reviews; backup %s",
-                len(candidates), backup)
+                len(candidates), backup, extra={"event": "rejected_contacts_restored"})
 
 
 def _registry():
@@ -259,13 +260,15 @@ def migrate_p0(store, con):
                 con.commit()
             except SkipMigration as exc:
                 con.rollback()
-                log.warning("P0 迁移 %s 已跳过，未写入台账：%s", id, exc)
+                log.warning("P0 迁移 %s 已跳过，未写入台账：%s", id, exc, extra={"event": "migration_skipped", "id": id})
                 break
             except BaseException:
                 con.rollback()
-                log.exception("P0 迁移 %s 失败，未写入台账", id)
+                log.exception("P0 迁移 %s 失败，未写入台账", id, extra={"event": "migration_failed", "id": id})
                 raise
-            log.info("P0 迁移 %s 用时 %.2fs", id, time.perf_counter() - start)
+            elapsed = time.perf_counter() - start
+            log.info("P0 迁移 %s 用时 %.2fs", id, elapsed,
+                     extra={"event": "migration", "id": id, "duration_ms": round(elapsed * 1000)})
             if finished:
                 break
     con.execute("PRAGMA optimize")

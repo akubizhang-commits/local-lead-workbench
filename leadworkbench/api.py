@@ -16,14 +16,18 @@ import json
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from contextvars import ContextVar
 import logging
 import re
 import sys
 import time
 
+from starlette.routing import Match
+
 from .db import Conflict, Store
 from .errors import (INTERNAL, REQUEST_ID, Busy, DomainError, NotFound, classify_storage_error,
                      test_fault as fault_enabled)
+from . import logging_setup
 from .export import export_data
 from .sources.website import normalize_url
 from .validation_messages import translate_errors
@@ -41,14 +45,26 @@ UNAVAILABLE_DETAIL = {
 }
 
 
+# Per-request holder shared with child tasks, so http_request can log the error code.
+RESPONSE_CODE: ContextVar[dict | None] = ContextVar("response_code", default=None)
+
+
+def _note_code(code):
+    holder = RESPONSE_CODE.get()
+    if holder is not None:
+        holder["code"] = code
+
+
 def error_response(status, code, detail, headers=None):
     """Every non-2xx /api/* body: {detail, code, request_id} (design §5.4)."""
+    _note_code(code)
     return JSONResponse({"detail": detail, "code": code, "request_id": REQUEST_ID.get()},
                         status_code=status, headers=headers)
 
 
 def domain_response(exc: DomainError):
     headers = {"Retry-After": str(exc.retry_after)} if isinstance(exc, Busy) else None
+    _note_code(exc.code)
     body = {"detail": str(exc), "code": exc.code, "request_id": REQUEST_ID.get(), **exc.extra}
     return JSONResponse(body, status_code=exc.status, headers=headers)
 
@@ -416,11 +432,14 @@ def create_app(data_dir=None, *, allowed_hosts=None):
                   extra={"event": "store_unavailable", "code": app.state.unavailable[0]})
         print(app.state.unavailable[1], file=sys.stderr)
     app.state.store = store
+    # JSON line logs only when the data directory is usable (degraded mode: console only).
+    logging_setup.configure("api", app.state.data_dir if store is not None else None)
     from .export_jobs import ExportJobs
     jobs = app.state.export_jobs = ExportJobs(app.state.data_dir)
     if store is not None:
         jobs.list(1)  # reap jobs left running by an earlier API instance (§8.6)
     token = secrets.token_urlsafe(40)
+    logging_setup.hide_token(token)
     hosts = allowed_hosts or {"127.0.0.1", "localhost", "::1"}
     from .maintenance import MaintenanceGate
     gate = app.state.gate = MaintenanceGate()
@@ -442,14 +461,35 @@ def create_app(data_dir=None, *, allowed_hosts=None):
     async def local_boundary(request: Request, call_next):
         request_id = "req_" + secrets.token_hex(6)
         context = REQUEST_ID.set(request_id)
+        holder = {}
+        code_context = RESPONSE_CODE.set(holder)
         request.state.request_id = request_id
+        started = time.perf_counter()
         try:
             response = await boundary(request, call_next)
+            if request.url.path.startswith("/api/"):
+                response.headers["X-Request-ID"] = request_id
+                log_request(request, response, started, holder.get("code"))
         finally:
+            RESPONSE_CODE.reset(code_context)
             REQUEST_ID.reset(context)
-        if request.url.path.startswith("/api/"):
-            response.headers["X-Request-ID"] = request_id
         return response
+    def log_request(request, response, started, code):
+        """``http_request``: writes, errors and slow requests only; never the query string (§6.2)."""
+        duration = round((time.perf_counter() - started) * 1000)
+        if request.method == "GET" and response.status_code < 400 and duration < 500:
+            return
+        route = "<unmatched>"
+        for candidate in app.router.routes:
+            if candidate.matches(request.scope)[0] == Match.FULL:
+                route = getattr(candidate, "path", route)
+                break
+        fields = {"event": "http_request", "method": request.method, "route": route,
+                  "status": response.status_code, "duration_ms": duration,
+                  "query_keys": sorted(set(request.query_params.keys()))}
+        if code:
+            fields["code"] = code
+        log.info("%s %s %s", request.method, route, response.status_code, extra=fields)
 
     async def boundary(request, call_next):
         host = request.url.hostname

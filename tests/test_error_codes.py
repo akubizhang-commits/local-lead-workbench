@@ -1,4 +1,5 @@
 """P1-6: explicit error codes and request ids (design §5.8)."""
+import json
 import logging
 import os
 import sqlite3
@@ -86,6 +87,12 @@ def test_2_bare_key_error_is_internal_and_logged(api, monkeypatch, caplog):
     records = [r for r in caplog.records if getattr(r, "event", "") == "unhandled"]
     assert records and records[0].request_id == payload["request_id"]
     assert records[0].exc_info
+    # The same failure is in logs/api.log as one JSON line with the traceback (P1-7).
+    lines = [json.loads(line) for line in (app.state.data_dir / "logs/api.log").read_text().splitlines()]
+    errors_logged = [line for line in lines if line["event"] == "unhandled"]
+    assert errors_logged and errors_logged[0]["level"] == "ERROR"
+    assert errors_logged[0]["request_id"] == payload["request_id"]
+    assert "Traceback" in errors_logged[0]["exc"] and errors_logged[0]["error_type"] == "KeyError"
 
 
 @pytest.mark.parametrize("message,status,code", [

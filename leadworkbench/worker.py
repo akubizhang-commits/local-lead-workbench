@@ -295,7 +295,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-dir", default=os.environ.get("LEAD_DATA_DIR", "data"))
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    from .logging_setup import configure
+    configure("worker", Path(args.data_dir).expanduser())
     async def runner():
         task = asyncio.current_task()
         loop = asyncio.get_running_loop()

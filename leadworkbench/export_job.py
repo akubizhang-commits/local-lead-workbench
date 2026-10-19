@@ -115,6 +115,7 @@ def run(data_dir, job_id) -> int:
     signal.signal(signal.SIGTERM, state.terminate)
     threading.Thread(target=state.heartbeat, daemon=True, name="export-heartbeat").start()
     job = state.job
+    started = time.monotonic()
     try:
         store = Store(data_dir, migrate=False)
         state.update(status="running", phase="reading", started_at=jobs.now(), pid=os.getpid())
@@ -133,7 +134,10 @@ def run(data_dir, job_id) -> int:
             state.update(status="succeeded", phase="done", finished_at=finished, size_bytes=final.stat().st_size,
                          expires_at=jobs.expires_at(data_dir, finished), processed=result["total"],
                          total=result["total"], rows=result["rows"])
-        log.info("export job finished", extra={"event": "export_finished", "job_id": job_id})
+        log.info("export job finished", extra={
+            "event": "export_job", "job_id": job_id, "status": "succeeded", "format": job["format"],
+            "layout": job["layout"], "processed": result["total"], "total": result["total"],
+            "size_bytes": final.stat().st_size, "duration_ms": round((time.monotonic() - started) * 1000)})
         return 0
     except ExportCancelled:
         state.finish("cancelled")
@@ -142,7 +146,8 @@ def run(data_dir, job_id) -> int:
         classified = classify_storage_error(exc, data_dir)
         code = classified.code if classified is not None and classified.code in FAILURE_MESSAGES else "internal"
         message = FAILURE_MESSAGES.get(code, f"导出失败，请重试。如果反复出现，请导出诊断包（作业编号 {job_id}）。")
-        log.exception("export job failed", extra={"event": "export_failed", "job_id": job_id, "code": code})
+        log.exception("export job failed", extra={"event": "export_job", "job_id": job_id, "code": code,
+                                                 "status": "failed"})
         state.finish("failed", {"code": code, "message": message})
         return 1
 
@@ -154,6 +159,9 @@ def main(argv=None) -> int:
     parser.add_argument("--job", required=True)
     args = parser.parse_args(argv)
     jobs.validate_id(args.job)
+    from .logging_setup import JOB_ID, configure
+    configure("export", Path(args.data_dir))
+    JOB_ID.set(args.job)
     return run(Path(args.data_dir), args.job)
 
 

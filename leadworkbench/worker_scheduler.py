@@ -66,9 +66,9 @@ class ParallelWorkScheduler:
                 task.result()
             except asyncio.CancelledError:
                 if not self._closed:
-                    log.warning("Worker %s lane cancelled", lane)
+                    log.warning("Worker %s lane cancelled", lane, extra={"event": "lane_cancelled", "lane": lane})
             except Exception:
-                log.exception("Worker %s lane failed", lane)
+                log.exception("Worker %s lane failed", lane, extra={"event": "lane_failed", "lane": lane})
 
     async def _market_item(self, store, process_run_item, lane, stages=None):
         # Bound empty probes to one pass. Rotate before awaiting so failures
@@ -110,7 +110,7 @@ class ParallelWorkScheduler:
                 from .worker import set_problem
                 set_problem(data_dir, result["problem"], slot="maps")
         except Exception:
-            log.exception("Maps reclaim failed")
+            log.exception("Maps reclaim failed", extra={"event": "maps_reclaim_failed"})
         finally:
             self._busy_since = None
 

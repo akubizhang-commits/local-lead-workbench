@@ -279,7 +279,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             try:
                 values = contact_facet(row)
             except Exception:
-                log.warning("contact facet failed: %s", row["id"], exc_info=True)
+                log.warning("contact facet failed: %s", row["id"], exc_info=True, extra={"event": "contact_facet_failed"})
                 values = (0, "irrelevant", "none", 8, encode([row["id"]]), "")
             facets.append((row["id"], row["company_id"], *values, FACET_VERSION))
         con.executemany("INSERT OR REPLACE INTO contact_facets VALUES(?,?,?,?,?,?,?,?,?)", facets)
@@ -1520,14 +1520,15 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                 dest.execute("PRAGMA journal_mode=DELETE")
                 dest.commit()
         except (sqlite3.Error, OSError):
-            log.exception("backup failed: %s", name)
+            log.exception("backup failed: %s", name, extra={"event": "backup_failed"})
             _remove_database_files(target)
             raise
         # SQLite 3.51.0 leaves an empty -shm behind even in DELETE mode; the connection is closed now.
         try:
             _remove_database_files(target, include_main=False)
         except OSError:
-            log.warning("could not remove backup sidecar files for %s", name, exc_info=True)
+            log.warning("could not remove backup sidecar files for %s", name, exc_info=True,
+                        extra={"event": "backup_sidecar_failed"})
         target.chmod(0o600)
         return {"name": name, "created_at": now()}
 
@@ -1544,7 +1545,8 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                 shutil.copyfile(file, tmp)
                 tmp.chmod(0o600)
             except OSError as exc:
-                log.warning("could not copy backup %s for restore", name, exc_info=True)
+                log.warning("could not copy backup %s for restore", name, exc_info=True,
+                            extra={"event": "restore_copy_failed"})
                 raise Invalid("无法读取备份文件，请检查磁盘空间或文件权限") from exc
             with closing(sqlite3.connect(tmp)) as source:
                 try:

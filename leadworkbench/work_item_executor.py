@@ -6,8 +6,10 @@ and monkeypatched source boundaries remain compatible after extraction.
 import asyncio
 import logging
 import json
+import time
 
 from .db import encode
+from .logging_setup import ITEM_ID, RUN_ID, STAGE
 
 log = logging.getLogger(__name__)
 
@@ -23,6 +25,37 @@ async def execute_run_item(store, run_id, *, discover=None, enrich, planner=None
         store.progress(run_id)
         store.finalize(run_id)
         return False
+    # Every log line produced while this item runs carries its ids (§6.2).
+    tokens = [(var, var.set(value)) for var, value in
+              ((RUN_ID, run_id), (ITEM_ID, item["id"]), (STAGE, item["stage"]))]
+    started = time.perf_counter()
+    log.info("work item claimed", extra={"event": "work_item_claimed"})
+    try:
+        return await _execute_claimed(store, run, run_id, item, pace_maps=pace_maps, discover=discover,
+                                      enrich=enrich, planner=planner)
+    finally:
+        _log_finished(store, item["id"], started)
+        for var, token in reversed(tokens):
+            var.reset(token)
+
+
+def _log_finished(store, item_id, started):
+    fields = {"event": "work_item_finished", "duration_ms": round((time.perf_counter() - started) * 1000)}
+    try:
+        with store.connect() as con:
+            row = con.execute("SELECT state, result FROM work_items WHERE id=?", (item_id,)).fetchone()
+        if row:
+            result = json.loads(row["result"] or "{}")
+            fields.update(state=row["state"], stop_reason=result.get("stop_reason"),
+                          error_type=result.get("error_type"))
+            if isinstance(result.get("records"), list):
+                fields["records"] = len(result["records"])
+    except Exception:  # logging must never change the outcome of an item
+        pass
+    log.info("work item finished", extra=fields)
+
+
+async def _execute_claimed(store, run, run_id, item, *, pace_maps, discover, enrich, planner):
     previous_result = json.loads(item.get("result") or "{}")
     applied = {}
     access = None
@@ -184,7 +217,7 @@ async def execute_run_item(store, run_id, *, discover=None, enrich, planner=None
         store.finish_item(item["id"], "pending", {**previous_result, "message": "worker 停止，等待恢复"})
         raise
     except Exception as exc:
-        log.exception("Run item failed: %s", item["id"])
+        log.exception("Run item failed: %s", item["id"], extra={"event": "work_item_failed"})
         error = (str(exc).strip() or type(exc).__name__)[:1200]
         if pace_maps and item['stage'] == 'discovery':
             from .maps_policy import observe
