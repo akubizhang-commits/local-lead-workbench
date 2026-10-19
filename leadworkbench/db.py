@@ -138,11 +138,15 @@ PRAGMA user_version=1;
 class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMixin):
     _facets_enabled = False
 
-    def __init__(self, directory: Path | str):
+    def __init__(self, directory: Path | str, *, migrate=True):
         self._local = threading.local()
         self.directory = Path(directory).expanduser().resolve()
         self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.path = self.directory / "workbench.sqlite3"
+        if not migrate:
+            # Readers in other processes (export child): never initialise the schema.
+            self._open_ready()
+            return
         from .migrations import migrate_lock
         # The whole initialisation is serialised across processes (P1-5).
         with migrate_lock(self.directory):
@@ -167,6 +171,24 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             self.resolve_empty_reviews()
             self.resolve_format_reviews()
             self.resolve_duplicate_reviews()
+
+    def _open_ready(self):
+        from .migrations import SchemaNotReady
+        if not self.path.exists():
+            raise SchemaNotReady()
+        with self.connect() as con:
+            if con.execute("PRAGMA user_version").fetchone()[0] != 2:
+                raise SchemaNotReady()
+            from .p0_migrations import MIGRATIONS
+            wanted = {id for id, _ in MIGRATIONS} - {"p0_20261018_repair_rejected"}
+            try:
+                done = {row[0] for row in con.execute("SELECT id FROM schema_migrations")}
+            except sqlite3.OperationalError as exc:
+                raise SchemaNotReady() from exc
+            if not wanted <= done:
+                raise SchemaNotReady()
+            self._facets_enabled = bool(con.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='contact_facets'").fetchone())
 
     def _migrate_audit(self, con):
         from .maps_policy import DDL

@@ -11,7 +11,7 @@ every kind of data is read with one batched query (no per-company queries).
 import csv
 import io
 import json
-
+from pathlib import Path
 from openpyxl import Workbook
 from openpyxl.cell import WriteOnlyCell
 from openpyxl.styles import Font, PatternFill
@@ -129,30 +129,88 @@ def _grouped_contacts(data, company):
             if row.get("outreach_category") != "irrelevant"]
 
 
-def export_data(store, format="csv", layout="companies", **filters):
+class ExportCancelled(Exception):
+    """should_stop() became true; the caller removes the partial file."""
+
+
+PROGRESS_COMPANIES = 200
+PROGRESS_ROWS = 1000
+
+
+class _Progress:
+    """Progress/cancel hooks: every 200 companies while building, every 1000 rows while writing."""
+    def __init__(self, progress=None, should_stop=None):
+        self.progress, self.should_stop = progress, should_stop
+        self.rows = 0
+
+    def report(self, phase, **values):
+        if self.should_stop and self.should_stop():
+            raise ExportCancelled()
+        if self.progress:
+            self.progress(phase, **values)
+
+
+def normalize_filters(store, layout, filters):
+    """run_id -> market_id and layout check; raises NotFound/Invalid before any work starts."""
+    filters = dict(filters)
     if filters.get("run_id") and not filters.get("market_id"):
         market_id = store.run(filters["run_id"]).get("task_id")
         if market_id:
             filters["market_id"] = market_id
     if layout not in {"companies", "entries"}:
         raise Invalid("无效导出布局")
+    return filters
+
+
+def export_to_file(store, target, format="csv", layout="companies", filters=None, *, progress=None,
+                   should_stop=None):
+    """Write one export to ``target`` (a path or a binary file object).
+
+    The data is read in one deferred (read-only) transaction, so the file is a
+    consistent snapshot and no write lock is held while reading."""
+    filters = normalize_filters(store, layout, filters or {})
+    hooks = _Progress(progress, should_stop)
     store._refresh_facets()
+    hooks.report("reading")
     with store.connect() as con:
-        data = _collect(store, con, filters, observations=format == "xlsx")
+        con.execute("BEGIN")
+        try:
+            data = _collect(store, con, filters, observations=format == "xlsx")
+        finally:
+            con.rollback()
+    hooks.report("building", processed=0, total=len(data["companies"]))
     if layout == "entries":
-        return _entries_layout(data, format)
-    return _companies_layout(data, format, bool(filters.get("market_id")))
+        sheets = _entries_layout(data, format, hooks)
+    else:
+        sheets = _companies_layout(data, format, bool(filters.get("market_id")), hooks)
+    _write(format, sheets, target, hooks)
+    return {"total": len(data["companies"]), "rows": hooks.rows}
 
 
-def _write(format, sheets):
+def export_data(store, format="csv", layout="companies", **filters):
+    buffer = io.BytesIO()
+    export_to_file(store, buffer, format, layout, filters)
+    return buffer.getvalue()
+
+
+def _write(format, sheets, target, hooks=None):
     """sheets: [(title, headers, rows)]. CSV writes only the first sheet."""
+    hooks = hooks or _Progress()
     if format == "csv":
         stream = io.StringIO(newline="")
         writer = csv.writer(stream)
         title, headers, rows = sheets[0]
         writer.writerow(headers)
-        writer.writerows([_csv_cell(v) for v in row] for row in rows)
-        return ("\ufeff" + stream.getvalue()).encode("utf-8")
+        for start in range(0, len(rows), PROGRESS_ROWS):
+            writer.writerows([_csv_cell(v) for v in row] for row in rows[start:start + PROGRESS_ROWS])
+            hooks.rows = min(len(rows), start + PROGRESS_ROWS)
+            hooks.report("writing", rows=hooks.rows)
+        data = ("\ufeff" + stream.getvalue()).encode("utf-8")
+        if isinstance(target, (str, Path)):
+            Path(target).write_bytes(data)
+        else:
+            target.write(data)
+        return
     book = Workbook(write_only=True)
     font, fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="173C46")
     for title, headers, rows in sheets:
@@ -170,16 +228,20 @@ def _write(format, sheets):
         ws.append(cells)
         for row in rows:
             ws.append([_xlsx_cell(ws, v) for v in row])
-    buffer = io.BytesIO()
-    book.save(buffer)
-    return buffer.getvalue()
-
-
-def _companies_layout(data, format, by_market):
+            hooks.rows += 1
+            if hooks.rows % PROGRESS_ROWS == 0:
+                hooks.report("writing", rows=hooks.rows)
+    hooks.report("writing", rows=hooks.rows)
+    book.save(target)
+def _companies_layout(data, format, by_market, hooks=None):
+    hooks = hooks or _Progress()
     headers = COMPANY_HEADERS + (MARKET_HEADERS if by_market else [])
     company_rows = []
     contacts, locations, sources = [], [], []
-    for company in data["companies"]:
+    total = len(data["companies"])
+    for index, company in enumerate(data["companies"]):
+        if index and index % PROGRESS_COMPANIES == 0:
+            hooks.report("building", processed=index, total=total)
         values = {**company, **data["latest"].get(company["id"], {"source_url": "", "observed_at": ""})}
         company_rows.append([safe(values.get(k)) for k in headers])
         if format == "csv":
@@ -195,10 +257,11 @@ def _companies_layout(data, format, by_market):
             locations.append([safe(row[k]) for k in LOCATION_KEYS] + [name])
         for row in data["observations"].get(company["id"], []):
             sources.append([safe(row[k]) for k in SOURCE_KEYS] + [name])
-    return _write(format, [("Companies", headers, company_rows),
-                           ("Contacts", CONTACT_KEYS + ["company_name"], contacts),
-                           ("Locations", LOCATION_KEYS + ["company_name"], locations),
-                           ("Sources", SOURCE_KEYS + ["company_name"], sources)])
+    hooks.report("building", processed=total, total=total)
+    return [("Companies", headers, company_rows),
+            ("Contacts", CONTACT_KEYS + ["company_name"], contacts),
+            ("Locations", LOCATION_KEYS + ["company_name"], locations),
+            ("Sources", SOURCE_KEYS + ["company_name"], sources)]
 
 
 def _company_columns(data, company):
@@ -244,9 +307,13 @@ def _entry_sources(row, website):
     return "；".join(labels), "；".join(links), observed
 
 
-def _entries_layout(data, format):
+def _entries_layout(data, format, hooks=None):
+    hooks = hooks or _Progress()
     entries, company_rows, locations, sources = [], [], [], []
-    for company in data["companies"]:
+    total = len(data["companies"])
+    for index, company in enumerate(data["companies"]):
+        if index and index % PROGRESS_COMPANIES == 0:
+            hooks.report("building", processed=index, total=total)
         columns = _company_columns(data, company)
         head = [company["name"], company["id"], columns["city"], columns["basis"], columns["market"],
                 columns["categories"], columns["types"], columns["status"]]
@@ -282,5 +349,6 @@ def _entries_layout(data, format):
             sources.append([safe(v) for v in [company["name"], company["id"], row["field"], row["value"],
                                                row["source_url"], row["evidence"], row["observed_at"],
                                                METHOD_LABELS.get(row["method"], row["method"]), row["query"]]])
-    return _write(format, [("联系入口", ENTRY_HEADERS, entries), ("企业", ENTRY_COMPANY_HEADERS, company_rows),
-                           ("地点", ENTRY_LOCATION_HEADERS, locations), ("来源证据", ENTRY_SOURCE_HEADERS, sources)])
+    hooks.report("building", processed=total, total=total)
+    return [("联系入口", ENTRY_HEADERS, entries), ("企业", ENTRY_COMPANY_HEADERS, company_rows),
+            ("地点", ENTRY_LOCATION_HEADERS, locations), ("来源证据", ENTRY_SOURCE_HEADERS, sources)]

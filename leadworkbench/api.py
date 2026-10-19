@@ -53,6 +53,8 @@ def domain_response(exc: DomainError):
     return JSONResponse(body, status_code=exc.status, headers=headers)
 
 
+MEDIA_TYPES = {"csv": "text/csv; charset=utf-8",
+               "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
 ARRAY_BATCH = 500
 
 
@@ -256,6 +258,23 @@ class BatchStatus(Input):
     status: Literal["candidate", "verified", "not_fit", "do_not_contact"]
 
 
+class ExportJobInput(Input):
+    format: Literal["csv", "xlsx"]
+    layout: Literal["companies", "entries"] = "companies"
+    q: str = Field(default="", max_length=200)
+    status: str = Field(default="", max_length=40)
+    type: str = Field(default="", max_length=40)
+    market_id: str = Field(default="", max_length=100)
+    run_id: str = Field(default="", max_length=100)
+    contact: Literal["", "email", "procurement"] = ""
+    sort: Literal["newest", "procurement", "email", "updated", "tier"] = "newest"
+    segment: Literal["", "new", "existing", "changed", "not_seen"] = ""
+    category: list[Annotated[str, Field(min_length=1, max_length=120)]] = Field(default_factory=list, max_length=20)
+    excluded: Literal["hide", "only", "include"] = "hide"
+    best_tier: Literal["", "named_procurement", "named_role", "named_unknown", "department_email", "general_email",
+                       "form_phone", "company_phone", "none"] = ""
+
+
 class ScheduleInput(Input):
     task_id: str | None = None
     company_id: str | None = None
@@ -374,6 +393,8 @@ def create_app(data_dir=None, *, allowed_hosts=None):
     @asynccontextmanager
     async def lifespan(application):
         yield
+        # Export children are stopped by SIGTERM here, never by a terminal SIGINT (§8.5).
+        await asyncio.to_thread(application.state.export_jobs.shutdown)
         from .sources.social_browser import close_session
         for platform in ("instagram", "facebook", "x"):
             await asyncio.to_thread(close_session, application.state.data_dir, platform)
@@ -395,6 +416,10 @@ def create_app(data_dir=None, *, allowed_hosts=None):
                   extra={"event": "store_unavailable", "code": app.state.unavailable[0]})
         print(app.state.unavailable[1], file=sys.stderr)
     app.state.store = store
+    from .export_jobs import ExportJobs
+    jobs = app.state.export_jobs = ExportJobs(app.state.data_dir)
+    if store is not None:
+        jobs.list(1)  # reap jobs left running by an earlier API instance (§8.6)
     token = secrets.token_urlsafe(40)
     hosts = allowed_hosts or {"127.0.0.1", "localhost", "::1"}
     from .maintenance import MaintenanceGate
@@ -798,6 +823,9 @@ def create_app(data_dir=None, *, allowed_hosts=None):
         # An idle worker releases worker.lock between ticks; wait briefly for it.
         # Paused runs deliberately do not block a restore (product decision).
         try:
+            # Inside the exclusive gate: an export child must not read while the file is replaced.
+            if jobs.any_live():
+                raise DomainError("正在生成导出文件，请等待完成或取消后再恢复备份", code="export_running", status=409)
             with worker_lock(store.directory, wait_seconds=RESTORE_LOCK_WAIT_SECONDS,
                              message="后台正在处理作业，请等待当前作业完成或暂停相关任务后再恢复备份"):
                 if store.active_runs():
@@ -821,11 +849,42 @@ def create_app(data_dir=None, *, allowed_hosts=None):
         output = export_data(store, format, layout, q=q, status=status, type=type,
                              market_id=market_id, run_id=run_id, segment=segment, contact=contact, sort=sort,
                              category=category, excluded=excluded, best_tier=best_tier)
-        return Response(output, media_type="text/csv; charset=utf-8" if format == "csv" else
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        # Compatibility only: the UI uses /api/export-jobs.
+        return Response(output, media_type=MEDIA_TYPES[format],
                         headers={"Content-Disposition": 'attachment; filename="'
-                                 + ("contact-entries" if layout == "entries" else "leads") + f'.{format}"'})
+                                 + ("contact-entries" if layout == "entries" else "leads") + f'.{format}"',
+                                 "Deprecation": "true", "Link": '</api/export-jobs>; rel="successor-version"'})
 
+    @app.post("/api/export-jobs", status_code=202)
+    def export_job_create(body: ExportJobInput, request: Request):
+        from .export import normalize_filters
+        filters = body.model_dump(exclude={"format", "layout"})
+        filters = normalize_filters(store, body.layout, filters)
+        if filters.get("market_id"):
+            with store.connect() as con:
+                if not con.execute("SELECT 1 FROM tasks WHERE id=?", (filters["market_id"],)).fetchone():
+                    raise NotFound("市场不存在")
+        return jobs.create({"format": body.format, "layout": body.layout, "filters": filters},
+                           request.state.request_id)
+
+    @app.get("/api/export-jobs")
+    def export_job_list(limit: int = Query(5, ge=1, le=20)):
+        return jobs.list(limit)
+
+    @app.get("/api/export-jobs/{id}")
+    def export_job_detail(id: str):
+        return jobs.get(id)
+
+    @app.post("/api/export-jobs/{id}/cancel")
+    def export_job_cancel(id: str):
+        return jobs.cancel(id)
+
+    @app.get("/api/export-jobs/{id}/file")
+    def export_job_file(id: str):
+        from .export_jobs import content_disposition
+        path, job = jobs.file(id)
+        return FileResponse(path, media_type=MEDIA_TYPES[job["format"]],
+                            headers={"Content-Disposition": content_disposition(job)})
     dist = ROOT / "frontend" / "dist"
     if (dist / "assets").is_dir():
         app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")

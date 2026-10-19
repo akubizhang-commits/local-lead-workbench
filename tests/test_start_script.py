@@ -154,3 +154,38 @@ def test_e_worker_killed_is_restarted_and_stopped(directory, tmp_path):
         assert until(lambda: not worker_pids(directory), 10)
     finally:
         script.stop()
+
+
+def post(path, token, body):
+    req = urllib.request.Request(f"http://127.0.0.1:{PORT}{path}", data=json.dumps(body).encode(), method="POST",
+                                 headers={"X-Local-Token": token, "Content-Type": "application/json"})
+    with OPENER.open(req, timeout=5) as response:
+        return json.loads(response.read())
+
+
+def export_children():
+    out = subprocess.run(["ps", "-A", "-o", "command="], capture_output=True, text=True).stdout
+    return [line for line in out.splitlines() if "leadworkbench.export_job" in line]
+
+
+@pytest.mark.parametrize("how", ["script", "group"])
+def test_a_stop_during_export_leaves_no_export_child(directory, tmp_path, how):
+    from perf_fixtures import build
+    build(directory, companies=2000, contacts_per_company=2, markets=1)
+    script = Script(directory, tmp_path, LEAD_TEST_FAULT="export_slow")
+    try:
+        assert until(lambda: request("/api/session")[0] == 200, 25), script.output()
+        key = token()
+        job = post("/api/export-jobs", key, {"format": "xlsx", "layout": "entries"})
+        assert until(lambda: request(f"/api/export-jobs/{job['id']}", key)[2]["status"] == "running", 15)
+        if how == "script":
+            script.process.send_signal(signal.SIGINT)
+        else:  # Ctrl+C in a terminal: the whole process group gets SIGINT
+            os.killpg(script.process.pid, signal.SIGINT)
+        script.process.wait(30)
+        assert until(lambda: not export_children(), 10), export_children()
+        state = json.loads((directory / "exports" / "jobs" / f"{job['id']}.json").read_text())
+        assert state["status"] == "cancelled"
+        assert not (directory / "exports" / f"{job['id']}.part").exists()
+    finally:
+        script.stop()
