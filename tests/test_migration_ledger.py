@@ -71,7 +71,8 @@ def test_0a_upgrade_matches_frozen_snapshot(tmp_path, name):
     path = load_upgrade_fixture(tmp_path, name)
     Store(tmp_path)
     after = normalize(dump_database(path), snapshot["volatile"])
-    assert set(after["sqlite_master_names"]) == set(snapshot["sqlite_master_names"]) | EXPECTED_NEW_TABLES
+    frozen_names = {n for n in snapshot["sqlite_master_names"] if not n.startswith("sqlite_stat")}
+    assert set(after["sqlite_master_names"]) == frozen_names | EXPECTED_NEW_TABLES
     assert set(after["ledger_ids"]) == set(snapshot["ledger_ids"]) | EXPECTED_NEW_LEDGER
     for table in EXPECTED_NEW_TABLES:
         assert after["tables"].pop(table) == []

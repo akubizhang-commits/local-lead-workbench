@@ -54,7 +54,9 @@ def dump_database(path):
     """Raw upgrade result: object names (no autoindexes), ledger ids, rows per table."""
     with closing(sqlite3.connect(path)) as con:
         con.row_factory = sqlite3.Row
-        names = sorted(r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_autoindex_%'"))
+        # sqlite_stat1/stat4 are created by ANALYZE and depend on SQLite build options (STAT4), so skip them.
+        names = sorted(r[0] for r in con.execute(
+            "SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_autoindex_%' AND name NOT LIKE 'sqlite_stat%'"))
         tables = [r[0] for r in con.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
         ledger = sorted(r[0] for r in con.execute("SELECT id FROM schema_migrations")) if "schema_migrations" in tables else []
