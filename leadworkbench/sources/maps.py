@@ -9,13 +9,18 @@ import math
 import os
 from pathlib import Path
 import re
+import logging
 import signal
+import sys
 import time
 from typing import Callable
 from urllib.parse import parse_qs, unquote, urlsplit
 import uuid
 
+log = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parents[2]
+BUSY_MESSAGE = "上一个地图查询的进程尚未退出，本查询稍后自动重试"
+REGISTRY_MESSAGE = "采集程序异常：无法写入运行记录（磁盘空间不足或目录不可写）"
 BINARY = ROOT / "tools/bin/google-maps-scraper"
 
 
@@ -245,7 +250,7 @@ async def discover_maps(query: str, output_dir: Path, *, limit: int = 20,
                         timeout_seconds: int = 300,
                         should_stop: Callable[[], bool] | None = None,
                         geo: tuple | list | None = None, zoom: int = 15,
-                        depth: int = 1) -> dict:
+                        depth: int = 1, data_dir: Path | None = None) -> dict:
     """Bound one source job. Market callers use limit=120, timeout=180, depth=10.
 
     saturated means the internal cap was reached, so the worker must subdivide
@@ -343,6 +348,10 @@ async def discover_maps(query: str, output_dir: Path, *, limit: int = 20,
                 seen.add(record["source_key"])
     process = None
     cleanup_task = None
+    # The guard owns maps.lock and the registry; without a data directory
+    # (direct adapter calls) the registry lives next to the run directory.
+    from .. import maps_guard
+    registry = maps_guard.registry_dir(data_dir) if data_dir is not None else run_dir
     async def cleanup():
         nonlocal cleanup_task
         if process is not None:
@@ -351,7 +360,8 @@ async def discover_maps(query: str, output_dir: Path, *, limit: int = 20,
             if cleanup_task is None:
                 cleanup_task = asyncio.create_task(_terminate(process))
             await asyncio.shield(cleanup_task)
-
+            # A SIGKILLed guard cannot remove its own registry entry.
+            (registry / f"{process.pid}.json").unlink(missing_ok=True)
     async def finish_exception(status, stop_reason):
         try:
             await cleanup()
@@ -374,8 +384,15 @@ async def discover_maps(query: str, output_dir: Path, *, limit: int = 20,
     try:
         with (run_dir / "stderr.log").open("wb") as stderr, (run_dir / "stdout.log").open("wb") as stdout:
             try:
-                process = await asyncio.create_subprocess_exec(*command, cwd=run_dir, env=env,
-                                                             stdout=stdout, stderr=stderr, start_new_session=True)
+                # The guard leads the new session; the scraper shares its group, so
+                # _terminate's killpg(process.pid) still ends everything (§9.3).
+                process = await asyncio.create_subprocess_exec(
+                    sys.executable, "-m", "leadworkbench.maps_guard", "--registry-dir", str(registry),
+                    "--run-dir", str(run_dir), "--", *command, cwd=run_dir, env=env,
+                    stdin=asyncio.subprocess.PIPE, stdout=stdout, stderr=stderr, start_new_session=True)
+                log.info("maps query started", extra={
+                    "event": "maps_query", "query_len": len(query),
+                    "query_sha8": hashlib.sha256(query.encode()).hexdigest()[:8], "guard_pid": process.pid})
             except OSError as exc:
                 warnings.append(str(exc).strip() or type(exc).__name__)
                 return finish("blocked", "launch_failed")
@@ -416,6 +433,13 @@ async def discover_maps(query: str, output_dir: Path, *, limit: int = 20,
         warnings.append(f"采集程序异常：Maps adapter failed: {str(exc).strip() or type(exc).__name__}")
         await finish_exception("failed", "adapter_error")
         raise
+    if reason is None and process.returncode == maps_guard.BUSY_EXIT and (run_dir / "guard.json").exists():
+        warnings.append(BUSY_MESSAGE)
+        log.warning("maps lock busy", extra={"event": "maps_busy"})
+        return finish("partial", "maps_busy")
+    if reason is None and process.returncode == maps_guard.REGISTRY_EXIT:
+        warnings.append(REGISTRY_MESSAGE)
+        return finish("blocked", "launch_failed")
     if reason in {'captcha', 'rate_limited', 'access_denied'}:
         warnings.append({'captcha':'检测到验证码或异常流量，停止地图访问',
                          'rate_limited':'平台限制访问频率，停止地图访问',

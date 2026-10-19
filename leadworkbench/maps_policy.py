@@ -13,6 +13,8 @@ TRANSIENT = {'timeout', 'nonzero_exit', 'adapter_error', 'inactivity_timeout'}
 # Local Chromium exits are not platform throttling: retried per query (maps_retry), no global backoff.
 SCRAPER_CRASH = {'browser_closed'}
 CONFIG_ERRORS = {'missing_binary', 'launch_failed'}
+# Another Maps process still holds maps.lock: retry the query later, no policy change.
+BUSY = frozenset({'maps_busy'})
 DDL = """CREATE TABLE IF NOT EXISTS maps_access_policy(
  id INTEGER PRIMARY KEY CHECK(id=1), not_before REAL NOT NULL DEFAULT 0,
  manual_required INTEGER NOT NULL DEFAULT 0, failures INTEGER NOT NULL DEFAULT 0,
@@ -52,6 +54,8 @@ def status(con, at=None):
 
 def observe(con, result, at=None, *, query_failures=0):
     at = time.time() if at is None else at
+    if result.get('stop_reason') in BUSY:
+        return dict(auto_retry=True, **status(con, at))  # not_before / failures / reason unchanged
     prior = status(con, at)
     reason = result.get('stop_reason', '')
     failures = prior['failures']

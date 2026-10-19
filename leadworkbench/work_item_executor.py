@@ -79,7 +79,7 @@ async def execute_run_item(store, run_id, *, discover=None, enrich, planner=None
             else:
                 result = await discover(
                     item["target"], store.directory / "runs" / run_id / item["id"],
-                    limit=config["limit"], timeout_seconds=180,
+                    limit=config["limit"], timeout_seconds=180, data_dir=store.directory,
                     should_stop=lambda: store.run(run_id)["status"] not in {"queued", "running"})
             observe_source(result)
             seen = store.run_source_keys(run_id)

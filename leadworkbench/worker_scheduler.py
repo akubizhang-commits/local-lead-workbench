@@ -2,11 +2,13 @@
 import asyncio
 from collections import deque
 import logging
-
-
+import os
+import time
 log = logging.getLogger(__name__)
 # Seconds idle() waits for running lanes before the worker decides it is busy.
 IDLE_GRACE_SECONDS = 0.2
+# maps.lock held by someone else while our maps lane is idle for this long -> reclaim.
+MAPS_BUSY_RECLAIM_SECONDS = 60
 
 
 class WorkScheduler:
@@ -52,6 +54,8 @@ class ParallelWorkScheduler:
         self._runs = {lane: deque() for lane in self.MARKET_STAGES}
         self._tasks = {}
         self._closed = False
+        self._busy_since = None
+        self._reclaiming = None
 
     def _reap(self):
         for lane, task in list(self._tasks.items()):
@@ -66,7 +70,7 @@ class ParallelWorkScheduler:
             except Exception:
                 log.exception("Worker %s lane failed", lane)
 
-    async def _market_item(self, store, process_run_item, lane):
+    async def _market_item(self, store, process_run_item, lane, stages=None):
         # Bound empty probes to one pass. Rotate before awaiting so failures
         # and interrupted items cannot repeatedly jump ahead of other runs.
         for _ in range(len(self._runs[lane])):
@@ -75,9 +79,40 @@ class ParallelWorkScheduler:
                 break
             run_id = queue.popleft()
             queue.append(run_id)
-            if await process_run_item(store, run_id, stages=self.MARKET_STAGES[lane]):
+            if await process_run_item(store, run_id, stages=stages or self.MARKET_STAGES[lane]):
                 return True
         return False
+
+    def _maps_stages(self, data_dir):
+        """Stages for an idle maps lane: planning only while maps.lock is held elsewhere (§9.3 #8)."""
+        from . import maps_guard
+        if not maps_guard.busy(data_dir):
+            self._busy_since = None
+            from .worker import set_problem
+            set_problem(data_dir, slot="maps")  # an earlier orphan has gone
+            return None
+        now = time.monotonic()
+        if self._busy_since is None:
+            self._busy_since = now
+        elif now - self._busy_since > MAPS_BUSY_RECLAIM_SECONDS and (
+                self._reclaiming is None or self._reclaiming.done()):
+            self._reclaiming = asyncio.create_task(self._reclaim(data_dir), name="worker-maps-reclaim")
+        return ("planning",)
+
+    async def _reclaim(self, data_dir):
+        from . import maps_guard
+        # Never touch this worker's own live guards (R3-1).
+        protect = frozenset(entry.get("guard_pid") for entry in maps_guard.entries(data_dir)
+                            if entry.get("worker_pid") == os.getpid())
+        try:
+            result = await asyncio.to_thread(maps_guard.reclaim, data_dir, protect_pids=protect)
+            if result.get("problem"):
+                from .worker import set_problem
+                set_problem(data_dir, result["problem"], slot="maps")
+        except Exception:
+            log.exception("Maps reclaim failed")
+        finally:
+            self._busy_since = None
 
     async def turn(self, store, process_run_item, process_social_item):
         if self._closed:
@@ -90,9 +125,18 @@ class ParallelWorkScheduler:
             queued = set(queue)
             queue.extend(run_id for run_id in active if run_id not in queued)
             self._runs[lane] = queue
+            stages = None
+            if lane == "maps":
+                # Probe and time maps.lock only while our own maps lane is idle:
+                # a running query of ours legitimately holds the lock.
+                directory = getattr(store, "directory", None)
+                if lane in self._tasks or not queue or directory is None:
+                    self._busy_since = None
+                else:
+                    stages = self._maps_stages(directory)
             if lane not in self._tasks and queue:
                 self._tasks[lane] = asyncio.create_task(
-                    self._market_item(store, process_run_item, lane),
+                    self._market_item(store, process_run_item, lane, stages),
                     name=f"worker-{lane}")
         if "social" not in self._tasks:
             self._tasks["social"] = asyncio.create_task(
@@ -114,6 +158,8 @@ class ParallelWorkScheduler:
 
     async def aclose(self):
         self._closed = True
+        if self._reclaiming is not None:
+            await asyncio.gather(self._reclaiming, return_exceptions=True)
         for task in self._tasks.values():
             if not task.done():
                 task.cancel()

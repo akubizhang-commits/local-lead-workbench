@@ -16,7 +16,7 @@ async def discover_market_item(store, run, item, discover, *, on_result=None):
     result = await discover(
         job["query"], store.directory / "runs" / run["id"] / item["id"],
         limit=BATCH_RECORDS, timeout_seconds=180, geo=job.get("geo"),
-        zoom=job.get("zoom", 15), depth=job.get("depth", 10),
+        zoom=job.get("zoom", 15), depth=job.get("depth", 10), data_dir=store.directory,
         should_stop=lambda: store.run(run["id"])["status"] not in {"queued", "running"})
     if on_result:
         on_result(result)

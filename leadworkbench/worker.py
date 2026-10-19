@@ -46,21 +46,25 @@ def _worker_health(directory):
 
 log = logging.getLogger(__name__)
 
-# Current worker problem shown in the heartbeat ({"code","message"} or absent).
+# Current worker problems shown in the heartbeat ({"code","message"} or absent).
+# The Maps slot (orphaned scraper) is separate: database recovery must not clear it.
 _PROBLEMS: dict[str, dict] = {}
+_MAPS_PROBLEMS: dict[str, dict] = {}
 
 
-def set_problem(directory, problem=None):
+def set_problem(directory, problem=None, *, slot=None):
+    problems = _MAPS_PROBLEMS if slot == "maps" else _PROBLEMS
     key = str(Path(directory))
     if problem:
-        _PROBLEMS[key] = problem
+        problems[key] = problem
     else:
-        _PROBLEMS.pop(key, None)
+        problems.pop(key, None)
 
 
 def heartbeat_payload(directory):
     payload = {"pid": os.getpid(), "last_seen": now()}
-    problem = _PROBLEMS.get(str(Path(directory)))
+    key = str(Path(directory))
+    problem = _PROBLEMS.get(key) or _MAPS_PROBLEMS.get(key)
     if problem:
         payload["problem"] = problem
     return payload
@@ -227,7 +231,11 @@ async def serve(directory):
         scheduler = ParallelWorkScheduler()
         op = None
         try:
-            # Step 2 (P1-4): reclaim Maps processes left by a previous worker.
+            # Step 2 (P1-4): reclaim Maps processes left by a previous worker,
+            # before recover() requeues their queries. ps/lsof/waits run in a thread.
+            from . import maps_guard
+            reclaimed = await asyncio.to_thread(maps_guard.reclaim, directory)
+            set_problem(directory, reclaimed.get("problem"), slot="maps")
             op = OperationLock(directory)
             if not op.try_acquire():
                 raise RuntimeError(LOCKED_MESSAGE)
@@ -276,6 +284,7 @@ async def serve(directory):
                     interrupted = True
             (Path(directory) / "worker-heartbeat.json").unlink(missing_ok=True)
             set_problem(directory)
+            set_problem(directory, slot="maps")
             if op is not None:
                 op.close()
             if interrupted:

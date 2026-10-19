@@ -80,7 +80,7 @@ async def test_loop_survives_storage_error_and_clears_problem(tmp_path, monkeypa
     monkeypatch.setattr(worker_scheduler, "ParallelWorkScheduler", FakeScheduler)
     problems = []
     real = worker.set_problem
-    monkeypatch.setattr(worker, "set_problem", lambda d, p=None: (problems.append(p), real(d, p)))
+    monkeypatch.setattr(worker, "set_problem", lambda d, p=None, **kw: (problems.append(p), real(d, p, **kw)))
     task = asyncio.create_task(worker.serve(tmp_path))
     try:
         await asyncio.wait_for(store.recovered.wait(), 10)

@@ -4,6 +4,7 @@ from . import maps_policy
 
 EMPTY_RETRY_SECONDS = (600, 1800)
 CRASH_RETRY_SECONDS = (120, 600, 1800)
+BUSY_RETRY_SECONDS = 30
 
 
 def timestamp(at):
@@ -21,6 +22,12 @@ def claimed(payload):
 def outcome(payload, result, access):
     meta = dict(payload.get('maps') or {})
     reason = result.get('stop_reason','')
+    if reason in maps_policy.BUSY:
+        # Undo claimed(): the query never ran. Float seconds, compared with time.time() on claim.
+        meta['attempts'] = max(0, meta.get('attempts',1)-1)
+        meta['cycle_attempts'] = max(0, meta.get('cycle_attempts',1)-1)
+        meta.update(next_attempt_at=maps_policy.time.time()+BUSY_RETRY_SECONDS, last_stop_reason=reason)
+        return meta, True
     retry = bool(access and access['auto_retry'])
     next_at = access['not_before'] if retry else None
     # Ambiguous empty output is a local query problem; it must not halt other queries.
