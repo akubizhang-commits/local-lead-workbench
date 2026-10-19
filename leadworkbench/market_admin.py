@@ -16,6 +16,9 @@ DEFAULT_MONTHS = {"discovery": 1, "refresh": 3}
 DEFAULT_TIMEZONE = "Asia/Shanghai"
 SCHEDULE_EXISTS = "该市场已有启用中的定时计划（每 {n} 个月，下次 {date}）。请直接修改这个计划。"
 SCHEDULE_FILLED = "补齐计划缺失的设置后重新计算下次时间"
+MARKET_ARCHIVED = "市场已归档，请先恢复后再操作。"
+MARKET_EXISTS = "已有相同地区和关键词的目标市场「{name}」，请直接使用该市场。"
+KEYWORDS_REASON = "用户修改关键词；下一轮起按新关键词检索，已有企业保留"
 
 
 def _default_months(kind):
@@ -129,8 +132,14 @@ class MarketAdminMixin:
                 self._reschedule_if_overdue(con, fresh, now, force=timing)
         return self.schedule(id)
 
+    @staticmethod
+    def _archived_at(con, task_id):
+        row = con.execute("SELECT archived_at FROM task_state WHERE task_id=?", (task_id,)).fetchone()
+        return row[0] if row else None
+
     def _ensure_not_archived(self, con, task_id):
-        """Hook for archive checks (design §6.2); archiving lands with task_state."""
+        if task_id and self._archived_at(con, task_id):
+            raise Conflict(MARKET_ARCHIVED, code="market_archived")
 
     def schedule(self, id):
         found = [s for s in self.schedules(_ids=(id,))]
@@ -251,3 +260,86 @@ class MarketAdminMixin:
             if not payload.get("pending"):
                 return payload
         return self._round_summary_payload(con, dict(run), market_id, False)
+
+    # ---- keyword edits (design §6.1) ----------------------------------------------
+
+    def _stored_market_payload(self, con, task_row, keywords):
+        """Identity payload from stored data: tasks row plus task_geography.place_id (no validate_selection)."""
+        row = con.execute("SELECT payload FROM task_geography WHERE task_id=?", (task_row["id"],)).fetchone()
+        try:
+            geography = json.loads(row[0]) if row else None
+        except ValueError:
+            geography = None
+        return {"country": task_row["country"], "state": task_row["state"], "city": task_row["city"],
+                "company_types": json.loads(task_row["company_types"] or "[]"), "keywords": keywords,
+                "place_id": (geography or {}).get("place_id"), "geography": geography}
+
+    def _other_market(self, con, identities, market_id):
+        """First other market owning one of these identities, as {id, name, archived}."""
+        for identity in identities:
+            row = con.execute("""SELECT t.id,t.name FROM market_keys k JOIN tasks t ON t.id=k.task_id
+                WHERE k.identity=? AND k.task_id<>?""", (identity, market_id)).fetchone()
+            if row:
+                return {"id": row["id"], "name": row["name"], "archived": bool(self._archived_at(con, row["id"]))}
+        return None
+
+    def _expanded_keywords(self, task_row, keywords, industry):
+        from .industry_presets import MAX_KEYWORDS, TOO_MANY, merge_keywords
+        # The preset expands with the market's own stored company types (R3-1).
+        merged = merge_keywords(keywords, industry, json.loads(task_row["company_types"] or "[]"))
+        if len(merged) > MAX_KEYWORDS:
+            raise Invalid(TOO_MANY)
+        return merged
+
+    def update_market_keywords(self, id, keywords, industry=None):
+        from .market_store import normalized
+        with self.connect() as con:
+            self._begin(con)
+            task = con.execute("SELECT * FROM tasks WHERE id=?", (id,)).fetchone()
+            if not task:
+                raise NotFound("市场不存在")
+            self._ensure_not_archived(con, id)
+            new = self._expanded_keywords(task, keywords, industry)
+            old = json.loads(task["keywords"] or "[]")
+            if new == sorted({normalized(v) for v in old if normalized(v)}):
+                unchanged = True
+            else:
+                unchanged = False
+                self._replace_keywords(con, task, old, new)
+        if not unchanged:
+            log.info("market keywords updated", extra={"event": "market_keywords_updated", "market_id": id})
+        return self.task(id)
+
+
+    def _replace_keywords(self, con, task, old, new):
+        from .market_store import market_name
+        id = task["id"]
+        payload = self._stored_market_payload(con, task, new)
+        identities = self._market_identities(con, payload)
+        other = self._other_market(con, identities, id)
+        if other:
+            log.info("market keyword edit conflicts with another market",
+                     extra={"event": "market_exists", "market_id": id})
+            raise Conflict(MARKET_EXISTS.format(name=other["name"]), code="market_exists",
+                           existing_id=other["id"], archived=other["archived"])
+        previous = [r[0] for r in con.execute("SELECT identity FROM market_keys WHERE task_id=? ORDER BY identity", (id,))]
+        # market_keys is derived from region + keywords: replaced as a whole, old rows kept in market_changes.
+        con.execute("DELETE FROM market_keys WHERE task_id=?", (id,))
+        con.executemany("INSERT OR IGNORE INTO market_keys(identity,task_id) VALUES(?,?)", [(k, id) for k in identities])
+        con.execute("UPDATE tasks SET keywords=?,name=? WHERE id=?", (canonical(new), market_name(payload), id))
+        con.execute("""INSERT INTO market_changes(id,market_id,field,old_value,new_value,reason,created_at)
+            VALUES(?,?,?,?,?,?,?)""", (ident(), id, "keywords", canonical({"keywords": old, "identities": previous}),
+                                       canonical(new), KEYWORDS_REASON, stamp()))
+
+    def preview_market_edit(self, market_id, keywords, industry=None):
+        """Preview of an edit: region and company types come from the market; this market is excluded."""
+        from .market_plan import estimate_queries
+        with self.connect() as con:
+            task = con.execute("SELECT * FROM tasks WHERE id=?", (market_id,)).fetchone()
+            if not task:
+                raise NotFound("市场不存在")
+            new = self._expanded_keywords(task, keywords, industry)
+            payload = self._stored_market_payload(con, task, new)
+            other = self._other_market(con, self._market_identities(con, payload), market_id)
+        return {**estimate_queries(payload), "keywords": new, "existing_market": other,
+                "existing_market_scope": "edit"}

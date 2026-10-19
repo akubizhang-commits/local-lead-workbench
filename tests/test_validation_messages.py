@@ -69,3 +69,11 @@ def test_url_table(english, chinese):
 def test_unknown_english_has_chinese_fallback():
     [item] = translate_errors([{"loc": ("body",), "msg": "Something odd", "type": "custom"}])
     assert item["msg"] == "输入不符合要求（Something odd）"
+def _market(client):
+    return client.post("/api/tasks", json={"state": "California", "city": "San Jose", "keywords": ["metal supplier"]}).json()
+def test_market_patch_needs_keywords_or_a_preset(client):
+    body = detail(client.patch(f"/api/tasks/{_market(client)['id']}", json={}))
+    assert [(e["loc"], e["msg"]) for e in body] == [(["body", "keywords"], "请填写检索关键词，或从预设行业中选择一个")]
+def test_market_patch_rejects_region_fields(client):
+    body = detail(client.patch(f"/api/tasks/{_market(client)['id']}", json={"keywords": ["x"], "city": "Campbell"}))
+    assert [(e["loc"], e["msg"]) for e in body] == [(["body", "city"], "不支持此字段")]

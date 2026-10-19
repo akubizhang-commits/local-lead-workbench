@@ -47,6 +47,7 @@ MISSING = [
     ("POST", "/api/companies/missing/social/outreach", {"entity_id": "e", "state": "draft", "note": "n"}),
     ("POST", "/api/reviews/missing/decision", {"decision": "accept"}),
     ("PATCH", "/api/schedules/missing", {"enabled": True}),
+    ("PATCH", "/api/tasks/missing", {"keywords": ["x"]}),
     ("GET", "/api/export-jobs/missing", None),
     ("POST", "/api/export-jobs/missing/cancel", None),
     ("GET", "/api/export-jobs/missing/file", None),

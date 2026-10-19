@@ -261,13 +261,13 @@ class MarketStoreMixin:
             market = self._existing_market(con, existing)
         keywords = sorted({normalized(v) for v in payload.get("keywords", []) if normalized(v)})
         return {**estimate_queries({**payload, "keywords": keywords}), "keywords": keywords,
-                "existing_market": market}
+                "existing_market": market, "existing_market_scope": "create"}
 
     def _existing_market(self, con, task_id):
         if not task_id:
             return None
         row = con.execute("SELECT id,name FROM tasks WHERE id=?", (task_id,)).fetchone()
-        return {"id": row["id"], "name": row["name"], "archived": False} if row else None
+        return {"id": row["id"], "name": row["name"], "archived": bool(self._archived_at(con, row["id"]))} if row else None
 
     def _market_run(self, con, run_id):
         return con.execute("SELECT * FROM market_runs WHERE run_id=?", (run_id,)).fetchone() if run_id else None

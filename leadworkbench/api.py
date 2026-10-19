@@ -8,7 +8,7 @@ from typing import Annotated, Literal
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import FastAPI, HTTPException, Request, Query
+from fastapi import Body, FastAPI, HTTPException, Request, Query
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from starlette.concurrency import run_in_threadpool
@@ -255,6 +255,37 @@ class TaskInput(TaskSocialSettingsInput):
             raise ValueError("州省和城市不能为空")
         self.city, self.state = (v.strip() for v in (self.city, self.state))
         return self
+
+
+class MarketPatch(Input):
+    """Keyword edit; regions cannot change (extra=forbid -> 422 on body.<field>, design §6.1).
+    No preset expansion here: the Store expands with the market's stored company types (R3-1)."""
+    industry: str | None = Field(default=None, max_length=40)
+    keywords: list[str] = Field(default_factory=list, max_length=30, validate_default=True)
+
+    @field_validator("industry")
+    @classmethod
+    def industry_valid(cls, value):
+        return industry_valid(value)
+
+    @field_validator("keywords")
+    @classmethod
+    def keywords_valid(cls, value, info: ValidationInfo):
+        return keywords_required(value, info)
+
+
+class MarketPreviewInput(MarketPatch):
+    """Preview of an edit: region and company types come from the stored market (D11)."""
+    market_id: str = Field(min_length=1, max_length=64)
+
+
+def validated(model, raw):
+    """Validate a raw JSON body like FastAPI does (422 with body-prefixed locations)."""
+    from pydantic import ValidationError
+    try:
+        return model.model_validate(raw)
+    except ValidationError as exc:
+        raise RequestValidationError([{**e, "loc": ("body", *e["loc"])} for e in exc.errors()]) from None
 
 
 class CompanyInput(Input):
@@ -705,10 +736,19 @@ def create_app(data_dir=None, *, allowed_hosts=None):
         return store.create_market(body.model_dump())
 
     @app.post("/api/tasks/preview")
-    def preview_task(body: TaskInput):
+    def preview_task(body: Annotated[dict, Body()]):
         # Same validation and order as create; no writes and no network (design §8.2).
-        ensure_keyword_limit(body.keywords)
-        return store.preview_market(body.model_dump())
+        # With market_id it previews an edit of that market instead (D11).
+        if "market_id" in body:
+            edit = validated(MarketPreviewInput, body)
+            return store.preview_market_edit(edit.market_id, edit.keywords, edit.industry)
+        task = validated(TaskInput, body)
+        ensure_keyword_limit(task.keywords)
+        return store.preview_market(task.model_dump())
+
+    @app.patch("/api/tasks/{id}")
+    def update_task(id: str, body: MarketPatch):
+        return store.update_market_keywords(id, body.keywords, body.industry)
 
     @app.get("/api/industry-presets")
     def industry_presets():
