@@ -8,7 +8,8 @@ import { CategoryFilter } from "../CategoryFilter";
 import { ExclusionRules } from "../ExclusionRules";
 import { useResource } from "../hooks";
 import { defaultFilters } from "../navigation";
-import type { Company, CompanyPage, Task } from "../types";
+import type { Company, CompanyPage, Task, CityCount } from "../types";
+import { ActualCityCell } from "../ActualCity";
 import { Alert, Badge, Empty, Icon } from "../ui";
 
 import { Resource } from "../Resource";
@@ -96,6 +97,10 @@ export function CompaniesPage({
   exportDays?: number;
 }) {
   const tasks = useResource<Task[]>("/tasks", version, true);
+  const cities = useResource<CityCount[]>(
+    `/company-cities?${new URLSearchParams({ market_id: filters.market_id || "", excluded: "hide" })}`,
+    version,
+  );
   const companies = useResource<CompanyPage>(
     `/company-page?${filtersQuery(filters, page)}`,
     version,
@@ -228,6 +233,27 @@ export function CompaniesPage({
           <option value="email">其他邮箱优先</option>
           <option value="updated">最近更新优先</option>
           <option value="tier">入口等级优先</option>
+        </select>
+        <select
+          aria-label="实际城市筛选"
+          value={filters.actual_city || ""}
+          onChange={(e) => updateFilters({ actual_city: e.target.value })}
+        >
+          <option value="">全部城市</option>
+          {cities.data?.map((city) => (
+            <option key={city.city_key} value={city.city}>
+              {city.city}（{city.count} 家）{city.nearby ? " · 邻近" : ""}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="邻近城市筛选"
+          value={filters.nearby || ""}
+          onChange={(e) => updateFilters({ nearby: e.target.value as Filters["nearby"] })}
+        >
+          <option value="">全部</option>
+          <option value="only">只看邻近城市</option>
+          <option value="hide">隐藏邻近城市</option>
         </select>
         <CategoryFilter
           marketId={filters.market_id}
@@ -396,10 +422,7 @@ export function CompaniesPage({
                         <span className="avatar">{c.name.slice(0, 1)}</span>
                         <span>
                           <strong>{c.name}</strong>
-                          <small>
-                            {[c.city, c.country].filter(Boolean).join(" / ") ||
-                              "地区未记录"}
-                          </small>
+                          <ActualCityCell company={c} />
                           {c.exclusion && (
                             <small className="badge badge-excluded">
                               已排除：{c.exclusion.kind === "category" ? "类别" : "关键词"} {c.exclusion.value}

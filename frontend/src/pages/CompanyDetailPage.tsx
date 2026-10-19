@@ -2,6 +2,7 @@ import { useState } from "react";
 import { CompanyStatus } from "../CompanyStatus";
 import { ContactEntrySummary } from "../ContactEntrySummary";
 import { ManualContactForm } from "../ManualContactForm";
+import { ActualCityLine } from "../ActualCity";
 import { date, display, label } from "../helpers";
 import { type View } from "../navigation";
 import { RelatedLocations } from "../RelatedLocations";
@@ -68,6 +69,7 @@ export function CompanyDetailPage({
                     .join(" / ") || "地区未记录"}{" "}
                   · 建档于 {date(detail.data.company.created_at)}
                 </p>
+                <ActualCityLine company={detail.data.company} />
               </div>
               <CompanyStatus
                 company={detail.data.company}
