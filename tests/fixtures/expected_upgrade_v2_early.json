@@ -1,0 +1,1132 @@
+{
+ "commit": "913ee04",
+ "fixture": "v2_early",
+ "generated_by": "tests/fixtures/build_expected_upgrade.py",
+ "ledger_ids": [
+  "contact_facets_v1",
+  "contact_facets_v1_mark",
+  "p0_20261018_categories",
+  "p0_20261018_contact_proposals",
+  "p0_20261018_facets_schema",
+  "p0_20261018_indexes",
+  "p0_20261018_repair_rejected"
+ ],
+ "sqlite_master_names": [
+  "changes",
+  "changes_company",
+  "companies",
+  "companies_newest",
+  "companies_status",
+  "company_categories",
+  "company_categories_key",
+  "company_manual_checks",
+  "company_social",
+  "company_type_hints",
+  "contact_change_proposals",
+  "contact_decisions",
+  "contact_facets",
+  "contact_facets_company",
+  "contact_facets_company_email",
+  "contact_facets_dirty",
+  "contact_proposals_contact",
+  "contact_versions",
+  "contact_versions_contact",
+  "contacts",
+  "contacts_company",
+  "contacts_company_email",
+  "contacts_facets_delete",
+  "contacts_facets_insert",
+  "contacts_facets_update",
+  "exclusion_rules",
+  "exclusion_rules_unique",
+  "listing_alias_source",
+  "listing_aliases",
+  "listings",
+  "listings_company",
+  "locations",
+  "locations_company",
+  "manual_contacts",
+  "manual_contacts_facets_insert",
+  "manual_contacts_facets_update",
+  "maps_access_policy",
+  "market_keys",
+  "market_membership_company",
+  "market_memberships",
+  "market_runs",
+  "market_runs_market",
+  "market_social_runs",
+  "observations",
+  "observations_company",
+  "observations_company_field",
+  "occurrences",
+  "review_evidence",
+  "review_evidence_review",
+  "reviews",
+  "reviews_company_field",
+  "reviews_contact",
+  "reviews_status",
+  "run_companies",
+  "run_companies_market",
+  "runs",
+  "schedules",
+  "schema_migrations",
+  "social_config",
+  "social_decisions",
+  "social_entities",
+  "social_evidence",
+  "social_evidence_company",
+  "social_migrations",
+  "social_outreach",
+  "social_page_observations",
+  "social_platform_gates",
+  "social_runs",
+  "social_work",
+  "social_work_state",
+  "sqlite_stat1",
+  "task_geography",
+  "task_metadata",
+  "task_social_settings",
+  "tasks",
+  "website_host_gates",
+  "work_items",
+  "work_items_run",
+  "work_items_target"
+ ],
+ "tables": {
+  "changes": [
+   {
+    "company_id": "c1",
+    "created_at": "<volatile>",
+    "field": "contact",
+    "id": "<volatile>",
+    "new_value": "{\"name\": \"Bob Buyer\", \"role\": \"Buyer\", \"kind\": \"procurement\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"evidence\": \"Bob Buyer | Buyer | bob@alpha.example\"}",
+    "old_value": "{\"name\": \"Robert Other\", \"role\": \"Sales Rep\", \"kind\": \"general\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"evidence\": \"Robert Other | Sales Rep | bob@alpha.example\"}",
+    "reason": "数据修复：恢复因‘标记为不采用’被误排除的原联系人（修复前备份 <name>）"
+   },
+   {
+    "company_id": "c1",
+    "created_at": "<volatile>",
+    "field": "phone",
+    "id": "<volatile>",
+    "new_value": "+1 408-555-0101",
+    "old_value": "+1 408-555-0100",
+    "reason": "审核已接受"
+   },
+   {
+    "company_id": "c3",
+    "created_at": "<volatile>",
+    "field": "phone",
+    "id": "<volatile>",
+    "new_value": "+1 408-555-0303",
+    "old_value": "",
+    "reason": "自动补全旧空字段"
+   }
+  ],
+  "companies": [
+   {
+    "address": "1 First St, San Jose, CA 95112",
+    "business_types": "[]",
+    "city": "San Jose",
+    "country": "US",
+    "created_at": "2026-01-01T08:00:00+00:00",
+    "id": "c1",
+    "last_checked_at": null,
+    "merged_into": null,
+    "name": "Alpha Supply",
+    "notes": "",
+    "overrides": "[\"phone\"]",
+    "phone": "+1 408-555-0101",
+    "revision": 2,
+    "social_links": "[]",
+    "source_kind": "maps",
+    "status": "candidate",
+    "website": "https://alpha.example"
+   },
+   {
+    "address": "2 Second St, San Jose, CA 95113",
+    "business_types": "[]",
+    "city": "San Jose",
+    "country": "US",
+    "created_at": "2026-01-01T08:00:00+00:00",
+    "id": "c2",
+    "last_checked_at": null,
+    "merged_into": null,
+    "name": "Alpha Supply",
+    "notes": "",
+    "overrides": "[]",
+    "phone": "+1 408-555-0102",
+    "revision": 1,
+    "social_links": "[]",
+    "source_kind": "maps",
+    "status": "candidate",
+    "website": "https://alpha.example"
+   },
+   {
+    "address": "3 Third St, San Jose, CA 95110",
+    "business_types": "[]",
+    "city": "San Jose",
+    "country": "US",
+    "created_at": "2026-01-01T08:00:00+00:00",
+    "id": "c3",
+    "last_checked_at": null,
+    "merged_into": null,
+    "name": "Gamma Metals",
+    "notes": "",
+    "overrides": "[]",
+    "phone": "+1 408-555-0303",
+    "revision": 2,
+    "social_links": "[]",
+    "source_kind": "maps",
+    "status": "candidate",
+    "website": "https://gamma.example"
+   },
+   {
+    "address": "4 Fourth St, San Jose, CA 95111",
+    "business_types": "[]",
+    "city": "San Jose",
+    "country": "US",
+    "created_at": "2026-01-01T08:00:00+00:00",
+    "id": "c4",
+    "last_checked_at": null,
+    "merged_into": null,
+    "name": "Delta Building",
+    "notes": "",
+    "overrides": "[]",
+    "phone": "+1 408-555-0404",
+    "revision": 1,
+    "social_links": "[]",
+    "source_kind": "maps",
+    "status": "candidate",
+    "website": "https://delta.example"
+   },
+   {
+    "address": "5 Old Rd, San Jose, CA 95116",
+    "business_types": "[]",
+    "city": "San Jose",
+    "country": "US",
+    "created_at": "2026-01-01T08:00:00+00:00",
+    "id": "c5",
+    "last_checked_at": null,
+    "merged_into": null,
+    "name": "Epsilon Roofing",
+    "notes": "",
+    "overrides": "[]",
+    "phone": "+1 408-555-0505",
+    "revision": 1,
+    "social_links": "[]",
+    "source_kind": "maps",
+    "status": "candidate",
+    "website": ""
+   }
+  ],
+  "company_categories": [
+   {
+    "category": "Metal supplier",
+    "category_key": "metal supplier",
+    "company_id": "c2",
+    "first_seen": "2026-01-01T08:00:00+00:00",
+    "last_seen": "2026-01-01T08:00:00+00:00",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_2"
+   },
+   {
+    "category": "Metal supplier",
+    "category_key": "metal supplier",
+    "company_id": "c4",
+    "first_seen": "2026-01-01T08:00:00+00:00",
+    "last_seen": "2026-01-01T08:00:00+00:00",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_4"
+   },
+   {
+    "category": "Roofing supply store",
+    "category_key": "roofing supply store",
+    "company_id": "c1",
+    "first_seen": "2026-01-01T08:00:00+00:00",
+    "last_seen": "2026-01-01T08:00:00+00:00",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_1"
+   },
+   {
+    "category": "Roofing supply store",
+    "category_key": "roofing supply store",
+    "company_id": "c3",
+    "first_seen": "2026-01-01T08:00:00+00:00",
+    "last_seen": "2026-01-01T08:00:00+00:00",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_3"
+   },
+   {
+    "category": "Roofing supply store",
+    "category_key": "roofing supply store",
+    "company_id": "c5",
+    "first_seen": "2026-01-01T08:00:00+00:00",
+    "last_seen": "2026-01-01T08:00:00+00:00",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_5"
+   }
+  ],
+  "company_manual_checks": [],
+  "company_social": [],
+  "company_type_hints": [
+   {
+    "business_type": "retailer",
+    "company_id": "c4",
+    "created_at": "<volatile>",
+    "market_id": "t2"
+   },
+   {
+    "business_type": "retailer",
+    "company_id": "c5",
+    "created_at": "<volatile>",
+    "market_id": "t2"
+   },
+   {
+    "business_type": "wholesaler",
+    "company_id": "c1",
+    "created_at": "<volatile>",
+    "market_id": "t1"
+   },
+   {
+    "business_type": "wholesaler",
+    "company_id": "c2",
+    "created_at": "<volatile>",
+    "market_id": "t1"
+   },
+   {
+    "business_type": "wholesaler",
+    "company_id": "c3",
+    "created_at": "<volatile>",
+    "market_id": "t1"
+   }
+  ],
+  "contact_change_proposals": [
+   {
+    "contact_id": "k2",
+    "created_at": "<volatile>",
+    "decided_at": "<volatile>",
+    "origin": "repair",
+    "proposal": "{\"name\": \"Robert Other\", \"role\": \"Sales Rep\", \"kind\": \"general\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"evidence\": \"Robert Other | Sales Rep | bob@alpha.example\", \"source_url\": \"https://alpha.example/about\", \"observed_at\": \"2026-01-03T08:00:00+00:00\"}",
+    "proposal_key": "b44bda96fccdc71311ef9552f0ed5b3f02c305f31b845915eedcca9c55f26a4f",
+    "review_id": "rv2",
+    "status": "rejected"
+   }
+  ],
+  "contact_decisions": [
+   {
+    "adoption_status": "accepted",
+    "contact_id": "k1",
+    "decided_at": "2026-01-02T08:00:00+00:00"
+   }
+  ],
+  "contact_facets": [
+   {
+    "category": "email",
+    "channel_ok": 1,
+    "company_id": "c2",
+    "contact_id": "k3",
+    "email_key": "info@alpha2.example",
+    "identity_key": "[\"c2\",\"\",\"\",\"info@alpha2.example\",\"\",\"general\",\"unknown\",\"company_only\"]",
+    "tier": "general_email",
+    "tier_rank": 5,
+    "version": 1
+   },
+   {
+    "category": "email",
+    "channel_ok": 1,
+    "company_id": "c4",
+    "contact_id": "k4",
+    "email_key": "carl@delta.example",
+    "identity_key": "[\"c4\",\"carla other\",\"sales rep\",\"carl@delta.example\",\"\",\"general\",\"explicit\",\"same_block\"]",
+    "tier": "named_role",
+    "tier_rank": 2,
+    "version": 1
+   },
+   {
+    "category": "procurement",
+    "channel_ok": 1,
+    "company_id": "c1",
+    "contact_id": "k1",
+    "email_key": "ann@alpha.example",
+    "identity_key": "[\"c1\",\"ann buyer\",\"buyer\",\"ann@alpha.example\",\"\",\"procurement\",\"explicit\",\"same_block\"]",
+    "tier": "named_procurement",
+    "tier_rank": 1,
+    "version": 1
+   },
+   {
+    "category": "procurement",
+    "channel_ok": 1,
+    "company_id": "c1",
+    "contact_id": "k2",
+    "email_key": "bob@alpha.example",
+    "identity_key": "[\"c1\",\"bob buyer\",\"buyer\",\"bob@alpha.example\",\"\",\"procurement\",\"explicit\",\"same_block\"]",
+    "tier": "named_procurement",
+    "tier_rank": 1,
+    "version": 1
+   }
+  ],
+  "contact_facets_dirty": [],
+  "contact_versions": [],
+  "contacts": [
+   {
+    "association_status": "company_only",
+    "company_id": "c2",
+    "email": "info@alpha2.example",
+    "evidence": "Email: info@alpha2.example",
+    "fingerprint": "fp-k3",
+    "id": "k3",
+    "kind": "general",
+    "name": "",
+    "observed_at": "2026-01-02T08:00:00+00:00",
+    "review_status": "auto_recorded",
+    "role": "",
+    "role_status": "unknown",
+    "source_url": "https://alpha.example/contact",
+    "url": ""
+   },
+   {
+    "association_status": "same_block",
+    "company_id": "c1",
+    "email": "ann@alpha.example",
+    "evidence": "Ann Buyer | Buyer | ann@alpha.example",
+    "fingerprint": "fp-k1",
+    "id": "k1",
+    "kind": "procurement",
+    "name": "Ann Buyer",
+    "observed_at": "2026-01-02T08:00:00+00:00",
+    "review_status": "accept",
+    "role": "Buyer",
+    "role_status": "explicit",
+    "source_url": "https://alpha.example/team",
+    "url": ""
+   },
+   {
+    "association_status": "same_block",
+    "company_id": "c1",
+    "email": "bob@alpha.example",
+    "evidence": "Bob Buyer | Buyer | bob@alpha.example",
+    "fingerprint": "fp-k2",
+    "id": "k2",
+    "kind": "procurement",
+    "name": "Bob Buyer",
+    "observed_at": "2026-01-03T08:00:00+00:00",
+    "review_status": "auto_recorded",
+    "role": "Buyer",
+    "role_status": "explicit",
+    "source_url": "https://alpha.example/about",
+    "url": ""
+   },
+   {
+    "association_status": "same_block",
+    "company_id": "c4",
+    "email": "carl@delta.example",
+    "evidence": "Carla Other | Sales Rep | carl@delta.example",
+    "fingerprint": "fp-k4",
+    "id": "k4",
+    "kind": "general",
+    "name": "Carla Other",
+    "observed_at": "2026-01-03T08:00:00+00:00",
+    "review_status": "pending",
+    "role": "Sales Rep",
+    "role_status": "explicit",
+    "source_url": "https://delta.example/about",
+    "url": ""
+   }
+  ],
+  "exclusion_rules": [],
+  "listing_aliases": [
+   {
+    "alias": "google_maps:place_id:EARLY_1",
+    "source_key": "google_maps:place_id:EARLY_1"
+   },
+   {
+    "alias": "google_maps:place_id:EARLY_2",
+    "source_key": "google_maps:place_id:EARLY_2"
+   },
+   {
+    "alias": "google_maps:place_id:EARLY_3",
+    "source_key": "google_maps:place_id:EARLY_3"
+   },
+   {
+    "alias": "google_maps:place_id:EARLY_4",
+    "source_key": "google_maps:place_id:EARLY_4"
+   },
+   {
+    "alias": "google_maps:place_id:EARLY_5",
+    "source_key": "google_maps:place_id:EARLY_5"
+   },
+   {
+    "alias": "google_maps:url:0bc2bf00639de19f9e84ae211e805185136ca4a2e25d1ebc831f91764c7dfab5",
+    "source_key": "google_maps:place_id:EARLY_5"
+   },
+   {
+    "alias": "google_maps:url:0cfa44771558cc09aa603f7ca643dcc1658a0d21c99f26fc90b119625dda065c",
+    "source_key": "google_maps:place_id:EARLY_4"
+   },
+   {
+    "alias": "google_maps:url:535f8b762c202bdda7cc8a304c79957fcfa58c2823f9e2c7dc231bedac91ce26",
+    "source_key": "google_maps:place_id:EARLY_2"
+   },
+   {
+    "alias": "google_maps:url:688274f9f6fa4dff11e025902ece8871cd6fa0ca66dc4034fe99f064124acfbb",
+    "source_key": "google_maps:place_id:EARLY_1"
+   },
+   {
+    "alias": "google_maps:url:9d3a0338bafcce2c9011ff110910bfece7af30153870ed403812166d6f055467",
+    "source_key": "google_maps:place_id:EARLY_3"
+   }
+  ],
+  "listings": [
+   {
+    "company_id": "c1",
+    "first_seen": "2026-01-01T08:00:00+00:00",
+    "last_seen": "2026-01-02T08:00:00+00:00",
+    "source_key": "google_maps:place_id:EARLY_1",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_1"
+   },
+   {
+    "company_id": "c2",
+    "first_seen": "2026-01-01T08:00:00+00:00",
+    "last_seen": "2026-01-02T08:00:00+00:00",
+    "source_key": "google_maps:place_id:EARLY_2",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_2"
+   },
+   {
+    "company_id": "c3",
+    "first_seen": "2026-01-01T08:00:00+00:00",
+    "last_seen": "2026-01-02T08:00:00+00:00",
+    "source_key": "google_maps:place_id:EARLY_3",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_3"
+   },
+   {
+    "company_id": "c4",
+    "first_seen": "2026-01-01T08:00:00+00:00",
+    "last_seen": "2026-01-02T08:00:00+00:00",
+    "source_key": "google_maps:place_id:EARLY_4",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_4"
+   },
+   {
+    "company_id": "c5",
+    "first_seen": "2026-01-01T08:00:00+00:00",
+    "last_seen": "2026-01-02T08:00:00+00:00",
+    "source_key": "google_maps:place_id:EARLY_5",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_5"
+   }
+  ],
+  "locations": [
+   {
+    "address": "1 Street",
+    "company_id": "c1",
+    "id": "l1",
+    "latitude": 37.309999999999995,
+    "longitude": -121.91000000000001,
+    "observed_at": "2026-01-01T08:00:00+00:00",
+    "source_key": "google_maps:place_id:EARLY_1",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_1"
+   },
+   {
+    "address": "2 Street",
+    "company_id": "c2",
+    "id": "l2",
+    "latitude": 37.32,
+    "longitude": -121.92,
+    "observed_at": "2026-01-01T08:00:00+00:00",
+    "source_key": "google_maps:place_id:EARLY_2",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_2"
+   },
+   {
+    "address": "3 Street",
+    "company_id": "c3",
+    "id": "l3",
+    "latitude": 37.33,
+    "longitude": -121.93,
+    "observed_at": "2026-01-01T08:00:00+00:00",
+    "source_key": "google_maps:place_id:EARLY_3",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_3"
+   },
+   {
+    "address": "4 Street",
+    "company_id": "c4",
+    "id": "l4",
+    "latitude": 37.339999999999996,
+    "longitude": -121.94000000000001,
+    "observed_at": "2026-01-01T08:00:00+00:00",
+    "source_key": "google_maps:place_id:EARLY_4",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_4"
+   },
+   {
+    "address": "5 Street",
+    "company_id": "c5",
+    "id": "l5",
+    "latitude": 37.349999999999994,
+    "longitude": -121.95,
+    "observed_at": "2026-01-01T08:00:00+00:00",
+    "source_key": "google_maps:place_id:EARLY_5",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_5"
+   }
+  ],
+  "manual_contacts": [],
+  "maps_access_policy": [
+   {
+    "failures": 0,
+    "id": 1,
+    "manual_required": 0,
+    "not_before": 0.0,
+    "reason": ""
+   }
+  ],
+  "market_keys": [
+   {
+    "identity": "early-key-t1",
+    "task_id": "t1"
+   },
+   {
+    "identity": "early-key-t2",
+    "task_id": "t2"
+   }
+  ],
+  "market_memberships": [
+   {
+    "company_id": "c1",
+    "first_run_id": "r1",
+    "first_seen": "2026-01-01T08:00:00+00:00",
+    "last_run_id": "r1",
+    "last_seen": "2026-01-01T08:00:00+00:00",
+    "market_id": "t1"
+   },
+   {
+    "company_id": "c2",
+    "first_run_id": "r1",
+    "first_seen": "2026-01-01T08:00:00+00:00",
+    "last_run_id": "r1",
+    "last_seen": "2026-01-01T08:00:00+00:00",
+    "market_id": "t1"
+   },
+   {
+    "company_id": "c3",
+    "first_run_id": "r1",
+    "first_seen": "2026-01-01T08:00:00+00:00",
+    "last_run_id": "r1",
+    "last_seen": "2026-01-01T08:00:00+00:00",
+    "market_id": "t1"
+   },
+   {
+    "company_id": "c4",
+    "first_run_id": "r2",
+    "first_seen": "2026-01-01T08:00:00+00:00",
+    "last_run_id": "r2",
+    "last_seen": "2026-01-01T08:00:00+00:00",
+    "market_id": "t2"
+   },
+   {
+    "company_id": "c5",
+    "first_run_id": "r2",
+    "first_seen": "2026-01-01T08:00:00+00:00",
+    "last_run_id": "r2",
+    "last_seen": "2026-01-01T08:00:00+00:00",
+    "market_id": "t2"
+   }
+  ],
+  "market_runs": [
+   {
+    "market_id": "t1",
+    "plan": "{}",
+    "run_id": "r1",
+    "unresolved": "[]"
+   },
+   {
+    "market_id": "t2",
+    "plan": "{}",
+    "run_id": "r2",
+    "unresolved": "[]"
+   }
+  ],
+  "market_social_runs": [],
+  "observations": [
+   {
+    "company_id": "c1",
+    "evidence": "Maps category",
+    "field": "category",
+    "fingerprint": "fp-o1b",
+    "id": "o1b",
+    "method": "maps",
+    "observed_at": "2026-01-01T08:00:00+00:00",
+    "query": "q",
+    "run_id": "r1",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_1",
+    "value": "Roofing supply store"
+   },
+   {
+    "company_id": "c1",
+    "evidence": "Maps listing",
+    "field": "name",
+    "fingerprint": "fp-o1a",
+    "id": "o1a",
+    "method": "maps",
+    "observed_at": "2026-01-01T08:00:00+00:00",
+    "query": "q",
+    "run_id": "r1",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_1",
+    "value": "x"
+   },
+   {
+    "company_id": "c2",
+    "evidence": "Maps category",
+    "field": "category",
+    "fingerprint": "fp-o2b",
+    "id": "o2b",
+    "method": "maps",
+    "observed_at": "2026-01-01T08:00:00+00:00",
+    "query": "q",
+    "run_id": "r1",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_2",
+    "value": "Metal supplier"
+   },
+   {
+    "company_id": "c2",
+    "evidence": "Maps listing",
+    "field": "name",
+    "fingerprint": "fp-o2a",
+    "id": "o2a",
+    "method": "maps",
+    "observed_at": "2026-01-01T08:00:00+00:00",
+    "query": "q",
+    "run_id": "r1",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_2",
+    "value": "x"
+   },
+   {
+    "company_id": "c3",
+    "evidence": "Maps category",
+    "field": "category",
+    "fingerprint": "fp-o3b",
+    "id": "o3b",
+    "method": "maps",
+    "observed_at": "2026-01-01T08:00:00+00:00",
+    "query": "q",
+    "run_id": "r1",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_3",
+    "value": "Roofing supply store"
+   },
+   {
+    "company_id": "c3",
+    "evidence": "Maps listing",
+    "field": "name",
+    "fingerprint": "fp-o3a",
+    "id": "o3a",
+    "method": "maps",
+    "observed_at": "2026-01-01T08:00:00+00:00",
+    "query": "q",
+    "run_id": "r1",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_3",
+    "value": "x"
+   },
+   {
+    "company_id": "c4",
+    "evidence": "Maps category",
+    "field": "category",
+    "fingerprint": "fp-o4b",
+    "id": "o4b",
+    "method": "maps",
+    "observed_at": "2026-01-01T08:00:00+00:00",
+    "query": "q",
+    "run_id": "r2",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_4",
+    "value": "Metal supplier"
+   },
+   {
+    "company_id": "c4",
+    "evidence": "Maps listing",
+    "field": "name",
+    "fingerprint": "fp-o4a",
+    "id": "o4a",
+    "method": "maps",
+    "observed_at": "2026-01-01T08:00:00+00:00",
+    "query": "q",
+    "run_id": "r2",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_4",
+    "value": "x"
+   },
+   {
+    "company_id": "c5",
+    "evidence": "Maps category",
+    "field": "category",
+    "fingerprint": "fp-o5b",
+    "id": "o5b",
+    "method": "maps",
+    "observed_at": "2026-01-01T08:00:00+00:00",
+    "query": "q",
+    "run_id": "r2",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_5",
+    "value": "Roofing supply store"
+   },
+   {
+    "company_id": "c5",
+    "evidence": "Maps listing",
+    "field": "name",
+    "fingerprint": "fp-o5a",
+    "id": "o5a",
+    "method": "maps",
+    "observed_at": "2026-01-01T08:00:00+00:00",
+    "query": "q",
+    "run_id": "r2",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_5",
+    "value": "x"
+   }
+  ],
+  "occurrences": [
+   {
+    "due_at": "2026-01-01T08:00:00+00:00",
+    "run_id": "r1",
+    "schedule_id": "s1"
+   }
+  ],
+  "review_evidence": [
+   {
+    "evidence": "Address A",
+    "fingerprint": "fp-rv8",
+    "observed_at": "2026-01-03T08:00:00+00:00",
+    "review_id": "rv8",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_5"
+   },
+   {
+    "evidence": "Address B",
+    "fingerprint": "fp-rv9",
+    "observed_at": "2026-01-04T08:00:00+00:00",
+    "review_id": "rv8",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_5"
+   },
+   {
+    "evidence": "Name",
+    "fingerprint": "fp-rv10",
+    "observed_at": "2026-01-03T08:00:00+00:00",
+    "review_id": "rv10",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_4"
+   },
+   {
+    "evidence": "Phone: +1 408-555-0101",
+    "fingerprint": "fp-rv3",
+    "observed_at": "2026-01-02T08:00:00+00:00",
+    "review_id": "rv3",
+    "source_url": "https://alpha.example/contact"
+   },
+   {
+    "evidence": "Phone: +1 408-555-0303",
+    "fingerprint": "fp-rv5",
+    "observed_at": "2026-01-02T08:00:00+00:00",
+    "review_id": "rv5",
+    "source_url": "https://gamma.example"
+   },
+   {
+    "evidence": "Phone: +14085550404；格式等价，保留现有值，无需审核",
+    "fingerprint": "fp-rv7",
+    "observed_at": "2026-01-03T08:00:00+00:00",
+    "review_id": "rv7",
+    "source_url": "https://delta.example"
+   }
+  ],
+  "reviews": [
+   {
+    "company_id": "c1",
+    "created_at": "2026-01-02T08:00:00+00:00",
+    "evidence": "Ann Buyer",
+    "field": "contact",
+    "fingerprint": "fp-rv1",
+    "id": "rv1",
+    "kind": "contact",
+    "new_value": "k1",
+    "old_value": "",
+    "source_url": "https://alpha.example/team",
+    "status": "accept"
+   },
+   {
+    "company_id": "c1",
+    "created_at": "2026-01-02T08:00:00+00:00",
+    "evidence": "Phone: +1 408-555-0101",
+    "field": "phone",
+    "fingerprint": "fp-rv3",
+    "id": "rv3",
+    "kind": "field_update",
+    "new_value": "+1 408-555-0101",
+    "old_value": "+1 408-555-0100",
+    "source_url": "https://alpha.example/contact",
+    "status": "accept"
+   },
+   {
+    "company_id": "c1",
+    "created_at": "2026-01-02T08:00:00+00:00",
+    "evidence": "同名同官网；同名同官网、地址和电话不同，自动保留独立门店",
+    "field": "company",
+    "fingerprint": "fp-rv4",
+    "id": "rv4",
+    "kind": "duplicate_candidate",
+    "new_value": "c2",
+    "old_value": "c1",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_2",
+    "status": "auto_separate"
+   },
+   {
+    "company_id": "c1",
+    "created_at": "2026-01-03T08:00:00+00:00",
+    "evidence": "Robert Other | Sales Rep",
+    "field": "contact",
+    "fingerprint": "fp-rv2",
+    "id": "rv2",
+    "kind": "contact",
+    "new_value": "k2",
+    "old_value": "{\"name\": \"Bob Buyer\", \"role\": \"Buyer\", \"kind\": \"procurement\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"evidence\": \"Bob Buyer | Buyer | bob@alpha.example\"}",
+    "source_url": "https://alpha.example/about",
+    "status": "reject"
+   },
+   {
+    "company_id": "c2",
+    "created_at": "2026-01-02T08:00:00+00:00",
+    "evidence": "Email: info@alpha2.example",
+    "field": "contact",
+    "fingerprint": "fp-rv6",
+    "id": "rv6",
+    "kind": "contact",
+    "new_value": "k3",
+    "old_value": "",
+    "source_url": "https://alpha.example/contact",
+    "status": "auto_recorded"
+   },
+   {
+    "company_id": "c3",
+    "created_at": "2026-01-02T08:00:00+00:00",
+    "evidence": "Phone: +1 408-555-0303",
+    "field": "phone",
+    "fingerprint": "fp-rv5",
+    "id": "rv5",
+    "kind": "field_update",
+    "new_value": "+1 408-555-0303",
+    "old_value": "",
+    "source_url": "https://gamma.example",
+    "status": "auto_recorded"
+   },
+   {
+    "company_id": "c4",
+    "created_at": "2026-01-03T08:00:00+00:00",
+    "evidence": "Carla Other | Sales Rep",
+    "field": "contact",
+    "fingerprint": "fp-rv11",
+    "id": "rv11",
+    "kind": "contact",
+    "new_value": "k4",
+    "old_value": "{\"name\": \"Carl Buyer\", \"role\": \"Buyer\", \"kind\": \"procurement\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"evidence\": \"Carl Buyer | Buyer | carl@delta.example\"}",
+    "source_url": "https://delta.example/about",
+    "status": "pending"
+   },
+   {
+    "company_id": "c4",
+    "created_at": "2026-01-03T08:00:00+00:00",
+    "evidence": "Name",
+    "field": "name",
+    "fingerprint": "fp-rv10",
+    "id": "rv10",
+    "kind": "field_update",
+    "new_value": "Delta Bldg",
+    "old_value": "Delta Building",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_4",
+    "status": "reject"
+   },
+   {
+    "company_id": "c4",
+    "created_at": "2026-01-03T08:00:00+00:00",
+    "evidence": "Phone: +14085550404；格式等价，保留现有值，无需审核",
+    "field": "phone",
+    "fingerprint": "fp-rv7",
+    "id": "rv7",
+    "kind": "field_update",
+    "new_value": "+14085550404",
+    "old_value": "+1 408-555-0404",
+    "source_url": "https://delta.example",
+    "status": "auto_recorded"
+   },
+   {
+    "company_id": "c5",
+    "created_at": "2026-01-03T08:00:00+00:00",
+    "evidence": "Address A",
+    "field": "address",
+    "fingerprint": "fp-rv8",
+    "id": "rv8",
+    "kind": "field_update",
+    "new_value": "9 New Rd, San Jose, CA 95116",
+    "old_value": "5 Old Rd, San Jose, CA 95116",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_5",
+    "status": "pending"
+   },
+   {
+    "company_id": "c5",
+    "created_at": "2026-01-04T08:00:00+00:00",
+    "evidence": "Address B；与同值建议合并",
+    "field": "address",
+    "fingerprint": "fp-rv9",
+    "id": "rv9",
+    "kind": "field_update",
+    "new_value": "9 New Rd, San Jose, CA 95116",
+    "old_value": "5 Old Rd, San Jose, CA 95116",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_5",
+    "status": "auto_closed"
+   }
+  ],
+  "run_companies": [
+   {
+    "changed": 0,
+    "company_id": "c1",
+    "first_seen": "2026-01-01T08:00:00+00:00",
+    "last_seen": "2026-01-01T08:00:00+00:00",
+    "market_id": "t1",
+    "run_id": "r1",
+    "segment": "new"
+   },
+   {
+    "changed": 0,
+    "company_id": "c2",
+    "first_seen": "2026-01-01T08:00:00+00:00",
+    "last_seen": "2026-01-01T08:00:00+00:00",
+    "market_id": "t1",
+    "run_id": "r1",
+    "segment": "new"
+   },
+   {
+    "changed": 0,
+    "company_id": "c3",
+    "first_seen": "2026-01-01T08:00:00+00:00",
+    "last_seen": "2026-01-01T08:00:00+00:00",
+    "market_id": "t1",
+    "run_id": "r1",
+    "segment": "new"
+   },
+   {
+    "changed": 0,
+    "company_id": "c4",
+    "first_seen": "2026-01-01T08:00:00+00:00",
+    "last_seen": "2026-01-01T08:00:00+00:00",
+    "market_id": "t2",
+    "run_id": "r2",
+    "segment": "new"
+   },
+   {
+    "changed": 0,
+    "company_id": "c5",
+    "first_seen": "2026-01-01T08:00:00+00:00",
+    "last_seen": "2026-01-01T08:00:00+00:00",
+    "market_id": "t2",
+    "run_id": "r2",
+    "segment": "new"
+   }
+  ],
+  "runs": [
+   {
+    "company_id": null,
+    "created_at": "2026-01-01T08:00:00+00:00",
+    "error": null,
+    "finished_at": null,
+    "id": "r1",
+    "kind": "discovery",
+    "message": "",
+    "progress": "{\"done\": 1, \"total\": 2}",
+    "snapshot": "{\"limit\": 0, \"mode\": \"market\"}",
+    "status": "queued",
+    "task_id": "t1"
+   },
+   {
+    "company_id": null,
+    "created_at": "2026-01-02T08:00:00+00:00",
+    "error": null,
+    "finished_at": "2026-01-03T08:00:00+00:00",
+    "id": "r2",
+    "kind": "discovery",
+    "message": "",
+    "progress": "{\"done\": 1, \"total\": 1}",
+    "snapshot": "{\"limit\": 20}",
+    "status": "succeeded",
+    "task_id": "t2"
+   }
+  ],
+  "schedules": [
+   {
+    "anchor": "2026-01-01T08:00:00+00:00",
+    "company_id": null,
+    "enabled": 1,
+    "id": "s1",
+    "interval_months": 3,
+    "kind": "discovery",
+    "next_due_at": "2026-04-01T08:00:00+00:00",
+    "task_id": "t1",
+    "timezone": "America/Los_Angeles"
+   }
+  ],
+  "social_config": [],
+  "social_decisions": [],
+  "social_entities": [],
+  "social_evidence": [],
+  "social_migrations": [
+   {
+    "name": "legacy_links_v1"
+   }
+  ],
+  "social_outreach": [],
+  "social_page_observations": [],
+  "social_platform_gates": [],
+  "social_runs": [],
+  "social_work": [],
+  "task_geography": [],
+  "task_metadata": [],
+  "task_social_settings": [],
+  "tasks": [
+   {
+    "auto_enrich": 0,
+    "city": "San Jose",
+    "company_types": "[\"wholesale\"]",
+    "country": "US",
+    "created_at": "2026-01-01T08:00:00+00:00",
+    "id": "t1",
+    "keywords": "[\"roofing supply\"]",
+    "limit": 0,
+    "name": "San Jose roofing",
+    "state": "California"
+   },
+   {
+    "auto_enrich": 1,
+    "city": "San Jose",
+    "company_types": "[\"retail\"]",
+    "country": "US",
+    "created_at": "2026-01-02T08:00:00+00:00",
+    "id": "t2",
+    "keywords": "[\"metal supplier\"]",
+    "limit": 0,
+    "name": "San Jose metal",
+    "state": "California"
+   }
+  ],
+  "website_host_gates": [],
+  "work_items": [
+   {
+    "id": "w-plan-r1",
+    "result": null,
+    "run_id": "r1",
+    "stage": "planning",
+    "state": "pending",
+    "target": "t1"
+   },
+   {
+    "id": "w3",
+    "result": "{\"found\": 2}",
+    "run_id": "r2",
+    "stage": "discovery",
+    "state": "succeeded",
+    "target": "metal supplier in San Jose"
+   }
+  ]
+ },
+ "volatile": {
+  "changes": [
+   "created_at",
+   "id"
+  ],
+  "company_type_hints": [
+   "created_at"
+  ],
+  "contact_change_proposals": [
+   "created_at",
+   "decided_at"
+  ]
+ }
+}

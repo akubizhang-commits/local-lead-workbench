@@ -1,0 +1,1503 @@
+{
+ "commit": "913ee04",
+ "fixture": "v2_9423c53",
+ "generated_by": "tests/fixtures/build_expected_upgrade.py",
+ "ledger_ids": [
+  "contact_facets_v1",
+  "contact_facets_v1_mark",
+  "p0_20261018_categories",
+  "p0_20261018_contact_proposals",
+  "p0_20261018_facets_schema",
+  "p0_20261018_indexes",
+  "p0_20261018_repair_rejected"
+ ],
+ "sqlite_master_names": [
+  "changes",
+  "changes_company",
+  "companies",
+  "companies_newest",
+  "companies_status",
+  "company_categories",
+  "company_categories_key",
+  "company_manual_checks",
+  "company_social",
+  "company_type_hints",
+  "contact_change_proposals",
+  "contact_decisions",
+  "contact_facets",
+  "contact_facets_company",
+  "contact_facets_company_email",
+  "contact_facets_dirty",
+  "contact_proposals_contact",
+  "contact_versions",
+  "contact_versions_contact",
+  "contacts",
+  "contacts_company",
+  "contacts_company_email",
+  "contacts_facets_delete",
+  "contacts_facets_insert",
+  "contacts_facets_update",
+  "exclusion_rules",
+  "exclusion_rules_unique",
+  "listing_alias_source",
+  "listing_aliases",
+  "listings",
+  "listings_company",
+  "locations",
+  "locations_company",
+  "manual_contacts",
+  "manual_contacts_facets_insert",
+  "manual_contacts_facets_update",
+  "maps_access_policy",
+  "market_keys",
+  "market_membership_company",
+  "market_memberships",
+  "market_runs",
+  "market_runs_market",
+  "market_social_runs",
+  "observations",
+  "observations_company",
+  "observations_company_field",
+  "occurrences",
+  "review_evidence",
+  "review_evidence_review",
+  "reviews",
+  "reviews_company_field",
+  "reviews_contact",
+  "reviews_status",
+  "run_companies",
+  "run_companies_market",
+  "runs",
+  "schedules",
+  "schema_migrations",
+  "social_config",
+  "social_decisions",
+  "social_entities",
+  "social_evidence",
+  "social_evidence_company",
+  "social_migrations",
+  "social_outreach",
+  "social_page_observations",
+  "social_platform_gates",
+  "social_runs",
+  "social_work",
+  "social_work_state",
+  "sqlite_stat1",
+  "task_geography",
+  "task_metadata",
+  "task_social_settings",
+  "tasks",
+  "website_host_gates",
+  "work_items",
+  "work_items_run",
+  "work_items_target"
+ ],
+ "tables": {
+  "changes": [
+   {
+    "company_id": "56bc44d913e4495fa2d8f408aa124daf",
+    "created_at": "<volatile>",
+    "field": "contact",
+    "id": "<volatile>",
+    "new_value": "{\"name\": \"Carla Other\", \"role\": \"Sales Rep\", \"kind\": \"general\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"evidence\": \"Carla Other | Sales Rep | carl@delta.example\"}",
+    "old_value": "{\"name\": \"Carl Buyer\", \"role\": \"Buyer\", \"kind\": \"procurement\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"evidence\": \"Carl Buyer | Buyer | carl@delta.example\"}",
+    "reason": "联系人资料变化，需审核"
+   },
+   {
+    "company_id": "a73833fca1b4416698cad0c68450ae19",
+    "created_at": "<volatile>",
+    "field": "phone",
+    "id": "<volatile>",
+    "new_value": "+1 408-555-0105",
+    "old_value": "",
+    "reason": "自动补全旧空字段"
+   },
+   {
+    "company_id": "b3b9bdd8ebaf4b9db743aee1f802ec01",
+    "created_at": "<volatile>",
+    "field": "contact",
+    "id": "<volatile>",
+    "new_value": "{\"name\": \"Dana Smith\", \"role\": \"Purchasing Director\", \"kind\": \"procurement\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"evidence\": \"Dana Smith | Purchasing Director | dana@gamma.example\"}",
+    "old_value": "{\"name\": \"Dana Buyer\", \"role\": \"Buyer\", \"kind\": \"procurement\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"evidence\": \"Dana Buyer | Buyer | dana@gamma.example\"}",
+    "reason": "联系人资料变化，需审核"
+   },
+   {
+    "company_id": "b3b9bdd8ebaf4b9db743aee1f802ec01",
+    "created_at": "<volatile>",
+    "field": "contact",
+    "id": "<volatile>",
+    "new_value": "{\"name\": \"Dana Smith\", \"role\": \"Purchasing Director\", \"kind\": \"procurement\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"evidence\": \"Dana Smith | Purchasing Director | dana@gamma.example\"}",
+    "old_value": "{\"name\": \"Dee Other\", \"role\": \"Sales Rep\", \"kind\": \"general\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"evidence\": \"Dee Other | Sales Rep | dana@gamma.example\"}",
+    "reason": "数据修复：恢复因‘标记为不采用’被误排除的原联系人（修复前备份 <name>）"
+   },
+   {
+    "company_id": "b3b9bdd8ebaf4b9db743aee1f802ec01",
+    "created_at": "<volatile>",
+    "field": "contact",
+    "id": "<volatile>",
+    "new_value": "{\"name\": \"Dee Other\", \"role\": \"Sales Rep\", \"kind\": \"general\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"evidence\": \"Dee Other | Sales Rep | dana@gamma.example\"}",
+    "old_value": "{\"name\": \"Dana Smith\", \"role\": \"Purchasing Director\", \"kind\": \"procurement\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"evidence\": \"Dana Smith | Purchasing Director | dana@gamma.example\"}",
+    "reason": "联系人资料变化，需审核"
+   },
+   {
+    "company_id": "b3b9bdd8ebaf4b9db743aee1f802ec01",
+    "created_at": "<volatile>",
+    "field": "contact_adoption",
+    "id": "<volatile>",
+    "new_value": "{\"contact_id\": \"7cf325449aae4f3cba7803a4b92be9dd\", \"adoption_status\": \"accepted\"}",
+    "old_value": "automatic",
+    "reason": "人工联系人采用决定"
+   },
+   {
+    "company_id": "b3b9bdd8ebaf4b9db743aee1f802ec01",
+    "created_at": "<volatile>",
+    "field": "contact_adoption",
+    "id": "<volatile>",
+    "new_value": "{\"contact_id\": \"7cf325449aae4f3cba7803a4b92be9dd\", \"adoption_status\": \"excluded\"}",
+    "old_value": "accepted",
+    "reason": "人工联系人采用决定"
+   },
+   {
+    "company_id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "created_at": "<volatile>",
+    "field": "contact",
+    "id": "<volatile>",
+    "new_value": "{\"name\": \"Bob Buyer\", \"role\": \"Buyer\", \"kind\": \"procurement\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"evidence\": \"Bob Buyer | Buyer | bob@alpha.example\"}",
+    "old_value": "{\"name\": \"Robert Other\", \"role\": \"Sales Rep\", \"kind\": \"general\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"evidence\": \"Robert Other | Sales Rep | bob@alpha.example\"}",
+    "reason": "数据修复：恢复因‘标记为不采用’被误排除的原联系人（修复前备份 <name>）"
+   },
+   {
+    "company_id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "created_at": "<volatile>",
+    "field": "contact",
+    "id": "<volatile>",
+    "new_value": "{\"name\": \"Robert Other\", \"role\": \"Sales Rep\", \"kind\": \"general\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"evidence\": \"Robert Other | Sales Rep | bob@alpha.example\"}",
+    "old_value": "{\"name\": \"Bob Buyer\", \"role\": \"Buyer\", \"kind\": \"procurement\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"evidence\": \"Bob Buyer | Buyer | bob@alpha.example\"}",
+    "reason": "联系人资料变化，需审核"
+   },
+   {
+    "company_id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "created_at": "<volatile>",
+    "field": "contact_adoption",
+    "id": "<volatile>",
+    "new_value": "{\"contact_id\": \"72755585f6484ecd9c81aaa2d0a3bd9d\", \"adoption_status\": \"excluded\"}",
+    "old_value": "automatic",
+    "reason": "人工联系人采用决定"
+   },
+   {
+    "company_id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "created_at": "<volatile>",
+    "field": "phone",
+    "id": "<volatile>",
+    "new_value": "+1 408-555-0199",
+    "old_value": "+1 408-555-0101",
+    "reason": "来源观察；冲突需审核"
+   }
+  ],
+  "companies": [
+   {
+    "address": "100 First St, San Jose, CA 95112",
+    "business_types": "[]",
+    "city": "San Jose",
+    "country": "US",
+    "created_at": "2026-10-18T08:00:28.796008+00:00",
+    "id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "last_checked_at": "2026-10-18T08:00:28.842547+00:00",
+    "merged_into": null,
+    "name": "Alpha Roofing Supply",
+    "notes": "",
+    "overrides": "[]",
+    "phone": "+1 408-555-0101",
+    "revision": 3,
+    "social_links": "[]",
+    "source_kind": "maps",
+    "status": "candidate",
+    "website": "https://alpha.example"
+   },
+   {
+    "address": "200 Second St, San Jose, CA 95113",
+    "business_types": "[]",
+    "city": "San Jose",
+    "country": "US",
+    "created_at": "2026-10-18T08:00:28.801319+00:00",
+    "id": "418c1548456f4c23b91b33f9c71b3ab4",
+    "last_checked_at": "2026-10-18T08:00:28.861578+00:00",
+    "merged_into": null,
+    "name": "Beta Metals",
+    "notes": "",
+    "overrides": "[\"phone\"]",
+    "phone": "+1 408-555-0102",
+    "revision": 2,
+    "social_links": "[]",
+    "source_kind": "maps",
+    "status": "candidate",
+    "website": "https://beta.example"
+   },
+   {
+    "address": "300 Third St, Campbell, CA 95008",
+    "business_types": "[]",
+    "city": "San Jose",
+    "country": "US",
+    "created_at": "2026-10-18T08:00:28.810606+00:00",
+    "id": "b3b9bdd8ebaf4b9db743aee1f802ec01",
+    "last_checked_at": "2026-10-18T08:00:28.880036+00:00",
+    "merged_into": null,
+    "name": "Gamma Sheet Metal",
+    "notes": "",
+    "overrides": "[]",
+    "phone": "+1 408-555-0103",
+    "revision": 4,
+    "social_links": "[]",
+    "source_kind": "maps",
+    "status": "candidate",
+    "website": "https://gamma.example"
+   },
+   {
+    "address": "400 Fourth St, San Jose, CA 95110",
+    "business_types": "[]",
+    "city": "San Jose",
+    "country": "US",
+    "created_at": "2026-10-18T08:00:28.816802+00:00",
+    "id": "56bc44d913e4495fa2d8f408aa124daf",
+    "last_checked_at": "2026-10-18T08:00:28.896794+00:00",
+    "merged_into": null,
+    "name": "Delta Building Supply",
+    "notes": "",
+    "overrides": "[]",
+    "phone": "+1 408-555-0104",
+    "revision": 3,
+    "social_links": "[]",
+    "source_kind": "maps",
+    "status": "candidate",
+    "website": "https://delta.example"
+   },
+   {
+    "address": "500 Fifth St, San Jose, CA 95111",
+    "business_types": "[]",
+    "city": "San Jose",
+    "country": "US",
+    "created_at": "2026-10-18T08:00:28.823825+00:00",
+    "id": "a73833fca1b4416698cad0c68450ae19",
+    "last_checked_at": null,
+    "merged_into": null,
+    "name": "Epsilon Roofing Contractor",
+    "notes": "",
+    "overrides": "[]",
+    "phone": "+1 408-555-0105",
+    "revision": 2,
+    "social_links": "[]",
+    "source_kind": "maps",
+    "status": "candidate",
+    "website": ""
+   },
+   {
+    "address": "900 Ninth St, San Jose, CA 95112",
+    "business_types": "[]",
+    "city": "San Jose",
+    "country": "US",
+    "created_at": "2026-10-18T09:00:01+00:00",
+    "id": "x-alpha-2",
+    "last_checked_at": null,
+    "merged_into": null,
+    "name": "Alpha Roofing Supply",
+    "notes": "",
+    "overrides": "[]",
+    "phone": "+1 408-555-0909",
+    "revision": 1,
+    "social_links": "[]",
+    "source_kind": "maps",
+    "status": "candidate",
+    "website": "https://alpha.example"
+   }
+  ],
+  "company_categories": [
+   {
+    "category": "Building materials store",
+    "category_key": "building materials store",
+    "company_id": "56bc44d913e4495fa2d8f408aa124daf",
+    "first_seen": "2026-10-01T04:00:00+00:00",
+    "last_seen": "2026-10-01T04:00:00+00:00",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_4"
+   },
+   {
+    "category": "Metal supplier",
+    "category_key": "metal supplier",
+    "company_id": "418c1548456f4c23b91b33f9c71b3ab4",
+    "first_seen": "2026-10-01T02:00:00+00:00",
+    "last_seen": "2026-10-01T02:00:00+00:00",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_2"
+   },
+   {
+    "category": "Roofing contractor",
+    "category_key": "roofing contractor",
+    "company_id": "a73833fca1b4416698cad0c68450ae19",
+    "first_seen": "2026-10-01T05:00:00+00:00",
+    "last_seen": "2026-10-01T05:00:00+00:00",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_5"
+   },
+   {
+    "category": "Roofing supply store",
+    "category_key": "roofing supply store",
+    "company_id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "first_seen": "2026-10-01T01:00:00+00:00",
+    "last_seen": "2026-10-01T01:00:00+00:00",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_1"
+   },
+   {
+    "category": "Sheet metal contractor",
+    "category_key": "sheet metal contractor",
+    "company_id": "b3b9bdd8ebaf4b9db743aee1f802ec01",
+    "first_seen": "2026-10-01T03:00:00+00:00",
+    "last_seen": "2026-10-01T03:00:00+00:00",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_3"
+   }
+  ],
+  "company_manual_checks": [],
+  "company_social": [],
+  "company_type_hints": [
+   {
+    "business_type": "wholesaler",
+    "company_id": "418c1548456f4c23b91b33f9c71b3ab4",
+    "created_at": "<volatile>",
+    "market_id": "73dbcc0ae8a94e7ebbcf732c72dcb151"
+   },
+   {
+    "business_type": "wholesaler",
+    "company_id": "56bc44d913e4495fa2d8f408aa124daf",
+    "created_at": "<volatile>",
+    "market_id": "73dbcc0ae8a94e7ebbcf732c72dcb151"
+   },
+   {
+    "business_type": "wholesaler",
+    "company_id": "a73833fca1b4416698cad0c68450ae19",
+    "created_at": "<volatile>",
+    "market_id": "73dbcc0ae8a94e7ebbcf732c72dcb151"
+   },
+   {
+    "business_type": "wholesaler",
+    "company_id": "b3b9bdd8ebaf4b9db743aee1f802ec01",
+    "created_at": "<volatile>",
+    "market_id": "73dbcc0ae8a94e7ebbcf732c72dcb151"
+   },
+   {
+    "business_type": "wholesaler",
+    "company_id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "created_at": "<volatile>",
+    "market_id": "73dbcc0ae8a94e7ebbcf732c72dcb151"
+   }
+  ],
+  "contact_change_proposals": [
+   {
+    "contact_id": "72755585f6484ecd9c81aaa2d0a3bd9d",
+    "created_at": "<volatile>",
+    "decided_at": "<volatile>",
+    "origin": "repair",
+    "proposal": "{\"name\": \"Robert Other\", \"role\": \"Sales Rep\", \"kind\": \"general\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"evidence\": \"Robert Other | Sales Rep | bob@alpha.example\", \"source_url\": \"https://alpha.example/about\", \"observed_at\": \"2026-10-18T08:00:28.842530+00:00\"}",
+    "proposal_key": "b44bda96fccdc71311ef9552f0ed5b3f02c305f31b845915eedcca9c55f26a4f",
+    "review_id": "c8c7f7b5376940cfaeb9e0cbd518f175",
+    "status": "rejected"
+   },
+   {
+    "contact_id": "7cf325449aae4f3cba7803a4b92be9dd",
+    "created_at": "<volatile>",
+    "decided_at": "<volatile>",
+    "origin": "repair",
+    "proposal": "{\"name\": \"Dee Other\", \"role\": \"Sales Rep\", \"kind\": \"general\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"evidence\": \"Dee Other | Sales Rep | dana@gamma.example\", \"source_url\": \"https://gamma.example/news\", \"observed_at\": \"2026-10-18T08:00:28.880017+00:00\"}",
+    "proposal_key": "9f14a08602190467724ff6f41c1f2b1e9cf67891445cb4cc55a8582b780ce085",
+    "review_id": "8c33f01465ee4358ae57cacf2baacf88",
+    "status": "rejected"
+   }
+  ],
+  "contact_decisions": [
+   {
+    "adoption_status": "accepted",
+    "contact_id": "7cf325449aae4f3cba7803a4b92be9dd",
+    "decided_at": "<volatile>"
+   }
+  ],
+  "contact_facets": [
+   {
+    "category": "email",
+    "channel_ok": 1,
+    "company_id": "56bc44d913e4495fa2d8f408aa124daf",
+    "contact_id": "8284151add1f4496a909285aed76b6e2",
+    "email_key": "carl@delta.example",
+    "identity_key": "[\"56bc44d913e4495fa2d8f408aa124daf\",\"carla other\",\"sales rep\",\"carl@delta.example\",\"\",\"general\",\"explicit\",\"same_block\"]",
+    "tier": "named_role",
+    "tier_rank": 2,
+    "version": 1
+   },
+   {
+    "category": "email",
+    "channel_ok": 1,
+    "company_id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "contact_id": "e9b3267f695c48218736c5773802b487",
+    "email_key": "info@alpha.example",
+    "identity_key": "[\"f4b77019f0a14e7db966b7b9e352cfa2\",\"\",\"\",\"info@alpha.example\",\"\",\"general\",\"unknown\",\"company_only\"]",
+    "tier": "general_email",
+    "tier_rank": 5,
+    "version": 1
+   },
+   {
+    "category": "procurement",
+    "channel_ok": 1,
+    "company_id": "418c1548456f4c23b91b33f9c71b3ab4",
+    "contact_id": "8066d09f9de148d9adbfa528530e911b",
+    "email_key": "alice@beta.example",
+    "identity_key": "[\"418c1548456f4c23b91b33f9c71b3ab4\",\"alice agent\",\"purchasing manager\",\"alice@beta.example\",\"\",\"procurement\",\"explicit\",\"same_block\"]",
+    "tier": "named_procurement",
+    "tier_rank": 1,
+    "version": 1
+   },
+   {
+    "category": "procurement",
+    "channel_ok": 1,
+    "company_id": "b3b9bdd8ebaf4b9db743aee1f802ec01",
+    "contact_id": "7cf325449aae4f3cba7803a4b92be9dd",
+    "email_key": "dana@gamma.example",
+    "identity_key": "[\"b3b9bdd8ebaf4b9db743aee1f802ec01\",\"dana smith\",\"purchasing director\",\"dana@gamma.example\",\"\",\"procurement\",\"explicit\",\"same_block\"]",
+    "tier": "named_procurement",
+    "tier_rank": 1,
+    "version": 1
+   },
+   {
+    "category": "procurement",
+    "channel_ok": 1,
+    "company_id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "contact_id": "72755585f6484ecd9c81aaa2d0a3bd9d",
+    "email_key": "bob@alpha.example",
+    "identity_key": "[\"f4b77019f0a14e7db966b7b9e352cfa2\",\"bob buyer\",\"buyer\",\"bob@alpha.example\",\"\",\"procurement\",\"explicit\",\"same_block\"]",
+    "tier": "named_procurement",
+    "tier_rank": 1,
+    "version": 1
+   }
+  ],
+  "contact_facets_dirty": [],
+  "contact_versions": [
+   {
+    "contact_id": "72755585f6484ecd9c81aaa2d0a3bd9d",
+    "id": "197ff6a3a2d34b4c88bad14154fc0e28",
+    "observed_at": "2026-10-18T08:00:28.842454+00:00",
+    "payload": "{\"name\": \"Robert Other\", \"role\": \"Sales Rep\", \"email\": \"bob@alpha.example\", \"url\": \"\", \"kind\": \"general\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"source_url\": \"https://alpha.example/about\", \"evidence\": \"Robert Other | Sales Rep | bob@alpha.example\"}"
+   },
+   {
+    "contact_id": "72755585f6484ecd9c81aaa2d0a3bd9d",
+    "id": "8c4c9b42cdc24b858350d900e1701c3c",
+    "observed_at": "2026-10-18T08:00:28.833595+00:00",
+    "payload": "{\"name\": \"Bob Buyer\", \"role\": \"Buyer\", \"email\": \"bob@alpha.example\", \"url\": \"\", \"kind\": \"procurement\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"source_url\": \"https://alpha.example/team\", \"evidence\": \"Bob Buyer | Buyer | bob@alpha.example\"}"
+   },
+   {
+    "contact_id": "72755585f6484ecd9c81aaa2d0a3bd9d",
+    "id": "a94e60e1565a4ac1b05ecb762c057fd5",
+    "observed_at": "2026-10-18T08:00:28.833595+00:00",
+    "payload": "{\"id\": \"72755585f6484ecd9c81aaa2d0a3bd9d\", \"company_id\": \"f4b77019f0a14e7db966b7b9e352cfa2\", \"name\": \"Bob Buyer\", \"role\": \"Buyer\", \"email\": \"bob@alpha.example\", \"url\": \"\", \"kind\": \"procurement\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"source_url\": \"https://alpha.example/team\", \"evidence\": \"Bob Buyer | Buyer | bob@alpha.example\", \"observed_at\": \"2026-10-18T08:00:28.833595+00:00\", \"review_status\": \"auto_recorded\", \"fingerprint\": \"172b5406f5787a5de18c2d8de8708ee99b0b54f8b2bcb4d58a93d171cba4727a\"}"
+   },
+   {
+    "contact_id": "7cf325449aae4f3cba7803a4b92be9dd",
+    "id": "1d6ec021a1b944f584098936dbf48e03",
+    "observed_at": "2026-10-18T08:00:28.867839+00:00",
+    "payload": "{\"id\": \"7cf325449aae4f3cba7803a4b92be9dd\", \"company_id\": \"b3b9bdd8ebaf4b9db743aee1f802ec01\", \"name\": \"Dana Buyer\", \"role\": \"Buyer\", \"email\": \"dana@gamma.example\", \"url\": \"\", \"kind\": \"procurement\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"source_url\": \"https://gamma.example/team\", \"evidence\": \"Dana Buyer | Buyer | dana@gamma.example\", \"observed_at\": \"2026-10-18T08:00:28.867839+00:00\", \"review_status\": \"auto_recorded\", \"fingerprint\": \"600a5b2364fa0103262ba4f7956ea95a8de5e6226e117aa0af1aefcb0d3cd43a\"}"
+   },
+   {
+    "contact_id": "7cf325449aae4f3cba7803a4b92be9dd",
+    "id": "2a7efbdebb1548dd86a1346de36b92ce",
+    "observed_at": "2026-10-18T08:00:28.872116+00:00",
+    "payload": "{\"id\": \"7cf325449aae4f3cba7803a4b92be9dd\", \"company_id\": \"b3b9bdd8ebaf4b9db743aee1f802ec01\", \"name\": \"Dana Smith\", \"role\": \"Purchasing Director\", \"email\": \"dana@gamma.example\", \"url\": \"\", \"kind\": \"procurement\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"source_url\": \"https://gamma.example/about\", \"evidence\": \"Dana Smith | Purchasing Director | dana@gamma.example\", \"observed_at\": \"2026-10-18T08:00:28.872116+00:00\", \"review_status\": \"accept\", \"fingerprint\": \"600a5b2364fa0103262ba4f7956ea95a8de5e6226e117aa0af1aefcb0d3cd43a\"}"
+   },
+   {
+    "contact_id": "7cf325449aae4f3cba7803a4b92be9dd",
+    "id": "43ad5fae136b432d994eeac36f379d36",
+    "observed_at": "2026-10-18T08:00:28.879951+00:00",
+    "payload": "{\"name\": \"Dee Other\", \"role\": \"Sales Rep\", \"email\": \"dana@gamma.example\", \"url\": \"\", \"kind\": \"general\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"source_url\": \"https://gamma.example/news\", \"evidence\": \"Dee Other | Sales Rep | dana@gamma.example\"}"
+   },
+   {
+    "contact_id": "7cf325449aae4f3cba7803a4b92be9dd",
+    "id": "634fe4d65d604b66846e3e733a0631cc",
+    "observed_at": "2026-10-18T08:00:28.867839+00:00",
+    "payload": "{\"name\": \"Dana Buyer\", \"role\": \"Buyer\", \"email\": \"dana@gamma.example\", \"url\": \"\", \"kind\": \"procurement\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"source_url\": \"https://gamma.example/team\", \"evidence\": \"Dana Buyer | Buyer | dana@gamma.example\"}"
+   },
+   {
+    "contact_id": "7cf325449aae4f3cba7803a4b92be9dd",
+    "id": "8dbc8a7e71a64f8c82818903d51f4aff",
+    "observed_at": "2026-10-18T08:00:28.872036+00:00",
+    "payload": "{\"name\": \"Dana Smith\", \"role\": \"Purchasing Director\", \"email\": \"dana@gamma.example\", \"url\": \"\", \"kind\": \"procurement\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"source_url\": \"https://gamma.example/about\", \"evidence\": \"Dana Smith | Purchasing Director | dana@gamma.example\"}"
+   },
+   {
+    "contact_id": "8066d09f9de148d9adbfa528530e911b",
+    "id": "95b80cbada624ceeb33a398e13d086a8",
+    "observed_at": "2026-10-18T08:00:28.861534+00:00",
+    "payload": "{\"name\": \"Alice Agent\", \"role\": \"Purchasing Manager\", \"email\": \"alice@beta.example\", \"url\": \"\", \"kind\": \"procurement\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"source_url\": \"https://beta.example/team\", \"evidence\": \"Alice Agent | Purchasing Manager | alice@beta.example\"}"
+   },
+   {
+    "contact_id": "8284151add1f4496a909285aed76b6e2",
+    "id": "30a75bc9e99e4e12bdf3696a8ef0ce24",
+    "observed_at": "2026-10-18T08:00:28.891686+00:00",
+    "payload": "{\"id\": \"8284151add1f4496a909285aed76b6e2\", \"company_id\": \"56bc44d913e4495fa2d8f408aa124daf\", \"name\": \"Carl Buyer\", \"role\": \"Buyer\", \"email\": \"carl@delta.example\", \"url\": \"\", \"kind\": \"procurement\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"source_url\": \"https://delta.example/team\", \"evidence\": \"Carl Buyer | Buyer | carl@delta.example\", \"observed_at\": \"2026-10-18T08:00:28.891686+00:00\", \"review_status\": \"auto_recorded\", \"fingerprint\": \"ee37089487991703b92af50bb5893d5dbc907bb7f24d430c8294f0afb72a1701\"}"
+   },
+   {
+    "contact_id": "8284151add1f4496a909285aed76b6e2",
+    "id": "819348ff05714cb5a746a5cb8e0d67c0",
+    "observed_at": "2026-10-18T08:00:28.896706+00:00",
+    "payload": "{\"name\": \"Carla Other\", \"role\": \"Sales Rep\", \"email\": \"carl@delta.example\", \"url\": \"\", \"kind\": \"general\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"source_url\": \"https://delta.example/about\", \"evidence\": \"Carla Other | Sales Rep | carl@delta.example\"}"
+   },
+   {
+    "contact_id": "8284151add1f4496a909285aed76b6e2",
+    "id": "c896e39b39bf42b89de170477f44e1b2",
+    "observed_at": "2026-10-18T08:00:28.891686+00:00",
+    "payload": "{\"name\": \"Carl Buyer\", \"role\": \"Buyer\", \"email\": \"carl@delta.example\", \"url\": \"\", \"kind\": \"procurement\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"source_url\": \"https://delta.example/team\", \"evidence\": \"Carl Buyer | Buyer | carl@delta.example\"}"
+   },
+   {
+    "contact_id": "e9b3267f695c48218736c5773802b487",
+    "id": "860357075eea49348a46fb7d7f0a4264",
+    "observed_at": "2026-10-18T08:00:28.833665+00:00",
+    "payload": "{\"name\": \"\", \"role\": \"\", \"email\": \"info@alpha.example\", \"url\": \"\", \"kind\": \"general\", \"role_status\": \"unknown\", \"association_status\": \"company_only\", \"source_url\": \"https://alpha.example/contact\", \"evidence\": \"Email: info@alpha.example\"}"
+   }
+  ],
+  "contacts": [
+   {
+    "association_status": "company_only",
+    "company_id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "email": "info@alpha.example",
+    "evidence": "Email: info@alpha.example",
+    "fingerprint": "5359da68e2e18eceb5c46fbb190731c2333492b1c2e856f1fc4ad7622e186312",
+    "id": "e9b3267f695c48218736c5773802b487",
+    "kind": "general",
+    "name": "",
+    "observed_at": "2026-10-18T08:00:28.833665+00:00",
+    "review_status": "auto_recorded",
+    "role": "",
+    "role_status": "unknown",
+    "source_url": "https://alpha.example/contact",
+    "url": ""
+   },
+   {
+    "association_status": "same_block",
+    "company_id": "418c1548456f4c23b91b33f9c71b3ab4",
+    "email": "alice@beta.example",
+    "evidence": "Alice Agent | Purchasing Manager | alice@beta.example",
+    "fingerprint": "02f2944cd3fc6e01b5081ce27fc90921d66aebbdf1d077f9e21f120e52afff05",
+    "id": "8066d09f9de148d9adbfa528530e911b",
+    "kind": "procurement",
+    "name": "Alice Agent",
+    "observed_at": "2026-10-18T08:00:28.861534+00:00",
+    "review_status": "auto_recorded",
+    "role": "Purchasing Manager",
+    "role_status": "explicit",
+    "source_url": "https://beta.example/team",
+    "url": ""
+   },
+   {
+    "association_status": "same_block",
+    "company_id": "56bc44d913e4495fa2d8f408aa124daf",
+    "email": "carl@delta.example",
+    "evidence": "Carla Other | Sales Rep | carl@delta.example",
+    "fingerprint": "ee37089487991703b92af50bb5893d5dbc907bb7f24d430c8294f0afb72a1701",
+    "id": "8284151add1f4496a909285aed76b6e2",
+    "kind": "general",
+    "name": "Carla Other",
+    "observed_at": "2026-10-18T08:00:28.896778+00:00",
+    "review_status": "pending",
+    "role": "Sales Rep",
+    "role_status": "explicit",
+    "source_url": "https://delta.example/about",
+    "url": ""
+   },
+   {
+    "association_status": "same_block",
+    "company_id": "b3b9bdd8ebaf4b9db743aee1f802ec01",
+    "email": "dana@gamma.example",
+    "evidence": "Dana Smith | Purchasing Director | dana@gamma.example",
+    "fingerprint": "600a5b2364fa0103262ba4f7956ea95a8de5e6226e117aa0af1aefcb0d3cd43a",
+    "id": "7cf325449aae4f3cba7803a4b92be9dd",
+    "kind": "procurement",
+    "name": "Dana Smith",
+    "observed_at": "2026-10-18T08:00:28.872116+00:00",
+    "review_status": "accept",
+    "role": "Purchasing Director",
+    "role_status": "explicit",
+    "source_url": "https://gamma.example/about",
+    "url": ""
+   },
+   {
+    "association_status": "same_block",
+    "company_id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "email": "bob@alpha.example",
+    "evidence": "Bob Buyer | Buyer | bob@alpha.example",
+    "fingerprint": "172b5406f5787a5de18c2d8de8708ee99b0b54f8b2bcb4d58a93d171cba4727a",
+    "id": "72755585f6484ecd9c81aaa2d0a3bd9d",
+    "kind": "procurement",
+    "name": "Bob Buyer",
+    "observed_at": "2026-10-18T08:00:28.833595+00:00",
+    "review_status": "auto_recorded",
+    "role": "Buyer",
+    "role_status": "explicit",
+    "source_url": "https://alpha.example/team",
+    "url": ""
+   }
+  ],
+  "exclusion_rules": [],
+  "listing_aliases": [
+   {
+    "alias": "google_maps:place_id:PLACE_1",
+    "source_key": "google_maps:place_id:PLACE_1"
+   },
+   {
+    "alias": "google_maps:place_id:PLACE_2",
+    "source_key": "google_maps:place_id:PLACE_2"
+   },
+   {
+    "alias": "google_maps:place_id:PLACE_3",
+    "source_key": "google_maps:place_id:PLACE_3"
+   },
+   {
+    "alias": "google_maps:place_id:PLACE_4",
+    "source_key": "google_maps:place_id:PLACE_4"
+   },
+   {
+    "alias": "google_maps:place_id:PLACE_5",
+    "source_key": "google_maps:place_id:PLACE_5"
+   },
+   {
+    "alias": "google_maps:url:24fe9b9b6337ca65a88fca61d9c4fe4b3bbba175a491cd8ff5c7eed94b16ff96",
+    "source_key": "google_maps:place_id:PLACE_5"
+   },
+   {
+    "alias": "google_maps:url:a9073e3846322737ba5578ca4736af6f88ceb358ad4ea4781cf02c0119cda5d0",
+    "source_key": "google_maps:place_id:PLACE_3"
+   },
+   {
+    "alias": "google_maps:url:b05fe24ee968ea54479ae7b20e813a96d8b3ea26ccd8a9b79e37d80fbb609262",
+    "source_key": "google_maps:place_id:PLACE_1"
+   },
+   {
+    "alias": "google_maps:url:cb7485322c2d1d86d183e2f6625b724ea564a62eabd10aff6471700903e26c7e",
+    "source_key": "google_maps:place_id:PLACE_2"
+   },
+   {
+    "alias": "google_maps:url:f60505ea173a0b85088c43f0453204690ccd57b6c3e4069cb2388a13965e48e8",
+    "source_key": "google_maps:place_id:PLACE_4"
+   }
+  ],
+  "listings": [
+   {
+    "company_id": "418c1548456f4c23b91b33f9c71b3ab4",
+    "first_seen": "2026-10-01T02:00:00+00:00",
+    "last_seen": "2026-10-01T02:00:00+00:00",
+    "source_key": "google_maps:place_id:PLACE_2",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_2"
+   },
+   {
+    "company_id": "56bc44d913e4495fa2d8f408aa124daf",
+    "first_seen": "2026-10-01T04:00:00+00:00",
+    "last_seen": "2026-10-01T04:00:00+00:00",
+    "source_key": "google_maps:place_id:PLACE_4",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_4"
+   },
+   {
+    "company_id": "a73833fca1b4416698cad0c68450ae19",
+    "first_seen": "2026-10-01T05:00:00+00:00",
+    "last_seen": "2026-10-01T05:00:00+00:00",
+    "source_key": "google_maps:place_id:PLACE_5",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_5"
+   },
+   {
+    "company_id": "b3b9bdd8ebaf4b9db743aee1f802ec01",
+    "first_seen": "2026-10-01T03:00:00+00:00",
+    "last_seen": "2026-10-01T03:00:00+00:00",
+    "source_key": "google_maps:place_id:PLACE_3",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_3"
+   },
+   {
+    "company_id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "first_seen": "2026-10-01T01:00:00+00:00",
+    "last_seen": "2026-10-01T01:00:00+00:00",
+    "source_key": "google_maps:place_id:PLACE_1",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_1"
+   }
+  ],
+  "locations": [
+   {
+    "address": "100 First St, San Jose, CA 95112",
+    "company_id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "id": "a4f2190fc2074206aa7c10f0de99bb6e",
+    "latitude": 37.300999999999995,
+    "longitude": -121.881,
+    "observed_at": "2026-10-01T01:00:00+00:00",
+    "source_key": "google_maps:place_id:PLACE_1",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_1"
+   },
+   {
+    "address": "200 Second St, San Jose, CA 95113",
+    "company_id": "418c1548456f4c23b91b33f9c71b3ab4",
+    "id": "34b143a6ca274ff8879b692bdebb18c9",
+    "latitude": 37.302,
+    "longitude": -121.88199999999999,
+    "observed_at": "2026-10-01T02:00:00+00:00",
+    "source_key": "google_maps:place_id:PLACE_2",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_2"
+   },
+   {
+    "address": "300 Third St, Campbell, CA 95008",
+    "company_id": "b3b9bdd8ebaf4b9db743aee1f802ec01",
+    "id": "4496dbd750734e9e9427f96768d19777",
+    "latitude": 37.303,
+    "longitude": -121.883,
+    "observed_at": "2026-10-01T03:00:00+00:00",
+    "source_key": "google_maps:place_id:PLACE_3",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_3"
+   },
+   {
+    "address": "400 Fourth St, San Jose, CA 95110",
+    "company_id": "56bc44d913e4495fa2d8f408aa124daf",
+    "id": "b2a2bb0040b24caeb7c37a4a269d0dde",
+    "latitude": 37.303999999999995,
+    "longitude": -121.884,
+    "observed_at": "2026-10-01T04:00:00+00:00",
+    "source_key": "google_maps:place_id:PLACE_4",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_4"
+   },
+   {
+    "address": "500 Fifth St, San Jose, CA 95111",
+    "company_id": "a73833fca1b4416698cad0c68450ae19",
+    "id": "38b591ed39224ef28b7a7dc9b930bb43",
+    "latitude": 37.305,
+    "longitude": -121.88499999999999,
+    "observed_at": "2026-10-01T05:00:00+00:00",
+    "source_key": "google_maps:place_id:PLACE_5",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_5"
+   }
+  ],
+  "manual_contacts": [],
+  "maps_access_policy": [
+   {
+    "failures": 0,
+    "id": 1,
+    "manual_required": 0,
+    "not_before": 0.0,
+    "reason": ""
+   }
+  ],
+  "market_keys": [
+   {
+    "identity": "7975e56098bf9c0a7ea2ef131fed324d379ecc9fcd3065dd35f4978eecad6ca0",
+    "task_id": "73dbcc0ae8a94e7ebbcf732c72dcb151"
+   }
+  ],
+  "market_memberships": [
+   {
+    "company_id": "418c1548456f4c23b91b33f9c71b3ab4",
+    "first_run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "first_seen": "2026-10-01T02:00:00+00:00",
+    "last_run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "last_seen": "2026-10-01T02:00:00+00:00",
+    "market_id": "73dbcc0ae8a94e7ebbcf732c72dcb151"
+   },
+   {
+    "company_id": "56bc44d913e4495fa2d8f408aa124daf",
+    "first_run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "first_seen": "2026-10-01T04:00:00+00:00",
+    "last_run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "last_seen": "2026-10-01T04:00:00+00:00",
+    "market_id": "73dbcc0ae8a94e7ebbcf732c72dcb151"
+   },
+   {
+    "company_id": "a73833fca1b4416698cad0c68450ae19",
+    "first_run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "first_seen": "2026-10-01T05:00:00+00:00",
+    "last_run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "last_seen": "2026-10-01T05:00:00+00:00",
+    "market_id": "73dbcc0ae8a94e7ebbcf732c72dcb151"
+   },
+   {
+    "company_id": "b3b9bdd8ebaf4b9db743aee1f802ec01",
+    "first_run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "first_seen": "2026-10-01T03:00:00+00:00",
+    "last_run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "last_seen": "2026-10-01T03:00:00+00:00",
+    "market_id": "73dbcc0ae8a94e7ebbcf732c72dcb151"
+   },
+   {
+    "company_id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "first_run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "first_seen": "2026-10-01T01:00:00+00:00",
+    "last_run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "last_seen": "2026-10-01T01:00:00+00:00",
+    "market_id": "73dbcc0ae8a94e7ebbcf732c72dcb151"
+   }
+  ],
+  "market_runs": [
+   {
+    "market_id": "73dbcc0ae8a94e7ebbcf732c72dcb151",
+    "plan": "{\"coverage\":{\"attribution\":\"\",\"bbox\":null,\"query_basis\":\"keywords\",\"query_terms\":[\"metal roofing supply\"],\"scope_label\":\"San Jose, California, US · 城市文字检索（范围定位未完成）\"},\"jobs\":[{\"bbox\":null,\"depth\":10,\"geo\":null,\"key\":\"c61c63609df281210824af2547b9db8fc5fa14754807596a3db937d79d9ce4a3\",\"level\":0,\"query\":\"metal roofing supply in San Jose, California, US\",\"zoom\":12}],\"mode\":\"text_only\",\"status\":\"completed\",\"warnings\":[\"城市范围定位超时（TimeoutError），暂用城市文字检索\"]}",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "unresolved": "[]"
+   }
+  ],
+  "market_social_runs": [],
+  "observations": [
+   {
+    "company_id": "418c1548456f4c23b91b33f9c71b3ab4",
+    "evidence": "Google Maps 实际查询：metal roofing supply",
+    "field": "address",
+    "fingerprint": "c5f71e006f434d99cfae28777a148954b58f912fb0d92f0083b6c2d446f25797",
+    "id": "41a35e33ee1d4d18aa24e1ec8d386910",
+    "method": "maps",
+    "observed_at": "2026-10-01T02:00:00+00:00",
+    "query": "metal roofing supply",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_2",
+    "value": "200 Second St, San Jose, CA 95113"
+   },
+   {
+    "company_id": "418c1548456f4c23b91b33f9c71b3ab4",
+    "evidence": "Google Maps 实际查询：metal roofing supply",
+    "field": "name",
+    "fingerprint": "9f7d58465f315b2c1e69085c5fa55c528759b9c90149a1b53ca7cc3c8f4ca7b7",
+    "id": "613e65d2aa38406a804477fa0f68d21d",
+    "method": "maps",
+    "observed_at": "2026-10-01T02:00:00+00:00",
+    "query": "metal roofing supply",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_2",
+    "value": "Beta Metals"
+   },
+   {
+    "company_id": "418c1548456f4c23b91b33f9c71b3ab4",
+    "evidence": "Google Maps 实际查询：metal roofing supply",
+    "field": "phone",
+    "fingerprint": "d44c73c305625ff84a293153e4e042b5aa9d81cb842e216ea7d3d0f4bab38011",
+    "id": "52b1384a7d2642d88e30f501a636e257",
+    "method": "maps",
+    "observed_at": "2026-10-01T02:00:00+00:00",
+    "query": "metal roofing supply",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_2",
+    "value": "+1 408-555-0102"
+   },
+   {
+    "company_id": "418c1548456f4c23b91b33f9c71b3ab4",
+    "evidence": "Google Maps 实际查询：metal roofing supply",
+    "field": "website",
+    "fingerprint": "e3338416d38da0a5ba30f5bbe0319ec7a498e509d83e17eda3419fd64416c282",
+    "id": "a21216949e9a4d3eb8e733b8036715f6",
+    "method": "maps",
+    "observed_at": "2026-10-01T02:00:00+00:00",
+    "query": "metal roofing supply",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_2",
+    "value": "https://beta.example"
+   },
+   {
+    "company_id": "418c1548456f4c23b91b33f9c71b3ab4",
+    "evidence": "Google Maps 来源类别：Metal supplier；实际查询：metal roofing supply",
+    "field": "category",
+    "fingerprint": "d894a39f5d09e2ffb5a5dbb08e86d1e51887ac082c2e6e18e7f0c6e48546c1ef",
+    "id": "508429c4a8f24aa199fb98e4d1a2c8f0",
+    "method": "maps",
+    "observed_at": "2026-10-01T02:00:00+00:00",
+    "query": "metal roofing supply",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_2",
+    "value": "Metal supplier"
+   },
+   {
+    "company_id": "56bc44d913e4495fa2d8f408aa124daf",
+    "evidence": "Google Maps 实际查询：metal roofing supply",
+    "field": "address",
+    "fingerprint": "3861d019ea353b24f5e4e462fb634ea8d1f424e3134bfc45c76d6e9b9fa454c8",
+    "id": "91853e31a5004904a5636e59533df11a",
+    "method": "maps",
+    "observed_at": "2026-10-01T04:00:00+00:00",
+    "query": "metal roofing supply",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_4",
+    "value": "400 Fourth St, San Jose, CA 95110"
+   },
+   {
+    "company_id": "56bc44d913e4495fa2d8f408aa124daf",
+    "evidence": "Google Maps 实际查询：metal roofing supply",
+    "field": "name",
+    "fingerprint": "4031ba529d9cadd86c7c0dedffe5905c27bd0e53ccd9a5f68c8954e56c6e208a",
+    "id": "8b8ed9f57d7748ada94c0d8dddfbd744",
+    "method": "maps",
+    "observed_at": "2026-10-01T04:00:00+00:00",
+    "query": "metal roofing supply",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_4",
+    "value": "Delta Building Supply"
+   },
+   {
+    "company_id": "56bc44d913e4495fa2d8f408aa124daf",
+    "evidence": "Google Maps 实际查询：metal roofing supply",
+    "field": "phone",
+    "fingerprint": "28cc176f8452173101f7e9d035d6837adb0c88580be28f5dce15788bb6be8812",
+    "id": "770dc75d306247c98a837c47ef042c46",
+    "method": "maps",
+    "observed_at": "2026-10-01T04:00:00+00:00",
+    "query": "metal roofing supply",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_4",
+    "value": "+1 408-555-0104"
+   },
+   {
+    "company_id": "56bc44d913e4495fa2d8f408aa124daf",
+    "evidence": "Google Maps 实际查询：metal roofing supply",
+    "field": "website",
+    "fingerprint": "f397ec573a036b4bcdcfa2405c48dc4780685cfd46a4cf9650a8029ddde8b089",
+    "id": "d96334aa425d49b6937f5e706a141a62",
+    "method": "maps",
+    "observed_at": "2026-10-01T04:00:00+00:00",
+    "query": "metal roofing supply",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_4",
+    "value": "https://delta.example"
+   },
+   {
+    "company_id": "56bc44d913e4495fa2d8f408aa124daf",
+    "evidence": "Google Maps 来源类别：Building materials store；实际查询：metal roofing supply",
+    "field": "category",
+    "fingerprint": "dd6284abf3de5693c7eac6314e97de33adefa38421bc348ba5d116ec0fdd84a7",
+    "id": "e86a3eb7ab784dd69f83bdf21ba8be35",
+    "method": "maps",
+    "observed_at": "2026-10-01T04:00:00+00:00",
+    "query": "metal roofing supply",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_4",
+    "value": "Building materials store"
+   },
+   {
+    "company_id": "a73833fca1b4416698cad0c68450ae19",
+    "evidence": "Google Maps 实际查询：metal roofing supply",
+    "field": "address",
+    "fingerprint": "b1d185945399cdf1ba608b55fff0998181db59193216ba13f2c833367c947a70",
+    "id": "b191d285b4c24bd4a679f4a6004c9a57",
+    "method": "maps",
+    "observed_at": "2026-10-01T05:00:00+00:00",
+    "query": "metal roofing supply",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_5",
+    "value": "500 Fifth St, San Jose, CA 95111"
+   },
+   {
+    "company_id": "a73833fca1b4416698cad0c68450ae19",
+    "evidence": "Google Maps 实际查询：metal roofing supply",
+    "field": "name",
+    "fingerprint": "29be7659ba4f31333b15dd10de61dcb2ec9cb2fd0b388b9f4d440f74568b59e2",
+    "id": "338283299b74494fb22a21d0f6b062a3",
+    "method": "maps",
+    "observed_at": "2026-10-01T05:00:00+00:00",
+    "query": "metal roofing supply",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_5",
+    "value": "Epsilon Roofing Contractor"
+   },
+   {
+    "company_id": "a73833fca1b4416698cad0c68450ae19",
+    "evidence": "Google Maps 来源类别：Roofing contractor；实际查询：metal roofing supply",
+    "field": "category",
+    "fingerprint": "ef690c051f64e519a3977911741284a7934413f3b735c6163b19154be02c690a",
+    "id": "b16d386f51674fb7bd5ee0194d8ff2b9",
+    "method": "maps",
+    "observed_at": "2026-10-01T05:00:00+00:00",
+    "query": "metal roofing supply",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_5",
+    "value": "Roofing contractor"
+   },
+   {
+    "company_id": "b3b9bdd8ebaf4b9db743aee1f802ec01",
+    "evidence": "Google Maps 实际查询：metal roofing supply",
+    "field": "address",
+    "fingerprint": "3e5928e9c284b4111408fe1712281f80ffde28c6b8a41d5721b82633b6cd9696",
+    "id": "48ca8743d83c4457a170dbcfde1b6dc5",
+    "method": "maps",
+    "observed_at": "2026-10-01T03:00:00+00:00",
+    "query": "metal roofing supply",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_3",
+    "value": "300 Third St, Campbell, CA 95008"
+   },
+   {
+    "company_id": "b3b9bdd8ebaf4b9db743aee1f802ec01",
+    "evidence": "Google Maps 实际查询：metal roofing supply",
+    "field": "name",
+    "fingerprint": "d0d87a5dbbcb7f7bf47dd1628ef65981ac975bb01fb2d07477edf11c275960da",
+    "id": "f8c621ee68d24ada8dfc804c14f3a3d9",
+    "method": "maps",
+    "observed_at": "2026-10-01T03:00:00+00:00",
+    "query": "metal roofing supply",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_3",
+    "value": "Gamma Sheet Metal"
+   },
+   {
+    "company_id": "b3b9bdd8ebaf4b9db743aee1f802ec01",
+    "evidence": "Google Maps 实际查询：metal roofing supply",
+    "field": "phone",
+    "fingerprint": "8369cb151342fe8ea23539648d70bce2e443aaa06932ea8d07db1bc5c8307533",
+    "id": "bd3d5d00f0794c35976ba9d63dee0600",
+    "method": "maps",
+    "observed_at": "2026-10-01T03:00:00+00:00",
+    "query": "metal roofing supply",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_3",
+    "value": "+1 408-555-0103"
+   },
+   {
+    "company_id": "b3b9bdd8ebaf4b9db743aee1f802ec01",
+    "evidence": "Google Maps 实际查询：metal roofing supply",
+    "field": "website",
+    "fingerprint": "9dd075af726cc9ae2a01bdcc4923dbb1c7063b8eb6d6fef3eb5e0d9047870347",
+    "id": "697ee892f30f4133af78ceba52dc1a61",
+    "method": "maps",
+    "observed_at": "2026-10-01T03:00:00+00:00",
+    "query": "metal roofing supply",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_3",
+    "value": "https://gamma.example"
+   },
+   {
+    "company_id": "b3b9bdd8ebaf4b9db743aee1f802ec01",
+    "evidence": "Google Maps 来源类别：Sheet metal contractor；实际查询：metal roofing supply",
+    "field": "category",
+    "fingerprint": "788c883add9f9dea56f8709cbe871cfab428463fe4e7b5634570e80c63495ac8",
+    "id": "e5daf9c4c72d4ab4b7df4cc5d9a60b65",
+    "method": "maps",
+    "observed_at": "2026-10-01T03:00:00+00:00",
+    "query": "metal roofing supply",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_3",
+    "value": "Sheet metal contractor"
+   },
+   {
+    "company_id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "evidence": "Google Maps 实际查询：metal roofing supply",
+    "field": "address",
+    "fingerprint": "15c9d363e27a940ccff9c6444e4f634f4ccfe620dbfde650333e04f92d4ca2b2",
+    "id": "9adbcb72e3dd48cf887c9359a1746368",
+    "method": "maps",
+    "observed_at": "2026-10-01T01:00:00+00:00",
+    "query": "metal roofing supply",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_1",
+    "value": "100 First St, San Jose, CA 95112"
+   },
+   {
+    "company_id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "evidence": "Google Maps 实际查询：metal roofing supply",
+    "field": "name",
+    "fingerprint": "021c2c1b8e6a574cce0c3a559b5e1d22a532a646506bc749f72d55deac9c2cc6",
+    "id": "a24a330246e54df2a489ab2573daf311",
+    "method": "maps",
+    "observed_at": "2026-10-01T01:00:00+00:00",
+    "query": "metal roofing supply",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_1",
+    "value": "Alpha Roofing Supply"
+   },
+   {
+    "company_id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "evidence": "Google Maps 实际查询：metal roofing supply",
+    "field": "phone",
+    "fingerprint": "bb8e9297b4fe3eca40445adc3786f124afe1df4f30f159ce8b231d7cf2e8ff76",
+    "id": "80e7eff701cd4d6280a6f2066393bb76",
+    "method": "maps",
+    "observed_at": "2026-10-01T01:00:00+00:00",
+    "query": "metal roofing supply",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_1",
+    "value": "+1 408-555-0101"
+   },
+   {
+    "company_id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "evidence": "Google Maps 实际查询：metal roofing supply",
+    "field": "website",
+    "fingerprint": "e1f80c1e32e6d9e9965d66e7e803f048a6b15919cc1cd09f67c4d4bd65a5b714",
+    "id": "8aab3c3769cc4a079c5de21c28cbc0ee",
+    "method": "maps",
+    "observed_at": "2026-10-01T01:00:00+00:00",
+    "query": "metal roofing supply",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_1",
+    "value": "https://alpha.example"
+   },
+   {
+    "company_id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "evidence": "Google Maps 来源类别：Roofing supply store；实际查询：metal roofing supply",
+    "field": "category",
+    "fingerprint": "30f97f78233c8c8c2d49b798cd8d6e19926a615af3bd4ecd494842bf838e0163",
+    "id": "ee7a6b88bfd24e24ae6f72ce2a856df0",
+    "method": "maps",
+    "observed_at": "2026-10-01T01:00:00+00:00",
+    "query": "metal roofing supply",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=PLACE_1",
+    "value": "Roofing supply store"
+   },
+   {
+    "company_id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "evidence": "Phone: +1 408-555-0199",
+    "field": "phone",
+    "fingerprint": "2e2c4b55dd3d669e85213362ea9231cd5255883b43958299f9e5084cb0c15631",
+    "id": "b5ff3e99755b49f0b23989610c101a22",
+    "method": "website",
+    "observed_at": "2026-10-18T08:00:28.833392+00:00",
+    "query": "",
+    "run_id": "",
+    "source_url": "https://alpha.example/contact",
+    "value": "+1 408-555-0199"
+   }
+  ],
+  "occurrences": [],
+  "review_evidence": [
+   {
+    "evidence": "Address A",
+    "fingerprint": "x-fp-same-1",
+    "observed_at": "2026-10-18T09:00:03+00:00",
+    "review_id": "x-same-1",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_4"
+   },
+   {
+    "evidence": "Address B",
+    "fingerprint": "x-fp-same-2",
+    "observed_at": "2026-10-18T09:00:04+00:00",
+    "review_id": "x-same-1",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_4"
+   },
+   {
+    "evidence": "Phone",
+    "fingerprint": "x-fp-accept",
+    "observed_at": "2026-10-18T09:00:01+00:00",
+    "review_id": "x-accept",
+    "source_url": "https://beta.example"
+   },
+   {
+    "evidence": "Phone",
+    "fingerprint": "x-fp-empty",
+    "observed_at": "2026-10-18T09:00:02+00:00",
+    "review_id": "x-empty",
+    "source_url": "https://epsilon.example"
+   },
+   {
+    "evidence": "Phone: +1 408-555-0199",
+    "fingerprint": "a1ec00b4074a732b09838cd1368066e71cc79180d252efe8b30331cdd04b9089",
+    "observed_at": "2026-10-18T08:00:28.833522+00:00",
+    "review_id": "40fa6f493180456898b48cb9f7031381",
+    "source_url": "https://alpha.example/contact"
+   },
+   {
+    "evidence": "Phone；格式等价，保留现有值，无需审核",
+    "fingerprint": "x-fp-format",
+    "observed_at": "2026-10-18T09:00:02+00:00",
+    "review_id": "x-format",
+    "source_url": "https://gamma.example"
+   }
+  ],
+  "reviews": [
+   {
+    "company_id": "418c1548456f4c23b91b33f9c71b3ab4",
+    "created_at": "2026-10-18T09:00:01+00:00",
+    "evidence": "Phone",
+    "field": "phone",
+    "fingerprint": "x-fp-accept",
+    "id": "x-accept",
+    "kind": "field_update",
+    "new_value": "+1 408-555-0102",
+    "old_value": "+1 408-555-0100",
+    "source_url": "https://beta.example",
+    "status": "accept"
+   },
+   {
+    "company_id": "56bc44d913e4495fa2d8f408aa124daf",
+    "created_at": "2026-10-18T08:00:28.896755+00:00",
+    "evidence": "Carla Other | Sales Rep | carl@delta.example",
+    "field": "contact",
+    "fingerprint": "32941a4f90677a2c9804111271588254de08384575ae6fb69413248b22e4ace1",
+    "id": "ecb45b85e0504613a6daa335b89b3692",
+    "kind": "contact",
+    "new_value": "8284151add1f4496a909285aed76b6e2",
+    "old_value": "{\"name\": \"Carl Buyer\", \"role\": \"Buyer\", \"kind\": \"procurement\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"evidence\": \"Carl Buyer | Buyer | carl@delta.example\"}",
+    "source_url": "https://delta.example/about",
+    "status": "pending"
+   },
+   {
+    "company_id": "56bc44d913e4495fa2d8f408aa124daf",
+    "created_at": "2026-10-18T09:00:03+00:00",
+    "evidence": "Address A",
+    "field": "address",
+    "fingerprint": "x-fp-same-1",
+    "id": "x-same-1",
+    "kind": "field_update",
+    "new_value": "410 Fourth St, San Jose, CA 95110",
+    "old_value": "400 Fourth St, San Jose, CA 95110",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_4",
+    "status": "pending"
+   },
+   {
+    "company_id": "56bc44d913e4495fa2d8f408aa124daf",
+    "created_at": "2026-10-18T09:00:04+00:00",
+    "evidence": "Address B；与同值建议合并",
+    "field": "address",
+    "fingerprint": "x-fp-same-2",
+    "id": "x-same-2",
+    "kind": "field_update",
+    "new_value": "410 Fourth St, San Jose, CA 95110",
+    "old_value": "400 Fourth St, San Jose, CA 95110",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_4",
+    "status": "auto_closed"
+   },
+   {
+    "company_id": "a73833fca1b4416698cad0c68450ae19",
+    "created_at": "2026-10-18T09:00:02+00:00",
+    "evidence": "Phone",
+    "field": "phone",
+    "fingerprint": "x-fp-empty",
+    "id": "x-empty",
+    "kind": "field_update",
+    "new_value": "+1 408-555-0105",
+    "old_value": "",
+    "source_url": "https://epsilon.example",
+    "status": "auto_recorded"
+   },
+   {
+    "company_id": "b3b9bdd8ebaf4b9db743aee1f802ec01",
+    "created_at": "2026-10-18T08:00:28.872085+00:00",
+    "evidence": "Dana Smith | Purchasing Director | dana@gamma.example",
+    "field": "contact",
+    "fingerprint": "784d603eb613a7cf7145b1870c9aa2d9f828f92291bd88974c4fa89e56ba089c",
+    "id": "055673e6c9394b49b30d88ce48028609",
+    "kind": "contact",
+    "new_value": "7cf325449aae4f3cba7803a4b92be9dd",
+    "old_value": "{\"name\": \"Dana Buyer\", \"role\": \"Buyer\", \"kind\": \"procurement\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"evidence\": \"Dana Buyer | Buyer | dana@gamma.example\"}",
+    "source_url": "https://gamma.example/about",
+    "status": "accept"
+   },
+   {
+    "company_id": "b3b9bdd8ebaf4b9db743aee1f802ec01",
+    "created_at": "2026-10-18T08:00:28.879993+00:00",
+    "evidence": "Dee Other | Sales Rep | dana@gamma.example",
+    "field": "contact",
+    "fingerprint": "e2057e4fd373532693ba401889d85f7d3ace771f79ef025ce0a030c18687d152",
+    "id": "8c33f01465ee4358ae57cacf2baacf88",
+    "kind": "contact",
+    "new_value": "7cf325449aae4f3cba7803a4b92be9dd",
+    "old_value": "{\"name\": \"Dana Smith\", \"role\": \"Purchasing Director\", \"kind\": \"procurement\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"evidence\": \"Dana Smith | Purchasing Director | dana@gamma.example\"}",
+    "source_url": "https://gamma.example/news",
+    "status": "reject"
+   },
+   {
+    "company_id": "b3b9bdd8ebaf4b9db743aee1f802ec01",
+    "created_at": "2026-10-18T09:00:02+00:00",
+    "evidence": "Phone；格式等价，保留现有值，无需审核",
+    "field": "phone",
+    "fingerprint": "x-fp-format",
+    "id": "x-format",
+    "kind": "field_update",
+    "new_value": "+14085550103",
+    "old_value": "+1 408-555-0103",
+    "source_url": "https://gamma.example",
+    "status": "auto_recorded"
+   },
+   {
+    "company_id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "created_at": "2026-10-18T08:00:28.833511+00:00",
+    "evidence": "Phone: +1 408-555-0199",
+    "field": "phone",
+    "fingerprint": "a1ec00b4074a732b09838cd1368066e71cc79180d252efe8b30331cdd04b9089",
+    "id": "40fa6f493180456898b48cb9f7031381",
+    "kind": "field_update",
+    "new_value": "+1 408-555-0199",
+    "old_value": "+1 408-555-0101",
+    "source_url": "https://alpha.example/contact",
+    "status": "pending"
+   },
+   {
+    "company_id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "created_at": "2026-10-18T08:00:28.842506+00:00",
+    "evidence": "Robert Other | Sales Rep | bob@alpha.example",
+    "field": "contact",
+    "fingerprint": "0e4b5bce79341f323c6b5ec12d71918c350dc18172419a7d4fcfb2317368e07b",
+    "id": "c8c7f7b5376940cfaeb9e0cbd518f175",
+    "kind": "contact",
+    "new_value": "72755585f6484ecd9c81aaa2d0a3bd9d",
+    "old_value": "{\"name\": \"Bob Buyer\", \"role\": \"Buyer\", \"kind\": \"procurement\", \"role_status\": \"explicit\", \"association_status\": \"same_block\", \"evidence\": \"Bob Buyer | Buyer | bob@alpha.example\"}",
+    "source_url": "https://alpha.example/about",
+    "status": "reject"
+   },
+   {
+    "company_id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "created_at": "2026-10-18T09:00:01+00:00",
+    "evidence": "同名同官网；同名同官网、地址和电话不同，自动保留独立门店",
+    "field": "company",
+    "fingerprint": "x-fp-dup",
+    "id": "x-dup",
+    "kind": "duplicate_candidate",
+    "new_value": "x-alpha-2",
+    "old_value": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "source_url": "https://www.google.com/maps/search/?api=1&query_place_id=EARLY_9",
+    "status": "auto_separate"
+   }
+  ],
+  "run_companies": [
+   {
+    "changed": 0,
+    "company_id": "418c1548456f4c23b91b33f9c71b3ab4",
+    "first_seen": "2026-10-01T02:00:00+00:00",
+    "last_seen": "2026-10-01T02:00:00+00:00",
+    "market_id": "73dbcc0ae8a94e7ebbcf732c72dcb151",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "segment": "new"
+   },
+   {
+    "changed": 0,
+    "company_id": "56bc44d913e4495fa2d8f408aa124daf",
+    "first_seen": "2026-10-01T04:00:00+00:00",
+    "last_seen": "2026-10-01T04:00:00+00:00",
+    "market_id": "73dbcc0ae8a94e7ebbcf732c72dcb151",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "segment": "new"
+   },
+   {
+    "changed": 0,
+    "company_id": "a73833fca1b4416698cad0c68450ae19",
+    "first_seen": "2026-10-01T05:00:00+00:00",
+    "last_seen": "2026-10-01T05:00:00+00:00",
+    "market_id": "73dbcc0ae8a94e7ebbcf732c72dcb151",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "segment": "new"
+   },
+   {
+    "changed": 0,
+    "company_id": "b3b9bdd8ebaf4b9db743aee1f802ec01",
+    "first_seen": "2026-10-01T03:00:00+00:00",
+    "last_seen": "2026-10-01T03:00:00+00:00",
+    "market_id": "73dbcc0ae8a94e7ebbcf732c72dcb151",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "segment": "new"
+   },
+   {
+    "changed": 0,
+    "company_id": "f4b77019f0a14e7db966b7b9e352cfa2",
+    "first_seen": "2026-10-01T01:00:00+00:00",
+    "last_seen": "2026-10-01T01:00:00+00:00",
+    "market_id": "73dbcc0ae8a94e7ebbcf732c72dcb151",
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "segment": "new"
+   }
+  ],
+  "runs": [
+   {
+    "company_id": null,
+    "created_at": "2026-10-18T08:00:28.767148+00:00",
+    "error": null,
+    "finished_at": null,
+    "id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "kind": "discovery",
+    "message": "等待本地 worker",
+    "progress": "{\"done\": 0, \"total\": 1, \"discovered\": 0, \"enrichment_done\": 0, \"enrichment_total\": 0, \"new\": 0, \"existing\": 0, \"changed\": 0, \"discovery_done\": 0, \"discovery_total\": 0, \"market_total\": 0}",
+    "snapshot": "{\"auto_enrich\":false,\"auto_social\":false,\"city\":\"San Jose\",\"company_types\":[\"wholesale\"],\"country\":\"US\",\"coverage\":{\"done\":0,\"planned\":0,\"scope_label\":\"\",\"unresolved\":[]},\"created_at\":\"2026-10-18T08:00:28.755540+00:00\",\"created_by_user_id\":null,\"id\":\"73dbcc0ae8a94e7ebbcf732c72dcb151\",\"keywords\":[\"metal roofing supply\"],\"limit\":0,\"market_plan\":{\"coverage\":{\"attribution\":\"\",\"bbox\":null,\"query_basis\":\"keywords\",\"query_terms\":[\"metal roofing supply\"],\"scope_label\":\"San Jose, California, US · 城市文字检索（范围定位未完成）\"},\"jobs\":[{\"bbox\":null,\"depth\":10,\"geo\":null,\"key\":\"c61c63609df281210824af2547b9db8fc5fa14754807596a3db937d79d9ce4a3\",\"level\":0,\"query\":\"metal roofing supply in San Jose, California, US\",\"zoom\":12}],\"mode\":\"text_only\",\"status\":\"completed\",\"warnings\":[\"城市范围定位超时（TimeoutError），暂用城市文字检索\"]},\"market_stats\":{\"changed\":0,\"existing\":0,\"new\":0,\"not_seen\":0,\"total\":0},\"mode\":\"market\",\"name\":\"San Jose / California / US · 批发商 · metal roofing supply\",\"social_platforms\":[\"facebook\",\"instagram\",\"x\"],\"social_read_posts\":false,\"state\":\"California\"}",
+    "status": "queued",
+    "task_id": "73dbcc0ae8a94e7ebbcf732c72dcb151"
+   }
+  ],
+  "schedules": [],
+  "social_config": [],
+  "social_decisions": [],
+  "social_entities": [],
+  "social_evidence": [],
+  "social_migrations": [
+   {
+    "name": "legacy_links_v1"
+   }
+  ],
+  "social_outreach": [],
+  "social_page_observations": [],
+  "social_platform_gates": [],
+  "social_runs": [
+   {
+    "company_ids": "[\"a73833fca1b4416698cad0c68450ae19\"]",
+    "created_at": "2026-10-18T09:00:01+00:00",
+    "finished_at": "2026-10-18T09:00:02+00:00",
+    "id": "x-social-run",
+    "sample": "[]",
+    "settings": "{}",
+    "status": "completed"
+   }
+  ],
+  "social_work": [
+   {
+    "company_id": "a73833fca1b4416698cad0c68450ae19",
+    "created_at": "2026-10-18T09:00:01+00:00",
+    "finished_at": "2026-10-18T09:00:02+00:00",
+    "id": "x-social-work",
+    "result": "{\"status\":\"skipped\",\"reason\":\"missing_website\"}",
+    "run_id": "x-social-run",
+    "stage": "website",
+    "state": "skipped",
+    "target": ""
+   }
+  ],
+  "task_geography": [],
+  "task_metadata": [
+   {
+    "created_by_user_id": null,
+    "task_id": "73dbcc0ae8a94e7ebbcf732c72dcb151"
+   }
+  ],
+  "task_social_settings": [
+   {
+    "payload": "{\"auto_social\":false,\"social_platforms\":[\"facebook\",\"instagram\",\"x\"],\"social_read_posts\":false}",
+    "task_id": "73dbcc0ae8a94e7ebbcf732c72dcb151"
+   }
+  ],
+  "tasks": [
+   {
+    "auto_enrich": 0,
+    "city": "San Jose",
+    "company_types": "[\"wholesale\"]",
+    "country": "US",
+    "created_at": "2026-10-18T08:00:28.755540+00:00",
+    "id": "73dbcc0ae8a94e7ebbcf732c72dcb151",
+    "keywords": "[\"metal roofing supply\"]",
+    "limit": 0,
+    "name": "San Jose / California / US · 批发商 · metal roofing supply",
+    "state": "California"
+   }
+  ],
+  "website_host_gates": [],
+  "work_items": [
+   {
+    "id": "300cfdb45c1f4a2b9d0040310cb39fa7",
+    "result": null,
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "stage": "planning",
+    "state": "pending",
+    "target": "73dbcc0ae8a94e7ebbcf732c72dcb151"
+   },
+   {
+    "id": "fd9bd1341ad94453a6e01d3c1b08f589",
+    "result": null,
+    "run_id": "f3d19a5ebe9e4d448a4a32b2546ad185",
+    "stage": "discovery",
+    "state": "pending",
+    "target": "{\"bbox\":null,\"depth\":10,\"geo\":null,\"key\":\"c61c63609df281210824af2547b9db8fc5fa14754807596a3db937d79d9ce4a3\",\"level\":0,\"query\":\"metal roofing supply in San Jose, California, US\",\"zoom\":12}"
+   }
+  ]
+ },
+ "volatile": {
+  "changes": [
+   "created_at",
+   "id"
+  ],
+  "company_type_hints": [
+   "created_at"
+  ],
+  "contact_change_proposals": [
+   "created_at",
+   "decided_at"
+  ],
+  "contact_decisions": [
+   "decided_at"
+  ]
+ }
+}
