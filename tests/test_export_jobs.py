@@ -317,5 +317,53 @@ def test_read_snapshot_holds_no_write_lock(small):
         reader.rollback()
 
 
+def test_reap_rereads_a_job_that_finished_before_poll(small):
+    app = create_app(small, allowed_hosts={"testserver"})
+    manager = app.state.export_jobs
+    export_jobs.ensure_dirs(small)
+    job_id = "c" * 32
+    stamp = export_jobs.now()
+    job = dict(id=job_id, status="running", phase="writing", format="csv", layout="entries", filters={},
+               created_at=stamp, updated_at=stamp)
+    export_jobs.write_job(small, job)
+
+    class FinishedChild:
+        """The child writes succeeded and exits after reap() read the job list."""
+        polled = False
+
+        def poll(self):
+            if not self.polled:
+                self.polled = True
+                export_jobs.write_job(small, dict(job, status="succeeded", phase="done", finished_at=stamp))
+            return 0
+
+    manager._procs[job_id] = FinishedChild()
+    with manager._lock:
+        manager.reap()
+    assert export_jobs.read_job(export_jobs.job_path(small, job_id))["status"] == "succeeded"
+    assert job_id not in manager._procs
+
+
+def test_sigterm_after_rename_removes_the_final_file(small, monkeypatch):
+    from leadworkbench import export_job
+    export_jobs.ensure_dirs(small)
+    job_id = "d" * 32
+    stamp = export_jobs.now()
+    job = dict(id=job_id, status="running", phase="writing", format="csv", layout="entries", filters={},
+               created_at=stamp, updated_at=stamp)
+    export_jobs.write_job(small, job)
+    final = export_jobs.file_path(small, job)
+    final.write_text("done")  # os.replace(part -> final) happened, succeeded not yet written
+
+    def fake_exit(code):
+        raise SystemExit(code)
+
+    monkeypatch.setattr(export_job.os, "_exit", fake_exit)
+    with pytest.raises(SystemExit):
+        export_job.JobState(small, job_id).terminate()
+    assert not final.exists()
+    assert export_jobs.read_job(export_jobs.job_path(small, job_id))["status"] == "cancelled"
+
+
 def test_no_children_left():
     assert no_child_processes()

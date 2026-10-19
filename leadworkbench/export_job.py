@@ -76,6 +76,9 @@ class JobState:
                 # SIGTERM after a user cancel (the API's 5 s fallback) is a plain cancel.
                 stopped = None if self.cancelled() else {"code": "stopped", "message": jobs.STOPPED}
                 self.finish("cancelled", stopped)
+                # SIGTERM may land between os.replace(part -> final) and the
+                # succeeded write: a cancelled job must not leave its file behind.
+                jobs.file_path(self.data_dir, self.job).unlink(missing_ok=True)
             os._exit(0)
 
 

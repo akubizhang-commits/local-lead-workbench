@@ -153,6 +153,14 @@ class ExportJobs:
         """Mark dead queued/running jobs as interrupted. Call with _lock held."""
         for job in self._load_all():
             if job.get("status") in LIVE and not self.is_live(job):
+                # The child may have written its final state between the read
+                # above and poll(); re-read before declaring it interrupted.
+                try:
+                    job = self._load(job["id"])
+                except NotFound:
+                    continue
+                if job.get("status") not in LIVE:
+                    continue
                 message = INTERRUPTED_CHILD if job["id"] in self._procs else INTERRUPTED_RESTART
                 log.warning("export job interrupted", extra={"event": "export_interrupted", "job_id": job["id"]})
                 self._finish(job, "failed", {"code": "interrupted", "message": message})
