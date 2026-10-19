@@ -35,6 +35,28 @@ export function requestIdSuffix(e: unknown): string {
     ? `（错误编号 ${requestId}）` : '';
 }
 
+/** Prefix for 4xx errors other than 409/422 (P1 batch 2, 收尾 A). */
+export const CLIENT_PREFIX = '请求未完成：';
+const CONFLICT_HINT = '。资料已变化，请刷新后重新选择或编辑；本次操作未重试。';
+
+/** 4xx other than 409 and 422; includes 404 not_found/unknown_endpoint, 401 and 413. */
+export function isPlainClientError(e: unknown): boolean {
+  const {status} = (e ?? {}) as Coded;
+  return typeof status === 'number' && status >= 400 && status < 500 && status !== 409 && status !== 422;
+}
+
+/** Text shown for a failed action (button, form submit). Never uses the offline wording unless offline. */
+export function actionMessage(e: unknown): string {
+  const {status, code} = (e ?? {}) as Coded;
+  const message = (e as Error | undefined)?.message || '';
+  if (status === 0 || code === 'offline') return message || '无法连接本地服务，请确认已启动';
+  if (isPlainClientError(e)) return `${CLIENT_PREFIX}${message}`;
+  if (status === 409) return code === 'conflict' ? `${message}${CONFLICT_HINT}` : message;
+  if (status === 422) return message;
+  if (typeof status === 'number' && status >= 500) return `${message}${requestIdSuffix(e)}`;
+  return message || '操作未完成';
+}
+
 export function errorTitle(info: ErrorInfo): string {
   if (info.kind === 'not_found') return '记录已更新或移除';
   if (info.kind === 'server') return '服务出错';

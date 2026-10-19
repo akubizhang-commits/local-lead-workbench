@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Icon } from "./ui";
-import { errorTitle, type ErrorInfo } from "./errors";
+import { CLIENT_PREFIX, errorTitle, isPlainClientError, type ErrorInfo } from "./errors";
 export function Loading() {
   return (
     <div className="loading" role="status">
@@ -41,6 +41,7 @@ export function Resource({
       <div className="error-state error-not-found" role="alert">
         <Icon name="search" size={28} />
         <h3>{errorTitle(errorInfo)}</h3>
+        <p>{CLIENT_PREFIX}{error}</p>
         <p>这条记录可能已被合并、被恢复的备份替换，或链接已失效。</p>
         <button onClick={action.onClick}>{action.label}</button>
       </div>
@@ -52,6 +53,18 @@ export function Resource({
         <Icon name="shield" size={28} />
         <h3>{errorTitle(errorInfo)}</h3>
         <p>{kind === "busy" ? "请稍后重试。" : error}</p>
+        <RequestId id={errorInfo.requestId} />
+        <button onClick={retry}>重试</button>
+      </div>
+    );
+  }
+  if (errorInfo && kind === "client") {
+    const plain = isPlainClientError(errorInfo);
+    return (
+      <div className="error-state error-client" role="alert">
+        <Icon name="shield" size={28} />
+        <h3>{plain ? "请求未完成" : "暂时无法读取数据"}</h3>
+        <p>{plain ? `${CLIENT_PREFIX}${error}` : error}</p>
         <RequestId id={errorInfo.requestId} />
         <button onClick={retry}>重试</button>
       </div>

@@ -1,6 +1,7 @@
 import {useState} from 'react';
 import {ApiError, api} from './api';
 import type {CompanyDetail} from './types';
+import {actionMessage} from './errors';
 
 export interface ManualContactValues {name:string;role:string;email:string;phone:string;url:string;procurement:boolean;note:string}
 export const emptyManualContact=():ManualContactValues=>({name:'',role:'',email:'',phone:'',url:'',procurement:false,note:''});
@@ -40,7 +41,7 @@ export function ManualContactForm({companyId,revision,onSaved,onCancel,onRefresh
    setValues(emptyManualContact());
    onSaved(detail);
   } catch(error) {
-   setServerError({message:error instanceof Error?error.message:'保存失败',conflict:error instanceof ApiError&&error.status===409});
+   setServerError({message:error instanceof Error ? actionMessage(error) :'保存失败',conflict:error instanceof ApiError&&error.status===409});
   } finally {setSaving(false);}
  }
  const described=(key:string)=>errors[key as keyof Errors]?`manual-${key}-error`:undefined;

@@ -6,6 +6,7 @@ import {Alert} from './ui';
 import {platformTitle} from './MarketSocialSettings';
 import {SocialRunReport,type SocialRun} from './SocialDiscovery';
 import type {SocialPlatform} from './types';
+import {actionMessage} from './errors';
 
 export interface SocialPlatformProgress {
  platform:SocialPlatform;
@@ -44,7 +45,7 @@ export function SocialPlatformGates({social,disabled,onOpenSettings,onChange}:{
    await api(`/social/platforms/${encodeURIComponent(platform.platform)}/resume`,'POST');
    setNotice(`${platformTitle[platform.platform]} 已请求恢复；按最新状态与队列安排继续。`);
    onChange?.();
-  }catch(error){setError(error instanceof Error?error.message:'恢复失败，请重试');}
+  }catch(error){setError(error instanceof Error ? actionMessage(error) :'恢复失败，请重试');}
   finally{inFlight.current=false;setPending(null);}
  }
  const platforms=social.platforms.filter(gated);

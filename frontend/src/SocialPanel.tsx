@@ -8,6 +8,7 @@ import { SocialFollowup } from "./social/SocialFollowup";
 import { SocialList } from "./social/SocialList";
 import type { Entry, SocialData } from "./social/types";
 import type { Contact } from "./types";
+import { actionMessage } from "./errors";
 // Preserve the public component imports used by existing callers.
 export { SocialAccountList } from "./social/SocialAccountList";
 export { SocialAccountSummary } from "./social/SocialAccountSummary";
@@ -51,7 +52,7 @@ export function SocialPanel({
       setRevision((r) => r + 1);
       setNotice(typeof message === "function" ? message(result) : message);
     } catch (e) {
-      setFailure(e instanceof Error ? e.message : "保存失败");
+      setFailure(e instanceof Error ? actionMessage(e) : "保存失败");
     } finally {
       setBusy(false);
     }

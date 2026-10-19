@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api, download } from "./api";
 import type { Filters } from "./helpers";
+import { actionMessage } from "./errors";
 
 /** Background export job as returned by /api/export-jobs (P1-2, design §8.3). */
 export interface ExportJob {
@@ -106,7 +107,7 @@ export function useExportJobs(pollMs = 1000) {
         }
       } catch (e) {
         if (mounted.current) {
-          setError(e instanceof Error ? e.message : String(e));
+          setError(e instanceof Error ? actionMessage(e) : String(e));
           setPollFailures((n) => n + 1);
         }
       }
@@ -135,7 +136,7 @@ export function useExportJobs(pollMs = 1000) {
     try {
       await start(body);
     } catch (e) {
-      if (mounted.current) setError(e instanceof Error ? e.message : String(e));
+      if (mounted.current) setError(e instanceof Error ? actionMessage(e) : String(e));
     }
   }
   async function cancel(job: ExportJob) {
@@ -143,7 +144,7 @@ export function useExportJobs(pollMs = 1000) {
     try {
       merge(await api<ExportJob>(`/export-jobs/${job.id}/cancel`, "POST"));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(e instanceof Error ? actionMessage(e) : String(e));
     }
   }
   async function fetchFile(job: ExportJob) {
@@ -152,7 +153,7 @@ export function useExportJobs(pollMs = 1000) {
       await download(`/export-jobs/${job.id}/file`, job.file_name);
       setNotice("导出文件已下载");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(e instanceof Error ? actionMessage(e) : String(e));
     }
   }
   return { jobs, active, notice, error, cancelling, start, restart, cancel, fetchFile };

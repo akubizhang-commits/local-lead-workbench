@@ -95,7 +95,7 @@ async function harness() {
     else if (path === "/api/companies/a%2Fb/social") result = social;
     else if (path === "/api/companies/batch-status") {
       revision++;
-      return new Response(JSON.stringify({ detail: "修订冲突" }), {
+      return new Response(JSON.stringify({ detail: "修订冲突", code: "conflict" }), {
         status: 409,
       });
     } else assert.fail(`Unexpected request ${method} ${path}`);

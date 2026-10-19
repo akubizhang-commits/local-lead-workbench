@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { Alert, Field } from "./ui";
+import { actionMessage } from "./errors";
 
 type Platform = "instagram" | "facebook" | "x";
 type Connections = {
@@ -84,7 +85,7 @@ export function SocialConnections({
       .catch((error) => {
         if (mounted.current)
           setFailure(
-            error instanceof Error ? error.message : "读取连接配置失败",
+            error instanceof Error ? actionMessage(error) : "读取连接配置失败",
           );
       })
       .finally(() => {
@@ -110,7 +111,7 @@ export function SocialConnections({
       setStale(false);
     } catch (error) {
       setStale(true);
-      setFailure(error instanceof Error ? error.message : "读取连接配置失败");
+      setFailure(error instanceof Error ? actionMessage(error) : "读取连接配置失败");
     } finally {
       lock.current = false;
       setBusy("");
@@ -157,9 +158,7 @@ export function SocialConnections({
     } catch (error) {
       setStale(true);
       setFailure(
-        error instanceof Error
-          ? error.message
-          : "保存或重读配置失败，请刷新状态后重试",
+        error instanceof Error ? actionMessage(error) : "保存或重读配置失败，请刷新状态后重试",
       );
     } finally {
       lock.current = false;
@@ -192,9 +191,7 @@ export function SocialConnections({
     } catch (error) {
       setStale(true);
       setFailure(
-        error instanceof Error
-          ? error.message
-          : "浏览器操作失败，请刷新状态后重试",
+        error instanceof Error ? actionMessage(error) : "浏览器操作失败，请刷新状态后重试",
       );
     } finally {
       lock.current = false;

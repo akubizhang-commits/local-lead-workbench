@@ -2,6 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {api} from './api';
 import {Alert} from './ui';
 import type {Run,SocialPlatform,Task,TaskSocialSettings} from './types';
+import {actionMessage} from './errors';
 
 export const socialPlatforms:SocialPlatform[]=['facebook','instagram','x'];
 export const platformTitle:Record<SocialPlatform,string>={facebook:'Facebook',instagram:'Instagram',x:'X'};
@@ -56,7 +57,7 @@ export function MarketSocialSettings({task,busy=false,onChange,onRun}:{task:Task
     onRun(run);
    }
    onChange();
-  } catch(error) {setError(error instanceof Error?error.message:'操作失败，请重试');}
+  } catch(error) {setError(error instanceof Error ? actionMessage(error) :'操作失败，请重试');}
   finally {inFlight.current=false;setPending(null);}
  }
  return <div className="market-social-settings" aria-label="市场社媒设置">

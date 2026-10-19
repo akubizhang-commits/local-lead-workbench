@@ -3,6 +3,7 @@ import {api} from './api';
 import {useResource} from './hooks';
 import {date} from './helpers';
 import {Alert, External, Field} from './ui';
+import {actionMessage} from './errors';
 
 type PlatformGate = {state:string;reason:string;manual_required:boolean;next_attempt_at?:string|null};
 export type SocialRun = {
@@ -61,7 +62,7 @@ function ManualPlatformGates({run,disabled,onChange}:{run:SocialRun;disabled:boo
       await api(`/social/platforms/${encodeURIComponent(platform)}/resume`,'POST');
       setNotice(`${readablePlatformNames[platform]||platform} 已恢复，待处理项按平台间隔继续。`);
       onChange?.();
-    }catch(error){setFailure(error instanceof Error?error.message:'恢复失败，请重试');}
+    }catch(error){setFailure(error instanceof Error ? actionMessage(error) :'恢复失败，请重试');}
     finally{inFlight.current=false;setPending('');}
   }
   if(!entries.length)return null;
@@ -151,7 +152,7 @@ function DiscoveryRuns({companyId,onChange,disabled}:{companyId?:string;onChange
         setNotice(action==='retry'?'已创建重试运行，历史报告保留。':'已提交发现任务，请查看逐项处理结果。');
       }
       setRevision(v=>v+1);
-    }catch(error){setFailure(error instanceof Error?error.message:'操作失败，请重试');}
+    }catch(error){setFailure(error instanceof Error ? actionMessage(error) :'操作失败，请重试');}
     finally{setBusy(false);}
   }
   return <section className="social-discovery" aria-label={companyId?'单企社媒自动发现':'社媒试点与报告'}>

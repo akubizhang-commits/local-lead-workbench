@@ -4,6 +4,7 @@ import {useResource} from './hooks';
 import {Alert,Field} from './ui';
 import {SocialDiscovery,socialStatus} from './SocialDiscovery';
 import {SocialConnections} from './SocialConnections';
+import {actionMessage} from './errors';
 
 type Settings={searxng_url:string;configured:boolean;platforms:string[];message:string};
 type Probe={status:string;message:string};
@@ -20,14 +21,14 @@ export function SocialSettings() {
     if(busy)return;
     setBusy(true);setFailure('');setNotice('');setProbe(undefined);
     try{await api('/social/settings','PUT',{searxng_url:url.trim()});setNotice('搜索服务配置已保存。');setRevision(v=>v+1);}
-    catch(error){setFailure(error instanceof Error?error.message:'保存失败');}
+    catch(error){setFailure(error instanceof Error ? actionMessage(error) :'保存失败');}
     finally{setBusy(false);}
   }
   async function testConnection() {
     if(busy)return;
     setBusy(true);setFailure('');setNotice('');setProbe(undefined);
     try{setProbe(await api<Probe>('/social/probe','POST'));}
-    catch(error){setFailure(error instanceof Error?error.message:'连接测试失败');}
+    catch(error){setFailure(error instanceof Error ? actionMessage(error) :'连接测试失败');}
     finally{setBusy(false);}
   }
   return <section className="panel social-settings">

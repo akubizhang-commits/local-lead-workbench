@@ -4,6 +4,7 @@ import { formatBytes } from "./ExportJobs";
 import { date } from "./helpers";
 import type { Overview, RetentionPolicy, RetentionView } from "./types";
 import { Alert, Modal } from "./ui";
+import { actionMessage } from "./errors";
 
 /** Storage clean-up settings, first-run confirmation and history (P1-8, design §10.6). */
 export const RETENTION_CHANGED = "待清理文件已变化，请重新查看后确认";
@@ -71,7 +72,7 @@ export function RetentionPanel({
       apply(await api<RetentionView>("/retention"));
       setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(e instanceof Error ? actionMessage(e) : String(e));
     }
   }, []);
   useEffect(() => {
@@ -105,7 +106,7 @@ export function RetentionPanel({
       setError("");
       onChanged?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(e instanceof Error ? actionMessage(e) : String(e));
     } finally {
       setWorking(false);
     }
@@ -126,7 +127,7 @@ export function RetentionPanel({
         setNotice(RETENTION_CHANGED);
         await load();
       } else {
-        setError(e instanceof Error ? e.message : String(e));
+        setError(e instanceof Error ? actionMessage(e) : String(e));
       }
     } finally {
       setWorking(false);
