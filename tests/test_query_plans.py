@@ -29,3 +29,13 @@ def test_hot_queries_do_not_scan(tmp_path, sql, params):
         plan = [row[3] for row in con.execute("EXPLAIN QUERY PLAN " + sql, params)]
     # An ordered index walk (SCAN … USING INDEX, stopping at LIMIT) is fine; a table scan is not.
     assert plan and not any(step.startswith("SCAN") and "USING" not in step for step in plan), plan
+
+
+def test_paged_reviews_use_the_status_index(tmp_path):
+    store = Store(tmp_path)
+    sql = f"""SELECT r.*,c.name company_name FROM reviews r JOIN companies c ON c.id=r.company_id
+        WHERE r.status='pending' {store.REVIEW_ORDER} LIMIT ? OFFSET ?"""
+    with store.connect() as con:
+        plan = [row[3] for row in con.execute("EXPLAIN QUERY PLAN " + sql, (20, 0))]
+    assert any("USING INDEX reviews_status" in step for step in plan), plan
+    assert not any("TEMP B-TREE" in step for step in plan), plan

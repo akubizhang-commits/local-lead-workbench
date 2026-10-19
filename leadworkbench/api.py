@@ -628,8 +628,14 @@ def create_app(data_dir=None, *, allowed_hosts=None):
 
     @app.get("/api/companies")
     def companies(q: str = "", status: str = "", type: str = "", category: CategoryFilter = [],
-                  excluded: Excluded = "hide"):
-        return json_array(store.companies(q, status, type, category=category, excluded=excluded))
+                  excluded: Excluded = "hide", page: int | None = Query(default=None, ge=1),
+                  page_size: int | None = Query(default=None, ge=1, le=200),
+                  sort: Literal["newest", "procurement", "email", "updated", "tier"] = "newest"):
+        # Without page/page_size: the deprecated full array; otherwise the /api/company-page envelope.
+        if page is None and page_size is None:
+            return json_array(store.companies(q, status, type, category=category, excluded=excluded, sort=sort))
+        return store.company_page(q=q, status=status, type=type, sort=sort, page=page or 1, page_size=page_size or 50,
+                                  category=category, excluded=excluded)
     @app.get("/api/company-page")
     def company_page(q: str = "", status: str = "", type: str = "", market_id: str = "",
                      run_id: str = "", segment: Literal["", "new", "existing", "changed", "not_seen"] = "",
@@ -774,8 +780,12 @@ def create_app(data_dir=None, *, allowed_hosts=None):
         return store.record_social_outreach(id, body.entity_id, body.state, body.note)
 
     @app.get("/api/reviews")
-    def reviews():
-        return json_array(store.reviews())
+    def reviews(page: int | None = Query(default=None, ge=1), page_size: int | None = Query(default=None, ge=1, le=200),
+                kind: Literal["", "field_update", "contact", "duplicate_candidate"] = ""):
+        # Without page/page_size: the deprecated full array (with X-Total-Count).
+        if page is None and page_size is None:
+            return json_array(store.reviews(kind=kind))
+        return store.reviews(page=page, page_size=page_size, kind=kind)
     @app.post("/api/reviews/{id}/decision")
     def decision(id: str, body: Decision):
         result = store.review_decision(id, body.decision)

@@ -49,3 +49,4 @@ export interface Settings {data_dir:string;version:string;network_mode:string;pa
 export interface Backup {name:string;created_at:string}
 
 export interface CompanyPage {items:Company[];total:number;page:number;page_size:number;excluded_total?:number}
+export interface ReviewPage {items:Review[];total:number;page:number;page_size:number}

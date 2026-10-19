@@ -991,44 +991,95 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         return {"company": company, "contacts": contacts, "observations": observations,
                 "changes": self.changes(id), "social_links": company["social_links"], "related_locations": related}
 
-    def reviews(self):
+    REVIEW_ORDER = "ORDER BY r.created_at DESC,r.rowid DESC"
+
+    def reviews(self, *, page=None, page_size=None, kind=""):
+        """Pending reviews. Without page/page_size: the full array; otherwise a page envelope.
+
+        A fixed number of batched queries per call (no per-review queries)."""
+        where = "r.status='pending'" + (" AND r.kind=?" if kind else "")
+        params = (kind,) if kind else ()
+        paged = page is not None or page_size is not None
+        page, page_size = (page or 1), (page_size or 20)
         with self.connect() as con:
-            reviews = [dict(r) for r in con.execute("""SELECT r.*,c.name company_name FROM reviews r
-                JOIN companies c ON c.id=r.company_id WHERE r.status='pending' ORDER BY r.created_at DESC""")]
-            from .contact_fields import contact_fields
-            for review in reviews:
-                review["evidence_count"] = max(1, con.execute(
-                    "SELECT count(*) FROM review_evidence WHERE review_id=?", (review["id"],)).fetchone()[0])
-                review["evidence_items"] = [dict(e) for e in con.execute(
-                    """SELECT source_url,evidence,observed_at FROM review_evidence WHERE review_id=?
-                       ORDER BY observed_at DESC,rowid DESC LIMIT 5""", (review["id"],))]
-                if review["kind"] == "contact":
-                    row = con.execute("SELECT * FROM contacts WHERE id=? AND company_id=?", (review["new_value"],review["company_id"])).fetchone()
-                    proposal = con.execute("SELECT proposal FROM contact_change_proposals WHERE review_id=?",
-                                           (review["id"],)).fetchone()
-                    if proposal:
-                        review["contact_change"] = "proposal"
-                    elif (review["old_value"] or "") not in ("", "{}"):
-                        review["contact_change"] = "legacy"
-                    else:
-                        review["contact_change"] = "new"
-                    review["contact"] = {**dict(row), **json.loads(proposal[0])} if row and proposal else dict(row) if row else None
-                    if row:
-                        website = con.execute("SELECT website FROM companies WHERE id=?", (review["company_id"],)).fetchone()[0]
-                        review["contact"]["fields"] = contact_fields(review["contact"],website)
-                    try:
-                        previous = json.loads(review["old_value"] or "{}")
-                    except ValueError:
-                        previous = {}
-                    review["previous_contact"] = previous if isinstance(previous,dict) else {}
-                if review["kind"] == "duplicate_candidate":
-                    left = brief(con.execute("SELECT * FROM companies WHERE id=?", (review["old_value"],)).fetchone())
-                    right = brief(con.execute("SELECT * FROM companies WHERE id=?", (review["new_value"],)).fetchone())
-                    key = website_key(left["website"]) if left else ""
-                    same = bool(key and right and key == website_key(right["website"]))
-                    review["comparison"] = {"left": left, "right": right, "same_website": same,
-                                            "website_group": key if same else ""}
-            return reviews
+            sql = f"""SELECT r.*,c.name company_name FROM reviews r JOIN companies c ON c.id=r.company_id
+                WHERE {where} {self.REVIEW_ORDER}"""
+            if paged:
+                sql += " LIMIT ? OFFSET ?"
+                params_page = params + (page_size, (page - 1) * page_size)
+            else:
+                params_page = params
+            reviews = [dict(r) for r in con.execute(sql, params_page)]
+            self._decorate_reviews(con, reviews)
+            if not paged:
+                return reviews
+            total = con.execute(f"""SELECT count(*) FROM reviews r JOIN companies c ON c.id=r.company_id
+                WHERE {where}""", params).fetchone()[0]
+        return {"items": reviews, "total": total, "page": page, "page_size": page_size}
+
+    @staticmethod
+    def _in(con, sql, ids, chunk=500):
+        """Run ``sql`` (with one ``{ids}`` placeholder list) over ids in chunks."""
+        ids = list(dict.fromkeys(ids))
+        rows = []
+        for start in range(0, len(ids), chunk):
+            part = ids[start:start + chunk]
+            rows += con.execute(sql.replace("{ids}", ",".join("?" * len(part))), part).fetchall()
+        return rows
+
+    def _decorate_reviews(self, con, reviews):
+        from .contact_fields import contact_fields
+        ids = [r["id"] for r in reviews]
+        counts = {row[0]: row[1] for row in self._in(con, """SELECT review_id,count(*) FROM review_evidence
+            WHERE review_id IN ({ids}) GROUP BY review_id""", ids)}
+        evidence = {}
+        for row in self._in(con, """SELECT review_id,source_url,evidence,observed_at FROM (
+                SELECT review_id,source_url,evidence,observed_at,ROW_NUMBER() OVER (
+                    PARTITION BY review_id ORDER BY observed_at DESC,rowid DESC) rn
+                FROM review_evidence WHERE review_id IN ({ids})) WHERE rn<=5 ORDER BY review_id,rn""", ids):
+            evidence.setdefault(row[0], []).append({"source_url": row[1], "evidence": row[2], "observed_at": row[3]})
+        contact_reviews = [r for r in reviews if r["kind"] == "contact"]
+        contacts = {row["id"]: row for row in self._in(
+            con, "SELECT * FROM contacts WHERE id IN ({ids})", [r["new_value"] for r in contact_reviews])}
+        proposals = {row[0]: row[1] for row in self._in(
+            con, "SELECT review_id,proposal FROM contact_change_proposals WHERE review_id IN ({ids})",
+            [r["id"] for r in contact_reviews])}
+        duplicates = [r for r in reviews if r["kind"] == "duplicate_candidate"]
+        company_ids = [r["company_id"] for r in contact_reviews] + [v for r in duplicates
+                                                                   for v in (r["old_value"], r["new_value"])]
+        companies = {row["id"]: row for row in self._in(con, "SELECT * FROM companies WHERE id IN ({ids})",
+                                                         [v for v in company_ids if v is not None])}
+        for review in reviews:
+            review["evidence_count"] = max(1, counts.get(review["id"], 0))
+            review["evidence_items"] = evidence.get(review["id"], [])
+            if review["kind"] == "contact":
+                row = contacts.get(review["new_value"])
+                if row is not None and row["company_id"] != review["company_id"]:
+                    row = None
+                proposal = proposals.get(review["id"])
+                if proposal is not None:
+                    review["contact_change"] = "proposal"
+                elif (review["old_value"] or "") not in ("", "{}"):
+                    review["contact_change"] = "legacy"
+                else:
+                    review["contact_change"] = "new"
+                review["contact"] = ({**dict(row), **json.loads(proposal)} if row and proposal is not None
+                                     else dict(row) if row else None)
+                if row:
+                    website = companies[review["company_id"]]["website"]
+                    review["contact"]["fields"] = contact_fields(review["contact"], website)
+                try:
+                    previous = json.loads(review["old_value"] or "{}")
+                except ValueError:
+                    previous = {}
+                review["previous_contact"] = previous if isinstance(previous, dict) else {}
+            if review["kind"] == "duplicate_candidate":
+                left = brief(companies.get(review["old_value"]))
+                right = brief(companies.get(review["new_value"]))
+                key = website_key(left["website"]) if left else ""
+                same = bool(key and right and key == website_key(right["website"]))
+                review["comparison"] = {"left": left, "right": right, "same_website": same,
+                                        "website_group": key if same else ""}
 
     def review_decision(self, id, decision):
         if decision not in {"accept", "reject"}:
