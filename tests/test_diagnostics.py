@@ -96,6 +96,7 @@ def test_bundle_has_no_business_data_or_secrets(tmp_path):
     assert manifest["git_commit"] != "" and manifest["note"] == diagnostics.NOTE
     environment = json.loads(files["environment.json"])
     assert environment["counts"]["companies"] == 1 and environment["counts"]["contacts"] >= 1
+    assert environment["export_jobs"] == 0
     config = json.loads(files["config.json"])
     assert config["social_connections"]["proxy_url"] == "已设置"
     assert config["social_connections"]["youtube_api_key"] == "已设置"
@@ -112,6 +113,14 @@ def test_bundle_has_no_business_data_or_secrets(tmp_path):
     assert exc_lines[0].startswith("Traceback") and exc_lines[-1] == "ValueError"
     assert all(diagnostics.FRAME.match(line) for line in exc_lines[1:-1])
     assert "raise ValueError" not in failure["exc"]
+
+
+def test_environment_counts_export_job_files(tmp_path):
+    from leadworkbench import export_jobs
+    export_jobs.ensure_dirs(tmp_path)
+    for job_id in ("a" * 32, "b" * 32):
+        export_jobs.write_job(tmp_path, dict(id=job_id, status="succeeded", format="csv", layout="entries"))
+    assert diagnostics._environment(tmp_path, None)["export_jobs"] == 2
 
 
 def test_degraded_mode_bundle_skips_name_redaction(tmp_path, monkeypatch):

@@ -289,7 +289,8 @@ def _environment(data_dir: Path, con):
     for name in ("workbench.sqlite3", "workbench.sqlite3-wal"):
         path = directory / name
         result.setdefault("database", {})[name] = path.stat().st_size if path.exists() else 0
-    result["export_jobs"] = len(list((directory / "exports").glob("*.json"))) if (directory / "exports").is_dir() else 0
+    jobs = directory / "exports" / "jobs"
+    result["export_jobs"] = len(list(jobs.glob("*.json"))) if jobs.is_dir() else 0
     if con is None:
         result["database_counts"] = {"error": "storage_unavailable"}
         return result
