@@ -1,4 +1,5 @@
-export interface WorkerHeartbeat {alive:boolean;last_seen:string|null}
+export interface WorkerProblem {code:string;message:string}
+export interface WorkerHeartbeat {alive:boolean;last_seen:string|null;problem?:WorkerProblem}
 export function workerStatus(worker?:WorkerHeartbeat){
  if(!worker)return {tone:'unknown',text:'后台采集状态未知'};
  return worker.alive?{tone:'alive',text:'后台采集在线'}:{tone:'offline',text:'后台采集离线'};

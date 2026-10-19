@@ -44,7 +44,7 @@ export interface RegionConfig {
   attribution:string;
   hint:string;
 }
-export interface Overview {maps_policy?:{manual_required:boolean;retry_after_seconds:number;message:string};companies:number;contacts:number;tasks:number;pending_reviews:number;running_runs:number;queued_runs?:number;worker?:{alive:boolean;last_seen:string|null};source_status:Record<'maps'|'website',{available:boolean;message:string}>}
+export interface Overview {maps_policy?:{manual_required:boolean;retry_after_seconds:number;message:string};companies:number;contacts:number;tasks:number;pending_reviews:number;running_runs:number;queued_runs?:number;worker?:{alive:boolean;last_seen:string|null;problem?:{code:string;message:string}};source_status:Record<'maps'|'website',{available:boolean;message:string}>}
 export interface Settings {data_dir:string;version:string;network_mode:string;paid_services:boolean;ai_enabled:boolean}
 export interface Backup {name:string;created_at:string}
 

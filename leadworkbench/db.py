@@ -144,27 +144,30 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         self.directory = Path(directory).expanduser().resolve()
         self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.path = self.directory / "workbench.sqlite3"
-        with self.connect() as con:
-            version = con.execute("PRAGMA user_version").fetchone()[0]
-            if version > 2:
-                raise ValueError("数据库版本高于应用版本")
-            con.execute("PRAGMA journal_mode=WAL")
-            if version == 0:
-                con.executescript(SCHEMA)
-            if version < 2:
-                self._migrate_market(con)
-            self._migrate_audit(con)
-            self._migrate_social(con)
-            self._migrate_market_social(con)
-            from .p0_migrations import migrate_p0
-            migrate_p0(self, con)
-            self._facets_enabled = bool(con.execute(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='contact_facets'").fetchone())
-        self.path.chmod(0o600)
-        self.resolve_branch_reviews()
-        self.resolve_empty_reviews()
-        self.resolve_format_reviews()
-        self.resolve_duplicate_reviews()
+        from .migrations import migrate_lock
+        # The whole initialisation is serialised across processes (P1-5).
+        with migrate_lock(self.directory):
+            with self.connect() as con:
+                version = con.execute("PRAGMA user_version").fetchone()[0]
+                if version > 2:
+                    raise ValueError("数据库版本高于应用版本")
+                con.execute("PRAGMA journal_mode=WAL")
+                if version == 0:
+                    con.executescript(SCHEMA)
+                if version < 2:
+                    self._migrate_market(con)
+                self._migrate_audit(con)
+                self._migrate_social(con)
+                self._migrate_market_social(con)
+                from .p0_migrations import migrate_p0
+                migrate_p0(self, con)
+                self._facets_enabled = bool(con.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='contact_facets'").fetchone())
+            self.path.chmod(0o600)
+            self.resolve_branch_reviews()
+            self.resolve_empty_reviews()
+            self.resolve_format_reviews()
+            self.resolve_duplicate_reviews()
 
     def _migrate_audit(self, con):
         from .maps_policy import DDL

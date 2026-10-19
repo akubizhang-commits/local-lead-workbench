@@ -1,12 +1,14 @@
 """Single local worker. A process lock protects recovery and database restoration."""
 import argparse
 import asyncio
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 import fcntl
 import logging
 import os
 from pathlib import Path
 import signal
+import sqlite3
+import sys
 import json
 import time
 from datetime import datetime, timezone
@@ -25,14 +27,39 @@ def worker_health(directory):
         locked = True
     except (OSError, ValueError, KeyError, TypeError):
         return {"alive": False, "last_seen": None}
-    return {"alive": locked and 0 <= age < 30, "last_seen": payload["last_seen"]}
+    result = {"alive": locked and 0 <= age < 30, "last_seen": payload["last_seen"]}
+    if result["alive"] and isinstance(payload.get("problem"), dict):
+        result["problem"] = payload["problem"]
+    return result
+
+
+log = logging.getLogger(__name__)
+
+# Current worker problem shown in the heartbeat ({"code","message"} or absent).
+_PROBLEMS: dict[str, dict] = {}
+
+
+def set_problem(directory, problem=None):
+    key = str(Path(directory))
+    if problem:
+        _PROBLEMS[key] = problem
+    else:
+        _PROBLEMS.pop(key, None)
+
+
+def heartbeat_payload(directory):
+    payload = {"pid": os.getpid(), "last_seen": now()}
+    problem = _PROBLEMS.get(str(Path(directory)))
+    if problem:
+        payload["problem"] = problem
+    return payload
 
 
 async def heartbeat(directory):
     path = Path(directory) / "worker-heartbeat.json"
     while True:
         temporary = path.with_suffix(".tmp")
-        temporary.write_text(json.dumps({"pid": os.getpid(), "last_seen": now()}))
+        temporary.write_text(json.dumps(heartbeat_payload(directory), ensure_ascii=False))
         temporary.replace(path)
         await asyncio.sleep(5)
 
@@ -111,6 +138,60 @@ async def process_run_item(store, run_id, *, discover=None, enrich=None, planner
         enrich=enrich_website if enrich is None else enrich, planner=planner, **options)
 
 
+STORE_RETRY_SECONDS = 120
+STORE_BACKOFF = (0.5, 1, 2, 4, 5)
+LOOP_BACKOFF = (1, 2, 5, 10, 30)
+LOOP_MAX_FAILURES = 20
+STARTING = {"code": "starting", "message": "后台采集等待数据库初始化…"}
+
+
+def _enter_lock(directory, filename, wait_seconds):
+    """Acquire a worker lock in a worker thread; the returned stack releases it."""
+    stack = ExitStack()
+    stack.enter_context(worker_lock(directory, filename, wait_seconds=wait_seconds))
+    return stack
+
+
+def storage_problem(exc):
+    """(code, Chinese message) for storage failures, None for other errors."""
+    text = str(exc).lower()
+    if "disk is full" in text or "no space" in text:
+        return "disk_full", "后台采集暂停：磁盘空间不足"
+    if "readonly" in text or "read-only" in text or "permission denied" in text:
+        return "readonly_storage", "后台采集暂停：数据目录不可写"
+    if isinstance(exc, (sqlite3.OperationalError, sqlite3.DatabaseError, OSError)):
+        return "storage_unavailable", "后台采集暂停：数据库暂时不可用，正在重试"
+    return None
+
+
+async def open_store_with_retry(directory):
+    """Open the store, waiting for another process to finish initialising it (P1-5)."""
+    from .migrations import MigrationLockTimeout, SchemaNotReady
+    retryable = (sqlite3.OperationalError, sqlite3.DatabaseError, MigrationLockTimeout, SchemaNotReady, OSError)
+    deadline = time.monotonic() + STORE_RETRY_SECONDS
+    attempt = 0
+    while True:
+        try:
+            store = await asyncio.to_thread(Store, directory)
+        except retryable as exc:
+            problem = storage_problem(exc)
+            code = problem[0] if problem else "starting"
+            if time.monotonic() >= deadline:
+                log.error("worker could not open the database", exc_info=True,
+                          extra={"event": "worker_store_failed", "code": code})
+                reason = problem[1].removeprefix("后台采集暂停：") if problem else str(exc)
+                print(f"后台采集进程无法打开数据库（{reason}），已退出。日志：{Path(directory) / 'logs' / 'worker.log'}",
+                      file=sys.stderr)
+                raise SystemExit(3) from exc
+            log.warning("database not ready (%s): %s", code, exc, extra={"event": "worker_store_retry", "code": code})
+            set_problem(directory, STARTING)
+            await asyncio.sleep(STORE_BACKOFF[min(attempt, len(STORE_BACKOFF) - 1)])
+            attempt += 1
+            continue
+        set_problem(directory)
+        return store
+
+
 async def serve(directory):
     from . import worker_scheduler
     from .worker_scheduler import ParallelWorkScheduler
@@ -119,31 +200,49 @@ async def serve(directory):
     # worker-single.lock is held for the whole lifecycle (single instance and
     # health checks). worker.lock is held only while dispatching or running
     # work; it is released during the idle sleep so a restore can proceed.
-    with worker_lock(directory, "worker-single.lock"):
-        op = OperationLock(directory)
-        if not op.try_acquire():
-            op.close()
-            raise RuntimeError(LOCKED_MESSAGE)
-        try:
-            store = Store(directory)
-        except BaseException:
-            op.close()
-            raise
-        scheduler = ParallelWorkScheduler()
+    # Waiting for the single lock (1 s: the API's health check may hold it
+    # briefly) happens in a thread so the event loop never sleeps.
+    with await asyncio.to_thread(_enter_lock, directory, "worker-single.lock", 1):
+        set_problem(directory)
         pulse = asyncio.create_task(heartbeat(directory))
+        scheduler = ParallelWorkScheduler()
+        op = None
         try:
+            # Step 2 (P1-4): reclaim Maps processes left by a previous worker.
+            op = OperationLock(directory)
+            if not op.try_acquire():
+                raise RuntimeError(LOCKED_MESSAGE)
+            store = await open_store_with_retry(directory)
             store.recover()
             store.recover_social()
+            failures = 0
             while True:
-                if not op.held and not op.try_acquire():
-                    await asyncio.sleep(1)  # Restore in progress: no dispatch, no database writes.
+                try:
+                    if not op.held and not op.try_acquire():
+                        await asyncio.sleep(1)  # Restore in progress: no dispatch, no database writes.
+                        continue
+                    store.dispatch_due()
+                    # Invariant: turn() is the only place lanes start and it runs only
+                    # while op is held, so "op not held" implies no lane task exists.
+                    await scheduler.turn(store, process_run_item, process_social_item)
+                    if await scheduler.idle(grace=worker_scheduler.IDLE_GRACE_SECONDS):
+                        op.release()
+                except Exception as exc:
+                    failures += 1
+                    problem = storage_problem(exc)
+                    if problem:
+                        log.warning("worker loop storage error (%s): %s", problem[0], exc,
+                                    extra={"event": "worker_loop_error", "code": problem[0]})
+                        set_problem(directory, {"code": problem[0], "message": problem[1]})
+                    else:
+                        log.exception("worker loop failed", extra={"event": "worker_loop_error"})
+                        if failures >= LOOP_MAX_FAILURES:
+                            raise SystemExit(70) from exc
+                    await asyncio.sleep(LOOP_BACKOFF[min(failures - 1, len(LOOP_BACKOFF) - 1)])
                     continue
-                store.dispatch_due()
-                # Invariant: turn() is the only place lanes start and it runs only
-                # while op is held, so "op not held" implies no lane task exists.
-                await scheduler.turn(store, process_run_item, process_social_item)
-                if await scheduler.idle(grace=worker_scheduler.IDLE_GRACE_SECONDS):
-                    op.release()
+                if failures:
+                    failures = 0
+                    set_problem(directory)
                 await asyncio.sleep(1)
         finally:
             pulse.cancel()
@@ -157,7 +256,9 @@ async def serve(directory):
                     # cleanup or release the restore lock while a lane is alive.
                     interrupted = True
             (Path(directory) / "worker-heartbeat.json").unlink(missing_ok=True)
-            op.close()
+            set_problem(directory)
+            if op is not None:
+                op.close()
             if interrupted:
                 raise asyncio.CancelledError
 
