@@ -50,16 +50,16 @@ class SocialStoreMixin(SocialDiscoveryStoreMixin):
         if not con.execute("SELECT 1 FROM social_migrations WHERE name='legacy_links_v1'").fetchone():
             for c in con.execute('SELECT id FROM companies WHERE merged_into IS NULL').fetchall():
                 self._sync_social(con,c['id'])
-            con.execute("INSERT INTO social_migrations VALUES('legacy_links_v1')")
+            con.execute("INSERT INTO social_migrations(name) VALUES('legacy_links_v1')")
     def _save_social(self,con,cid,url,source_url,evidence,method,observed_at):
         r=classify_link(url)
         eid=ident(r['url']) if r['kind']!='excluded' else None
         if eid:
-            con.execute('INSERT OR IGNORE INTO social_entities VALUES(?,?,?,?,?,?)',
+            con.execute('INSERT OR IGNORE INTO social_entities(id,platform,kind,url,label,created_at) VALUES(?,?,?,?,?,?)',
                         (eid,r['platform'],r['kind'],r['url'],r['label'],stamp()))
             con.execute('INSERT OR IGNORE INTO company_social(company_id,entity_id) VALUES(?,?)',(cid,eid))
         fingerprint=ident(json.dumps([cid,url,source_url,evidence,method],ensure_ascii=False))
-        con.execute('''INSERT INTO social_evidence VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(id)
+        con.execute('''INSERT INTO social_evidence(id,company_id,entity_id,original_url,source_url,evidence,method,observed_at,reason) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(id)
             DO UPDATE SET observed_at=MAX(observed_at,excluded.observed_at)''',
             (fingerprint,cid,eid,url,source_url,evidence,method,observed_at,r['reason']))
         return {**r,'id':eid}
@@ -108,7 +108,7 @@ class SocialStoreMixin(SocialDiscoveryStoreMixin):
                 raise Conflict('账号决定已变化，请刷新后重试')
             con.execute('UPDATE company_social SET status=?,scope=?,revision=revision+1,decided_at=? WHERE company_id=? AND entity_id=?',
                         (status,scope,stamp(),cid,eid))
-            con.execute('INSERT INTO social_decisions VALUES(?,?,?,?,?,?,?)',
+            con.execute('INSERT INTO social_decisions(id,company_id,entity_id,old_status,new_status,scope,decided_at) VALUES(?,?,?,?,?,?,?)',
                         (uuid.uuid4().hex,cid,eid,row['status'],status,scope,stamp()))
         return {'ok':True}
 
@@ -122,7 +122,7 @@ class SocialStoreMixin(SocialDiscoveryStoreMixin):
             if not row: raise NotFound("社媒记录不存在")
             if row['company_status']=='do_not_contact': raise Invalid('此企业已标记拒绝联系，不能新增联系记录')
             if row['status']!='confirmed': raise Invalid('请先确认该账号或帖子的归属')
-            con.execute('INSERT INTO social_outreach VALUES(?,?,?,?,?,?)',
+            con.execute('INSERT INTO social_outreach(id,company_id,entity_id,state,note,created_at) VALUES(?,?,?,?,?,?)',
                         (uuid.uuid4().hex,cid,eid,state,note.strip(),stamp()))
         return {'ok':True}
 

@@ -65,17 +65,17 @@ FACETS_SCHEMA = [
         contact_id TEXT PRIMARY KEY REFERENCES contacts(id),
         phone TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)""",
     """CREATE TRIGGER IF NOT EXISTS contacts_facets_insert AFTER INSERT ON contacts
-        BEGIN INSERT OR IGNORE INTO contact_facets_dirty VALUES(new.id); END""",
+        BEGIN INSERT OR IGNORE INTO contact_facets_dirty(contact_id) VALUES(new.id); END""",
     """CREATE TRIGGER IF NOT EXISTS contacts_facets_update
         AFTER UPDATE OF company_id,name,role,email,url,kind,role_status,association_status,evidence ON contacts
-        BEGIN INSERT OR IGNORE INTO contact_facets_dirty VALUES(new.id); END""",
+        BEGIN INSERT OR IGNORE INTO contact_facets_dirty(contact_id) VALUES(new.id); END""",
     """CREATE TRIGGER IF NOT EXISTS contacts_facets_delete AFTER DELETE ON contacts
         BEGIN DELETE FROM contact_facets WHERE contact_id=old.id;
               DELETE FROM contact_facets_dirty WHERE contact_id=old.id; END""",
     """CREATE TRIGGER IF NOT EXISTS manual_contacts_facets_insert AFTER INSERT ON manual_contacts
-        BEGIN INSERT OR IGNORE INTO contact_facets_dirty VALUES(new.contact_id); END""",
+        BEGIN INSERT OR IGNORE INTO contact_facets_dirty(contact_id) VALUES(new.contact_id); END""",
     """CREATE TRIGGER IF NOT EXISTS manual_contacts_facets_update AFTER UPDATE ON manual_contacts
-        BEGIN INSERT OR IGNORE INTO contact_facets_dirty VALUES(new.contact_id); END""",
+        BEGIN INSERT OR IGNORE INTO contact_facets_dirty(contact_id) VALUES(new.contact_id); END""",
 ]
 FACET_BATCH = 5000
 
@@ -86,7 +86,7 @@ def _facets_schema(store, con):
 
 
 def _facets_mark(store, con):
-    con.execute("INSERT OR IGNORE INTO contact_facets_dirty SELECT id FROM contacts")
+    con.execute("INSERT OR IGNORE INTO contact_facets_dirty(contact_id) SELECT id FROM contacts")
 
 
 def _facets_fill(store, con):
@@ -133,7 +133,7 @@ def _categories(store, con):
                                                              row["observed_at"]])
         if row["observed_at"] >= item[3]:
             item[0], item[1], item[3] = row["value"], row["source_url"], row["observed_at"]
-    con.executemany("INSERT OR IGNORE INTO company_categories VALUES(?,?,?,?,?,?)",
+    con.executemany("INSERT OR IGNORE INTO company_categories(company_id,category_key,category,source_url,first_seen,last_seen) VALUES(?,?,?,?,?,?)",
                     [(cid, key, v[0], v[1] or "", v[2], v[3]) for (cid, key), v in grouped.items()])
     stamp = now()
     hints = []
@@ -146,7 +146,7 @@ def _categories(store, con):
             if kind in TYPE_HINTS:
                 hints += [(row[0], TYPE_HINTS[kind], task["id"], stamp) for row in con.execute(
                     "SELECT company_id FROM market_memberships WHERE market_id=?", (task["id"],))]
-    con.executemany("INSERT OR IGNORE INTO company_type_hints VALUES(?,?,?,?)", hints)
+    con.executemany("INSERT OR IGNORE INTO company_type_hints(company_id,business_type,market_id,created_at) VALUES(?,?,?,?)", hints)
 
 
 PROPOSALS_SCHEMA = [
@@ -200,15 +200,15 @@ def _repair_rejected(store, con):
             ORDER BY created_at DESC,rowid DESC LIMIT 1""", (review["company_id"], contact_id)).fetchone()
         prior = before[0] if before else "automatic"
         if prior == "accepted":
-            con.execute("INSERT OR REPLACE INTO contact_decisions VALUES(?,'accepted',?)", (contact_id, stamp))
+            con.execute("INSERT OR REPLACE INTO contact_decisions(contact_id,adoption_status,decided_at) VALUES(?,'accepted',?)", (contact_id, stamp))
         elif prior != "excluded":
             con.execute("DELETE FROM contact_decisions WHERE contact_id=?", (contact_id,))
         rejected = {k: current[k] or "" for k in MATERIAL_KEYS}
         rejected.update(source_url=current["source_url"] or "", observed_at=current["observed_at"] or "")
-        con.execute("INSERT INTO contact_change_proposals VALUES(?,?,?,?,?,?,?,?)",
+        con.execute("INSERT INTO contact_change_proposals(review_id,contact_id,proposal,proposal_key,status,origin,created_at,decided_at) VALUES(?,?,?,?,?,?,?,?)",
                     (review["id"], contact_id, encode(rejected), proposal_key(rejected), "rejected", "repair",
                      stamp, stamp))
-        con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
+        con.execute("INSERT INTO changes(id,company_id,field,old_value,new_value,created_at,reason) VALUES(?,?,?,?,?,?,?)",
                     (uid(), review["company_id"], "contact", encode({k: rejected[k] for k in MATERIAL_KEYS}),
                      review["old_value"], stamp,
                      f"数据修复：恢复因‘标记为不采用’被误排除的原联系人（修复前备份 {backup}）"))

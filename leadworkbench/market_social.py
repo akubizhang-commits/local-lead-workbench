@@ -53,7 +53,7 @@ class MarketSocialMixin:
             self._begin(con)
             if not con.execute("SELECT 1 FROM tasks WHERE id=?", (task_id,)).fetchone():
                 raise NotFound("市场不存在")
-            con.execute("INSERT INTO task_social_settings VALUES(?,?) ON CONFLICT(task_id) DO UPDATE SET payload=excluded.payload",
+            con.execute("INSERT INTO task_social_settings(task_id,payload) VALUES(?,?) ON CONFLICT(task_id) DO UPDATE SET payload=excluded.payload",
                         (task_id, json.dumps(value)))
         return self.task(task_id)
 
@@ -64,7 +64,7 @@ class MarketSocialMixin:
             if not con.execute("SELECT 1 FROM tasks WHERE id=?", (task_id,)).fetchone():
                 raise NotFound("记录不存在")
             value = options({**self._task_social_options(con, task_id), **changes})
-            con.execute("INSERT INTO task_social_settings VALUES(?,?) ON CONFLICT(task_id) DO UPDATE SET payload=excluded.payload",
+            con.execute("INSERT INTO task_social_settings(task_id,payload) VALUES(?,?) ON CONFLICT(task_id) DO UPDATE SET payload=excluded.payload",
                         (task_id, json.dumps(value)))
         return self.task(task_id)
 
@@ -80,9 +80,9 @@ class MarketSocialMixin:
         settings = dict(platform_search=True, profile_only=False, read_only=False, searxng_url="",
             connections=load_connections(self.directory), market_options=cfg)
         rid = uid()
-        con.execute("INSERT INTO social_runs VALUES(?,?,?,NULL,?,?,?)",
+        con.execute("INSERT INTO social_runs(id,status,created_at,finished_at,company_ids,settings,sample) VALUES(?,?,?,NULL,?,?,?)",
             (rid, "paused" if parent["status"] == "paused" else "queued", stamp(), "[]", json.dumps(settings), "[]"))
-        con.execute("INSERT INTO market_social_runs VALUES(?,?)", (parent["id"], rid))
+        con.execute("INSERT INTO market_social_runs(market_run_id,social_run_id) VALUES(?,?)", (parent["id"], rid))
         return rid
 
     def _enqueue_market_social(self, con, run_id, company_id):
@@ -214,7 +214,7 @@ class MarketSocialMixin:
                 rid = uid()
                 snapshot = {**task, **cfg, "auto_enrich": False, "social_only": True}
                 snapshot.pop("latest_run", None)
-                con.execute("INSERT INTO runs VALUES(?,?,?,NULL,?,?,?,NULL,?,NULL,?)",
+                con.execute("INSERT INTO runs(id,task_id,kind,company_id,status,progress,message,error,created_at,finished_at,snapshot) VALUES(?,?,?,NULL,?,?,?,NULL,?,NULL,?)",
                     (rid, task_id, "social", "queued", "{}", "等待补充市场社媒资料", stamp(), json.dumps(snapshot)))
                 parent = dict(con.execute("SELECT * FROM runs WHERE id=?", (rid,)).fetchone())
             for cid in companies:

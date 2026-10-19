@@ -46,7 +46,7 @@ class SocialDiscoveryStoreMixin:
 
     def set_social_settings(self,value):
         value=validate_endpoint(value)
-        with self.connect() as con:con.execute("INSERT INTO social_config VALUES('searxng_url',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(value,))
+        with self.connect() as con:con.execute("INSERT INTO social_config(key,value) VALUES('searxng_url',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(value,))
         return self.social_settings()
 
     def social_pilot_sample(self,con):
@@ -105,7 +105,7 @@ class SocialDiscoveryStoreMixin:
             ), None)
             if existing:rid=existing['id']
             else:
-                rid=uid();con.execute('INSERT INTO social_runs VALUES(?,\'queued\',?,NULL,?,?,?)',
+                rid=uid();con.execute('INSERT INTO social_runs(id,status,created_at,finished_at,company_ids,settings,sample) VALUES(?,\'queued\',?,NULL,?,?,?)',
                     (rid,timestamp(),encoded,json.dumps(settings),json.dumps(sample,ensure_ascii=False)))
                 for c in companies:
                     if platform_search:
@@ -303,7 +303,7 @@ class SocialDiscoveryStoreMixin:
             if item['stage'] in {'read','profile'}:
                 entity=con.execute('SELECT id FROM social_entities WHERE url=?',(item['target'],)).fetchone()
                 if entity and not result.get('cache_reused'):
-                    con.execute('INSERT INTO social_page_observations VALUES(?,?,?,?,?)',(uid(),entity['id'],item['run_id'],json.dumps(result,ensure_ascii=False),timestamp()))
+                    con.execute('INSERT INTO social_page_observations(id,entity_id,run_id,payload,observed_at) VALUES(?,?,?,?,?)',(uid(),entity['id'],item['run_id'],json.dumps(result,ensure_ascii=False),timestamp()))
             state={'preview_read':'succeeded','unreadable':'blocked','auth_required':'blocked','challenge':'blocked'}.get(result.get('status'),result.get('status','failed'))
             if state not in {'succeeded','no_results','blocked','failed','skipped'}:state='failed'
             if parent and not retry and item['stage']=='profile' and state=='succeeded' and json.loads(run['settings'])['market_options']['social_read_posts']:

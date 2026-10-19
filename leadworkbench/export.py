@@ -87,7 +87,7 @@ def _collect(store, con, filters, *, observations):
     companies = [c for c in store._company_rows(con, keyed, query) if c["status"] != "do_not_contact"]
     con.execute("CREATE TEMP TABLE IF NOT EXISTS export_ids(id TEXT PRIMARY KEY, ord INTEGER)")
     con.execute("DELETE FROM temp.export_ids")
-    con.executemany("INSERT INTO temp.export_ids VALUES(?,?)", [(c["id"], i) for i, c in enumerate(companies)])
+    con.executemany("INSERT INTO temp.export_ids(id,ord) VALUES(?,?)", [(c["id"], i) for i, c in enumerate(companies)])
     data = {"companies": companies, "market_id": query["market_id"], "latest": {}, "contacts": {}, "versions": {},
             "locations": {}, "observations": {}, "listings": {}, "markets": {}, "phone_obs": {}}
     for r in _batch(con, """SELECT company_id,source_url,observed_at FROM (SELECT o.company_id,o.source_url,o.observed_at,

@@ -202,13 +202,13 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         def guard(alias):
             return (f"AND NOT EXISTS(SELECT 1 FROM contact_change_proposals p WHERE p.review_id={alias}.id)"
                     if proposals else "")
-        con.execute(f"""INSERT OR IGNORE INTO contact_decisions
+        con.execute(f"""INSERT OR IGNORE INTO contact_decisions(contact_id,adoption_status,decided_at)
             SELECT c.id,CASE r.status WHEN 'reject' THEN 'excluded' ELSE 'accepted' END,r.created_at
             FROM contacts c JOIN reviews r ON r.new_value=c.id AND r.kind='contact'
             WHERE r.status IN ('accept','reject') {guard('r')} AND r.rowid=(
                 SELECT max(r2.rowid) FROM reviews r2 WHERE r2.new_value=c.id
                 AND r2.kind='contact' AND r2.status IN ('accept','reject') {guard('r2')})""")
-        con.execute("""INSERT OR IGNORE INTO contact_decisions
+        con.execute("""INSERT OR IGNORE INTO contact_decisions(contact_id,adoption_status,decided_at)
             SELECT id,CASE review_status WHEN 'reject' THEN 'excluded' ELSE 'accepted' END,observed_at
             FROM contacts WHERE review_status IN ('accept','reject')""")
     def _accepted_overrides_backfill(self, con):
@@ -260,7 +260,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                 log.warning("contact facet failed: %s", row["id"], exc_info=True, extra={"event": "contact_facet_failed"})
                 values = (0, "irrelevant", "none", 8, encode([row["id"]]), "")
             facets.append((row["id"], row["company_id"], *values, FACET_VERSION))
-        con.executemany("INSERT OR REPLACE INTO contact_facets VALUES(?,?,?,?,?,?,?,?,?)", facets)
+        con.executemany("INSERT OR REPLACE INTO contact_facets(contact_id,company_id,channel_ok,category,tier,tier_rank,identity_key,email_key,version) VALUES(?,?,?,?,?,?,?,?,?)", facets)
         con.executemany("DELETE FROM contact_facets_dirty WHERE contact_id=?", [(r["dirty_id"],) for r in rows])
         return len(rows)
 
@@ -335,7 +335,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                     continue
                 if row[0] in (None,"","[]"):
                     con.execute(f"UPDATE companies SET {field}=?,revision=revision+1 WHERE id=?",(r["new_value"],r["company_id"]))
-                    con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",(uid(),r["company_id"],field,row[0],r["new_value"],now(),"自动补全旧空字段"))
+                    con.execute("INSERT INTO changes(id,company_id,field,old_value,new_value,created_at,reason) VALUES(?,?,?,?,?,?,?)",(uid(),r["company_id"],field,row[0],r["new_value"],now(),"自动补全旧空字段"))
                 elif row[0] != r["new_value"]:
                     continue
             else:
@@ -364,7 +364,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             return self._resolve_duplicate_reviews_locked(con)
     def _resolve_duplicate_reviews_locked(self, con):
         from .market_store import semantic_value
-        con.execute("""INSERT OR IGNORE INTO review_evidence
+        con.execute("""INSERT OR IGNORE INTO review_evidence(review_id,fingerprint,source_url,evidence,observed_at)
             SELECT r.id,COALESCE(r.fingerprint,r.id),r.source_url,r.evidence,COALESCE(r.created_at,'')
             FROM reviews r WHERE r.kind='field_update'
             AND NOT EXISTS (SELECT 1 FROM review_evidence e WHERE e.review_id=r.id)""")
@@ -466,7 +466,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         if not isinstance(value, str):
             value = encode(value)
         fingerprint = hashlib.sha256(encode([id, field, value, url, timestamp, method, run_id, query]).encode()).hexdigest()
-        con.execute("""INSERT OR IGNORE INTO observations VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+        con.execute("""INSERT OR IGNORE INTO observations(id,company_id,field,value,source_url,evidence,observed_at,method,run_id,query,fingerprint) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
                     (uid(), id, field, value, url, evidence[:4000], timestamp, method, run_id, query, fingerprint))
 
     def _review(self, con, id, kind, field, old, new, url, evidence, *, revision=None):
@@ -476,7 +476,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         review; each source page is kept as a review_evidence row."""
         fingerprint = hashlib.sha256(encode([id, kind, field, old, new, url, revision]).encode()).hexdigest()
         if kind != "field_update":
-            inserted = con.execute("INSERT OR IGNORE INTO reviews VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            inserted = con.execute("INSERT OR IGNORE INTO reviews(id,company_id,kind,field,old_value,new_value,source_url,evidence,status,created_at,fingerprint) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                                    (uid(), id, kind, field, old, new, url, evidence[:4000], "pending", now(), fingerprint))
             return "created" if inserted.rowcount else "duplicate"
         if (con.execute("SELECT 1 FROM reviews WHERE fingerprint=?", (fingerprint,)).fetchone()
@@ -488,15 +488,15 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                 AND kind='field_update' AND field=? AND status='pending' ORDER BY created_at,rowid""", (id, field))
                 if semantic_value(field, r["new_value"]) == wanted), None)
         if match:
-            con.execute("INSERT INTO review_evidence VALUES(?,?,?,?,?)",
+            con.execute("INSERT INTO review_evidence(review_id,fingerprint,source_url,evidence,observed_at) VALUES(?,?,?,?,?)",
                         (match["id"], fingerprint, url, evidence[:4000], now()))
             if match["old_value"] != old:
                 con.execute("UPDATE reviews SET old_value=? WHERE id=?", (old, match["id"]))
             return "merged"
         review_id = uid()
-        con.execute("INSERT INTO reviews VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+        con.execute("INSERT INTO reviews(id,company_id,kind,field,old_value,new_value,source_url,evidence,status,created_at,fingerprint) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                     (review_id, id, kind, field, old, new, url, evidence[:4000], "pending", now(), fingerprint))
-        con.execute("INSERT INTO review_evidence VALUES(?,?,?,?,?)",
+        con.execute("INSERT INTO review_evidence(review_id,fingerprint,source_url,evidence,observed_at) VALUES(?,?,?,?,?)",
                     (review_id, fingerprint, url, evidence[:4000], now()))
         return "created"
 
@@ -525,7 +525,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                 return  # Same proposal from another page: evidence added, no extra history row.
         else:
             con.execute(f"UPDATE companies SET {field}=?,revision=revision+1 WHERE id=?", (value, company["id"]))
-        con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
+        con.execute("INSERT INTO changes(id,company_id,field,old_value,new_value,created_at,reason) VALUES(?,?,?,?,?,?,?)",
                     (uid(), company["id"], field, old, value, now(), "来源观察；冲突需审核" if old else "补全空字段"))
 
     def ingest(self, record, run_id, query, *, city="", country="US"):
@@ -547,9 +547,9 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                     VALUES(?,?,?,?,?,?,?,'maps',?)""",
                     (id, record["name"], record.get("address") or "", record.get("phone") or "",
                      record.get("website") or "", city, country, now()))
-                con.execute("INSERT INTO listings VALUES(?,?,?,?,?)",
+                con.execute("INSERT INTO listings(source_key,company_id,source_url,first_seen,last_seen) VALUES(?,?,?,?,?)",
                             (record["source_key"], id, record["source_url"], timestamp, timestamp))
-                con.execute("INSERT INTO locations VALUES(?,?,?,?,?,?,?,?)",
+                con.execute("INSERT INTO locations(id,company_id,source_key,address,latitude,longitude,source_url,observed_at) VALUES(?,?,?,?,?,?,?,?)",
                             (uid(), id, record["source_key"], record.get("address"), record.get("latitude"),
                              record.get("longitude"), record["source_url"], timestamp))
             company = dict(con.execute("SELECT * FROM companies WHERE id=?", (id,)).fetchone())
@@ -582,7 +582,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                     stored = encode(value) if isinstance(value, list) else value
                     old = encode(company[field]) if isinstance(company[field], list) else company[field]
                     con.execute(f"UPDATE companies SET {field}=? WHERE id=?", (stored, id))
-                    con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
+                    con.execute("INSERT INTO changes(id,company_id,field,old_value,new_value,created_at,reason) VALUES(?,?,?,?,?,?,?)",
                                 (uid(), id, field, old, stored, now(), "人工修正"))
                     self._observe(con, id, field, value, company["website"], "人工修正", now(), "manual")
                 overrides.add(field)
@@ -590,16 +590,16 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                 con.execute("UPDATE companies SET notes=? WHERE id=?", (notes, id))
             if status is not None:
                 self._set_company_status(con, company, status)
-            con.execute("INSERT OR REPLACE INTO company_manual_checks VALUES(?,?)", (id, now()))
+            con.execute("INSERT OR REPLACE INTO company_manual_checks(company_id,checked_at) VALUES(?,?)", (id, now()))
             con.execute("UPDATE companies SET overrides=?,revision=revision+1 WHERE id=?", (encode(sorted(overrides)), id))
         return self.company(id)
 
     def _set_company_status(self, con, company, status):
         if company["status"] != status:
             con.execute("UPDATE companies SET status=? WHERE id=?", (status, company["id"]))
-            con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
+            con.execute("INSERT INTO changes(id,company_id,field,old_value,new_value,created_at,reason) VALUES(?,?,?,?,?,?,?)",
                         (uid(), company["id"], "status", company["status"], status, now(), "人工客户匹配判断"))
-        con.execute("INSERT OR REPLACE INTO company_manual_checks VALUES(?,?)", (company["id"], now()))
+        con.execute("INSERT OR REPLACE INTO company_manual_checks(company_id,checked_at) VALUES(?,?)", (company["id"], now()))
 
     def batch_status(self, companies, status):
         if status not in {"candidate", "verified", "not_fit", "do_not_contact"}:
@@ -650,14 +650,14 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                 if prior:
                     if prior["review_status"] == "reject":
                         # Only a rejected *new contact* review leaves the row in 'reject'.
-                        con.execute("INSERT OR IGNORE INTO contact_decisions VALUES(?, 'excluded', ?)", (prior["id"], now()))
+                        con.execute("INSERT OR IGNORE INTO contact_decisions(contact_id,adoption_status,decided_at) VALUES(?, 'excluded', ?)", (prior["id"], now()))
                     material = MATERIAL_KEYS
                     contact = {**contact, **{k: contact.get(k) or prior[k] or "" for k in material}}
                     conflict = any(prior[k] and contact[k] != prior[k] for k in material if k != "evidence")
                     if conflict or contact["source_url"] != prior["source_url"] or contact["evidence"] != prior["evidence"]:
-                        con.execute("INSERT INTO contact_versions VALUES(?,?,?,?)",
+                        con.execute("INSERT INTO contact_versions(id,contact_id,payload,observed_at) VALUES(?,?,?,?)",
                                     (uid(), prior["id"], encode(dict(prior)), prior["observed_at"]))
-                    con.execute("INSERT INTO contact_versions VALUES(?,?,?,?)",
+                    con.execute("INSERT INTO contact_versions(id,contact_id,payload,observed_at) VALUES(?,?,?,?)",
                                 (uid(), prior["id"], encode(contact), contact.get("observed_at") or now()))
                     if con.execute("SELECT 1 FROM manual_contacts WHERE contact_id=?", (prior["id"],)).fetchone():
                         continue  # Manually entered: later collection keeps history only, never overwrites.
@@ -677,7 +677,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                         con.execute("""UPDATE reviews SET old_value=? WHERE id IN (SELECT p.review_id
                             FROM contact_change_proposals p JOIN reviews r ON r.id=p.review_id AND r.status='pending'
                             WHERE p.contact_id=? AND p.status='pending')""", (new, prior["id"]))
-                        con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
+                        con.execute("INSERT INTO changes(id,company_id,field,old_value,new_value,created_at,reason) VALUES(?,?,?,?,?,?,?)",
                                     (uid(), id, "contact", old, new, now(), "自动补全联系人资料或更新来源证据"))
                     con.execute("UPDATE contacts SET observed_at=?,source_url=? WHERE id=?",
                                 (contact.get("observed_at") or now(), contact["source_url"], prior["id"]))
@@ -687,9 +687,9 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                     "name", "role", "email", "url", "kind", "role_status", "association_status",
                     "source_url", "evidence", "observed_at")]
                 vals[-1] = vals[-1] or now()
-                con.execute("INSERT INTO contacts VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                con.execute("INSERT INTO contacts(id,company_id,name,role,email,url,kind,role_status,association_status,source_url,evidence,observed_at,review_status,fingerprint) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                             (cid, id, *vals, "auto_recorded", fingerprint))
-                con.execute("INSERT INTO contact_versions VALUES(?,?,?,?)",
+                con.execute("INSERT INTO contact_versions(id,contact_id,payload,observed_at) VALUES(?,?,?,?)",
                             (uid(), cid, encode(contact), vals[-1]))
                 self._mark_market_changed(con, run_id, id)
             social = sorted(set(json.loads(company["social_links"])) | set(payload.get("social_links", [])))
@@ -736,7 +736,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             WHERE p.contact_id=? AND p.proposal_key=? AND p.status='pending'""", (contact_id, key)).fetchone()
         if pending:
             fingerprint = hashlib.sha256(encode(["contact_proposal", pending[0], source_url, evidence]).encode()).hexdigest()
-            con.execute("INSERT OR IGNORE INTO review_evidence VALUES(?,?,?,?,?)",
+            con.execute("INSERT OR IGNORE INTO review_evidence(review_id,fingerprint,source_url,evidence,observed_at) VALUES(?,?,?,?,?)",
                         (pending[0], fingerprint, source_url, evidence, now()))
             return
         for other in con.execute("""SELECT review_id FROM contact_change_proposals
@@ -748,16 +748,16 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         review_fp = hashlib.sha256(encode(["contact_proposal", review_id]).encode()).hexdigest()
         evidence_fp = hashlib.sha256(encode(["contact_proposal", review_id, source_url, evidence]).encode()).hexdigest()
         old = encode({k: prior[k] for k in MATERIAL_KEYS})
-        con.execute("INSERT INTO reviews VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+        con.execute("INSERT INTO reviews(id,company_id,kind,field,old_value,new_value,source_url,evidence,status,created_at,fingerprint) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                     (review_id, company_id, "contact", "contact", old, contact_id, source_url, evidence,
                      "pending", now(), review_fp))
-        con.execute("INSERT OR IGNORE INTO review_evidence VALUES(?,?,?,?,?)",
+        con.execute("INSERT OR IGNORE INTO review_evidence(review_id,fingerprint,source_url,evidence,observed_at) VALUES(?,?,?,?,?)",
                     (review_id, evidence_fp, source_url, evidence, now()))
         proposal = {k: contact.get(k) or "" for k in MATERIAL_KEYS}
         proposal.update(source_url=source_url, observed_at=contact.get("observed_at") or now())
-        con.execute("INSERT INTO contact_change_proposals VALUES(?,?,?,?,?,?,?,?)",
+        con.execute("INSERT INTO contact_change_proposals(review_id,contact_id,proposal,proposal_key,status,origin,created_at,decided_at) VALUES(?,?,?,?,?,?,?,?)",
                     (review_id, contact_id, encode(proposal), key, "pending", "proposal", now(), None))
-        con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
+        con.execute("INSERT INTO changes(id,company_id,field,old_value,new_value,created_at,reason) VALUES(?,?,?,?,?,?,?)",
                     (uid(), company_id, "contact", old, encode({k: proposal[k] for k in MATERIAL_KEYS}), now(),
                      "联系人资料变化，需审核（原记录保持可用）"))
 
@@ -782,8 +782,8 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
 
     def _record_adoption(self, con, company_id, contact_id, adoption):
         prior = con.execute("SELECT adoption_status FROM contact_decisions WHERE contact_id=?", (contact_id,)).fetchone()
-        con.execute("INSERT OR REPLACE INTO contact_decisions VALUES(?,?,?)", (contact_id, adoption, now()))
-        con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
+        con.execute("INSERT OR REPLACE INTO contact_decisions(contact_id,adoption_status,decided_at) VALUES(?,?,?)", (contact_id, adoption, now()))
+        con.execute("INSERT INTO changes(id,company_id,field,old_value,new_value,created_at,reason) VALUES(?,?,?,?,?,?,?)",
                     (uid(), company_id, "contact_adoption", prior[0] if prior else "automatic",
                      encode({"contact_id": contact_id, "adoption_status": adoption}), now(), "人工联系人采用决定"))
 
@@ -809,13 +809,13 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                 con.execute("UPDATE contact_change_proposals SET status='accepted',decided_at=? WHERE review_id=?",
                             (stamp, r["id"]))
                 self._record_adoption(con, r["company_id"], contact_id, "accepted")
-                con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
+                con.execute("INSERT INTO changes(id,company_id,field,old_value,new_value,created_at,reason) VALUES(?,?,?,?,?,?,?)",
                             (uid(), r["company_id"], "contact", r["old_value"],
                              encode({k: values.get(k) or "" for k in MATERIAL_KEYS}), stamp, "人工接受联系人变化"))
                 return {"ok": True, "auto_closed": 0}, False
             con.execute("UPDATE contact_change_proposals SET status='rejected',decided_at=? WHERE review_id=?",
                         (stamp, r["id"]))
-            con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
+            con.execute("INSERT INTO changes(id,company_id,field,old_value,new_value,created_at,reason) VALUES(?,?,?,?,?,?,?)",
                         (uid(), r["company_id"], "contact", proposal["proposal"], r["old_value"], stamp,
                          "不采用本次联系人变化，保留此前记录"))
             return {"ok": True, "auto_closed": 0, "kept_previous": True}, False
@@ -827,14 +827,14 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         key = proposal_key(rejected)
         if decision == "reject":
             self._restore_contact(con, contact_id, self._pre_proposal_snapshot(con, r, current))
-            con.execute("INSERT INTO contact_change_proposals VALUES(?,?,?,?,?,?,?,?)",
+            con.execute("INSERT INTO contact_change_proposals(review_id,contact_id,proposal,proposal_key,status,origin,created_at,decided_at) VALUES(?,?,?,?,?,?,?,?)",
                         (r["id"], contact_id, encode(rejected), key, "rejected", "legacy", stamp, stamp))
-            con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
+            con.execute("INSERT INTO changes(id,company_id,field,old_value,new_value,created_at,reason) VALUES(?,?,?,?,?,?,?)",
                         (uid(), r["company_id"], "contact", encode({k: rejected[k] for k in MATERIAL_KEYS}),
                          r["old_value"], stamp, "不采用本次联系人变化，原记录已恢复"))
             return {"ok": True, "auto_closed": 0, "kept_previous": True}, False
         con.execute("UPDATE contacts SET review_status='accept' WHERE id=?", (contact_id,))
-        con.execute("INSERT INTO contact_change_proposals VALUES(?,?,?,?,?,?,?,?)",
+        con.execute("INSERT INTO contact_change_proposals(review_id,contact_id,proposal,proposal_key,status,origin,created_at,decided_at) VALUES(?,?,?,?,?,?,?,?)",
                     (r["id"], contact_id, encode(rejected), key, "accepted", "legacy", stamp, stamp))
         self._record_adoption(con, r["company_id"], contact_id, "accepted")
         return {"ok": True, "auto_closed": 0}, False
@@ -871,18 +871,18 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             row = dict(name=name, role=role, email=email, url=url, kind=kind, role_status=role_status,
                        association_status=association, source_url="", evidence="人工录入：" + note, observed_at=stamp)
             try:
-                con.execute("INSERT INTO contacts VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                con.execute("INSERT INTO contacts(id,company_id,name,role,email,url,kind,role_status,association_status,source_url,evidence,observed_at,review_status,fingerprint) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                             (contact_id, id, *row.values(), "accept", fingerprint))
             except sqlite3.IntegrityError as exc:
                 raise Conflict("该联系人已存在，请直接核对现有记录") from exc
-            con.execute("INSERT INTO manual_contacts VALUES(?,?,?,?)", (contact_id, phone, note, stamp))
-            con.execute("INSERT INTO contact_decisions VALUES(?,'accepted',?)", (contact_id, stamp))
-            con.execute("INSERT INTO contact_versions VALUES(?,?,?,?)",
+            con.execute("INSERT INTO manual_contacts(contact_id,phone,note,created_at) VALUES(?,?,?,?)", (contact_id, phone, note, stamp))
+            con.execute("INSERT INTO contact_decisions(contact_id,adoption_status,decided_at) VALUES(?,'accepted',?)", (contact_id, stamp))
+            con.execute("INSERT INTO contact_versions(id,contact_id,payload,observed_at) VALUES(?,?,?,?)",
                         (uid(), contact_id, encode({**row, "phone": phone, "origin": "manual"}), stamp))
-            con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
+            con.execute("INSERT INTO changes(id,company_id,field,old_value,new_value,created_at,reason) VALUES(?,?,?,?,?,?,?)",
                         (uid(), id, "contact", None, encode({**row, "phone": phone}), stamp, "人工新增联系人"))
             con.execute("UPDATE companies SET revision=revision+1 WHERE id=?", (id,))
-            con.execute("INSERT OR REPLACE INTO company_manual_checks VALUES(?,?)", (id, stamp))
+            con.execute("INSERT OR REPLACE INTO company_manual_checks(company_id,checked_at) VALUES(?,?)", (id, stamp))
             if self._facets_enabled:
                 self._refresh_facets_locked(con)
         return self.detail(id)
@@ -944,7 +944,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                         and not invalid_email_reason(email)
                         and email.casefold() in (row['evidence'] or '').casefold()):
                     fingerprint = hashlib.sha256(encode([row['company_id'],email,None,row['source_url']]).encode()).hexdigest()
-                    result = con.execute("INSERT OR IGNORE INTO contacts VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    result = con.execute("INSERT OR IGNORE INTO contacts(id,company_id,name,role,email,url,kind,role_status,association_status,source_url,evidence,observed_at,review_status,fingerprint) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (uid(),row['company_id'],'','',email,'','general','unknown','company_only',
                          row['source_url'],row['evidence'],row['observed_at'],'auto_recorded',fingerprint))
                     channels_preserved += result.rowcount
@@ -952,7 +952,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                 con.execute("UPDATE reviews SET status='superseded' WHERE kind='contact' AND new_value=? AND status='pending'", (row['id'],))
                 con.execute("UPDATE contact_change_proposals SET status='superseded',decided_at=? WHERE contact_id=? AND status='pending'",
                             (now(), row['id']))
-                con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
+                con.execute("INSERT INTO changes(id,company_id,field,old_value,new_value,created_at,reason) VALUES(?,?,?,?,?,?,?)",
                             (uid(), row['company_id'], 'contact', encode(dict(row)),
                              encode({'id':row['id'], 'review_status':'invalid'}), now(),
                              '联系人识别修正：' + {'invalid_person_name':'服务栏目、宣传句或混合文字被误认为姓名', 'invalid_job_title':'普通文案被误认为岗位', 'placeholder_email':'建站占位邮箱', 'invalid_email_format':'邮箱格式无效', 'placeholder_contact_link':'菜单占位链接，不是联系入口', 'non_contact_form':'订阅或购物用途页面，不是联系入口', 'page_wrapper_form':'整页导航外层表单被误认为联系表单', 'invalid_contact_link':'联系地址无效', 'third_party_service_email':'第三方网站插件服务邮箱', 'shared_mailbox_assigned_to_person':'通用邮箱被错误归属个人', 'supplier_link_without_contact_intent':'缺少供应商申请或联系意图'}.get(reason, reason) + '；原始证据保留'))
@@ -1104,8 +1104,8 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                     con.execute(f"UPDATE companies SET {field}=?,revision=revision+1 WHERE id=?", (r["new_value"], r["company_id"]))
                     overrides = json.loads(con.execute("SELECT overrides FROM companies WHERE id=?", (r["company_id"],)).fetchone()[0])
                     con.execute("UPDATE companies SET overrides=? WHERE id=?", (encode(sorted(set(overrides) | {field})), r["company_id"]))
-                    con.execute("INSERT OR REPLACE INTO company_manual_checks VALUES(?,?)", (r["company_id"], now()))
-                    con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",
+                    con.execute("INSERT OR REPLACE INTO company_manual_checks(company_id,checked_at) VALUES(?,?)", (r["company_id"], now()))
+                    con.execute("INSERT INTO changes(id,company_id,field,old_value,new_value,created_at,reason) VALUES(?,?,?,?,?,?,?)",
                                 (uid(), r["company_id"], field, current, r["new_value"], now(), "人工接受来源变更"))
                 con.execute("UPDATE reviews SET status=? WHERE id=?", (decision, id))
                 result = self._close_same_value_reviews(con, r, decision) if r["kind"] == "field_update" else 0
@@ -1126,7 +1126,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
     def create_task(self, payload):
         id = uid()
         with self.connect() as con:
-            con.execute('INSERT INTO tasks VALUES(?,?,?,?,?,?,?,?,?,?)',
+            con.execute('INSERT INTO tasks(id,name,country,state,city,keywords,company_types,"limit",auto_enrich,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',
                         (id, payload["name"], payload["country"], payload["state"], payload["city"],
                          encode(payload["keywords"]), encode(payload["company_types"]), payload["limit"],
                          int(payload["auto_enrich"]), now()))
@@ -1173,13 +1173,13 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         if market_mode:
             progress.update(new=0, existing=0, changed=0, discovery_done=0, discovery_total=0,
                             market_total=self._market_stats(con, task_id)["total"])
-        con.execute("INSERT INTO runs VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+        con.execute("INSERT INTO runs(id,task_id,kind,company_id,status,progress,message,error,created_at,finished_at,snapshot) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                     (id, task_id, kind, company_id, "queued", encode(progress),
                      "等待本地 worker", None, now(), None, encode(snapshot)))
         if market_mode:
             con.execute("INSERT INTO market_runs(run_id,market_id) VALUES(?,?)", (id, task_id))
         for target in dict.fromkeys(targets):
-            con.execute("INSERT INTO work_items VALUES(?,?,?,?,?,?)",
+            con.execute("INSERT INTO work_items(id,run_id,stage,target,state,result) VALUES(?,?,?,?,?,?)",
                         (uid(), id, "planning" if market_mode else kind, target, "pending", None))
         if task and snapshot.get("auto_social"):
             self._market_social_run(con, dict(id=id, status="queued", snapshot=snapshot))
@@ -1338,7 +1338,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
 
     def add_enrichment(self, run_id, company_id):
         with self.connect() as con:
-            con.execute("INSERT OR IGNORE INTO work_items VALUES(?,?,?,?,?,?)", (uid(), run_id, "refresh", company_id, "pending", None))
+            con.execute("INSERT OR IGNORE INTO work_items(id,run_id,stage,target,state,result) VALUES(?,?,?,?,?,?)", (uid(), run_id, "refresh", company_id, "pending", None))
 
     def progress(self, run_id):
         with self.connect() as con:
@@ -1461,7 +1461,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         next_due = calendar_next(anchor, anchor, interval_months, timezone).isoformat()
         id = uid()
         with self.connect() as con:
-            con.execute("INSERT INTO schedules VALUES(?,?,?,?,?,?,?,?,?)",
+            con.execute("INSERT INTO schedules(id,task_id,company_id,kind,interval_months,timezone,next_due_at,enabled,anchor) VALUES(?,?,?,?,?,?,?,?,?)",
                         (id, task_id, company_id, kind, interval_months, timezone, next_due, int(enabled), anchor.isoformat()))
         return next(s for s in self.schedules() if s["id"] == id)
 
@@ -1492,7 +1492,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                     run = self._start(con, task=task, company_id=s["company_id"])
                     if run["status"] == "paused":
                         continue  # Still owed; a paused run has not executed this occurrence.
-                    con.execute("INSERT INTO occurrences VALUES(?,?,?)", (s["id"], s["next_due_at"], run["id"]))
+                    con.execute("INSERT INTO occurrences(schedule_id,due_at,run_id) VALUES(?,?,?)", (s["id"], s["next_due_at"], run["id"]))
                 due = calendar_next(datetime.fromisoformat(s["anchor"]), datetime.fromisoformat(timestamp),
                                     s["interval_months"], s["timezone"])
                 con.execute("UPDATE schedules SET next_due_at=? WHERE id=?", (due.isoformat(), s["id"]))

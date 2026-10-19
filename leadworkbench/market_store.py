@@ -136,7 +136,7 @@ class MarketStoreMixin:
         for row in con.execute("""SELECT source_key,source_url FROM listings l WHERE NOT EXISTS
             (SELECT 1 FROM listing_aliases a WHERE a.alias=l.source_key)""").fetchall():
             for alias in listing_aliases(row["source_key"], row["source_url"]):
-                con.execute("INSERT OR IGNORE INTO listing_aliases VALUES(?,?)", (alias, row["source_key"]))
+                con.execute("INSERT OR IGNORE INTO listing_aliases(alias,source_key) VALUES(?,?)", (alias, row["source_key"]))
 
     def _migrate_market_locked(self, con):
         """0002: inside the executor's transaction, including legacy membership backfill and version bump."""
@@ -145,7 +145,7 @@ class MarketStoreMixin:
             con.execute(statement)
         con.execute('UPDATE tasks SET "limit"=0')
         for task in con.execute("SELECT * FROM tasks ORDER BY created_at,id").fetchall():
-            con.execute("INSERT OR IGNORE INTO market_keys VALUES(?,?)",
+            con.execute("INSERT OR IGNORE INTO market_keys(identity,task_id) VALUES(?,?)",
                         (market_key(self.row(task)), task["id"]))
         for run in con.execute("SELECT * FROM runs WHERE task_id IS NOT NULL ORDER BY created_at,rowid").fetchall():
             con.execute("INSERT INTO market_runs(run_id,market_id) VALUES(?,?)", (run["id"], run["task_id"]))
@@ -163,7 +163,7 @@ class MarketStoreMixin:
                 # Archive exact old targets/results before replacing cap-based
                 # work. Company records, observations and run classifications stay.
                 con.execute("DELETE FROM work_items WHERE run_id=? AND stage='discovery'", (run["id"],))
-                con.execute("INSERT OR IGNORE INTO work_items VALUES(?,?,'planning',?,'pending',NULL)",
+                con.execute("INSERT OR IGNORE INTO work_items(id,run_id,stage,target,state,result) VALUES(?,?,'planning',?,'pending',NULL)",
                             (ident(), run["id"], run["task_id"]))
                 progress = json.loads(run["progress"] or "{}")
                 stats = self._market_stats(con, run["task_id"], run["id"])
@@ -201,25 +201,25 @@ class MarketStoreMixin:
                 matches = [row for row in matches if row]
                 if len({row[0] for row in matches}) == 1:
                     prior = matches[0]
-                    con.execute("INSERT OR IGNORE INTO market_keys VALUES(?,?)", (key, prior[0]))
+                    con.execute("INSERT OR IGNORE INTO market_keys(identity,task_id) VALUES(?,?)", (key, prior[0]))
             if prior:
                 task_id = prior[0]
             else:
                 task_id = ident()
-                con.execute("INSERT INTO tasks VALUES(?,?,?,?,?,?,?,?,?,?)", (
+                con.execute("INSERT INTO tasks(id,name,country,state,city,keywords,company_types,\"limit\",auto_enrich,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)", (
                     task_id, market_name(payload),
                     str(payload.get("country") or "US").strip(), str(payload.get("state") or "").strip(),
                     str(payload.get("city") or "").strip(),
                     canonical(sorted({normalized(v) for v in payload.get("keywords", []) if normalized(v)})),
                     canonical(sorted({normalized(v) for v in payload.get("company_types", []) if normalized(v)})),
                     0, int(payload.get("auto_enrich", True)), stamp()))
-                con.execute("INSERT INTO market_keys VALUES(?,?)", (key, task_id))
-                con.execute("INSERT INTO task_social_settings VALUES(?,?)", (task_id, canonical(social_options)))
+                con.execute("INSERT INTO market_keys(identity,task_id) VALUES(?,?)", (key, task_id))
+                con.execute("INSERT INTO task_social_settings(task_id,payload) VALUES(?,?)", (task_id, canonical(social_options)))
             con.execute("INSERT OR IGNORE INTO task_metadata(task_id) VALUES(?)", (task_id,))
             for legacy_key in legacy_keys:
-                con.execute("INSERT OR IGNORE INTO market_keys VALUES(?,?)", (legacy_key, task_id))
+                con.execute("INSERT OR IGNORE INTO market_keys(identity,task_id) VALUES(?,?)", (legacy_key, task_id))
             if payload.get("geography"):
-                con.execute("INSERT OR IGNORE INTO task_geography VALUES(?,?)",
+                con.execute("INSERT OR IGNORE INTO task_geography(task_id,payload) VALUES(?,?)",
                             (task_id, canonical(payload["geography"])))
         return self.task(task_id)
 
@@ -230,11 +230,11 @@ class MarketStoreMixin:
         last_seen = last_seen or first_seen
         prior = con.execute("SELECT 1 FROM market_memberships WHERE market_id=? AND company_id=?",
                             (market_id, company_id)).fetchone()
-        con.execute("""INSERT INTO market_memberships VALUES(?,?,?,?,?,?)
+        con.execute("""INSERT INTO market_memberships(market_id,company_id,first_seen,last_seen,first_run_id,last_run_id) VALUES(?,?,?,?,?,?)
             ON CONFLICT(market_id,company_id) DO UPDATE SET
             last_seen=max(last_seen,excluded.last_seen),last_run_id=excluded.last_run_id""",
                     (market_id, company_id, first_seen, last_seen, run_id, run_id))
-        con.execute("""INSERT INTO run_companies VALUES(?,?,?,?,0,?,?)
+        con.execute("""INSERT INTO run_companies(run_id,company_id,market_id,segment,changed,first_seen,last_seen) VALUES(?,?,?,?,0,?,?)
             ON CONFLICT(run_id,company_id) DO UPDATE SET last_seen=max(last_seen,excluded.last_seen)""",
                     (run_id, company_id, market_id, "existing" if prior else "new", first_seen, last_seen))
 
@@ -285,7 +285,7 @@ class MarketStoreMixin:
             else:
                 con.execute(f"UPDATE companies SET {field}=?,revision=revision+1 WHERE id=?", (value, company["id"]))
             if (not manual or material) and outcome != "merged":
-                con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)", (
+                con.execute("INSERT INTO changes(id,company_id,field,old_value,new_value,created_at,reason) VALUES(?,?,?,?,?,?,?)", (
                     ident(), company["id"], field, old, value, stamp(),
                     "市场来源变化；保留人工修正" if manual else "市场来源资料更新"))
         if material:
@@ -366,7 +366,7 @@ class MarketStoreMixin:
                 if known_cids and incoming_cids and known_cids != incoming_cids:
                     raise Invalid("地点 CID 与已有别名冲突，需人工核对，未自动合并")
                 for alias in aliases:
-                    con.execute("INSERT OR IGNORE INTO listing_aliases VALUES(?,?)", (alias, listing_key))
+                    con.execute("INSERT OR IGNORE INTO listing_aliases(alias,source_key) VALUES(?,?)", (alias, listing_key))
             if listing:
                 company_id = listing[0]
                 seen = set()
@@ -414,13 +414,13 @@ class MarketStoreMixin:
                             continue
                         self._review(con, company_id, "duplicate_candidate", "company", candidate["id"],
                                      company_id, record["source_url"], "同名来源证据不足；不自动合并")
-                con.execute("INSERT INTO listings VALUES(?,?,?,?,?)",
+                con.execute("INSERT INTO listings(source_key,company_id,source_url,first_seen,last_seen) VALUES(?,?,?,?,?)",
                             (record["source_key"], company_id, record["source_url"], timestamp, timestamp))
-                con.execute("INSERT INTO locations VALUES(?,?,?,?,?,?,?,?)", (
+                con.execute("INSERT INTO locations(id,company_id,source_key,address,latitude,longitude,source_url,observed_at) VALUES(?,?,?,?,?,?,?,?)", (
                     ident(), company_id, record["source_key"], record.get("address"), record.get("latitude"),
                     record.get("longitude"), record["source_url"], timestamp))
             for alias in aliases:
-                con.execute("INSERT OR IGNORE INTO listing_aliases VALUES(?,?)", (alias, listing_key))
+                con.execute("INSERT OR IGNORE INTO listing_aliases(alias,source_key) VALUES(?,?)", (alias, listing_key))
             # A stable listing identity represents this location even after a move.
             con.execute("""UPDATE locations SET address=COALESCE(NULLIF(?,''),address),
                 latitude=COALESCE(?,latitude),longitude=COALESCE(?,longitude),source_url=?,observed_at=?
@@ -434,7 +434,7 @@ class MarketStoreMixin:
                     record.get("status_evidence") or "Google Maps 明确营业状态", timestamp, "maps", run_id, query)
                 if old_status and old_status[0] != operating:
                     self._mark_market_changed(con, run_id, company_id)
-                    con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)", (ident(),company_id,"operating_status",old_status[0],operating,stamp(),"来源明确营业状态更新"))
+                    con.execute("INSERT INTO changes(id,company_id,field,old_value,new_value,created_at,reason) VALUES(?,?,?,?,?,?,?)", (ident(),company_id,"operating_status",old_status[0],operating,stamp(),"来源明确营业状态更新"))
 
             category = record.get("category")
             if category:
@@ -444,7 +444,7 @@ class MarketStoreMixin:
             from .p0_migrations import TYPE_HINTS
             for kind in json.loads(task["company_types"] or "[]"):
                 if kind in TYPE_HINTS:
-                    con.execute("INSERT OR IGNORE INTO company_type_hints VALUES(?,?,?,?)",
+                    con.execute("INSERT OR IGNORE INTO company_type_hints(company_id,business_type,market_id,created_at) VALUES(?,?,?,?)",
                                 (company_id, TYPE_HINTS[kind], task_id, stamp()))
             for field in ("name", "address", "phone", "website", "business_types"):
                 value = record.get(field)
@@ -484,7 +484,7 @@ class MarketStoreMixin:
             if count >= 4096:
                 self._market_unresolved(con, run_id, "internal job budget (4096)")
                 break
-            con.execute("INSERT INTO work_items VALUES(?,?, 'discovery',?,'pending',NULL)", (ident(), run_id, target))
+            con.execute("INSERT INTO work_items(id,run_id,stage,target,state,result) VALUES(?,?, 'discovery',?,'pending',NULL)", (ident(), run_id, target))
             added += 1
         return added
 
@@ -532,7 +532,7 @@ class MarketStoreMixin:
             self._begin(con)
             con.execute("""CREATE TABLE IF NOT EXISTS market_exhausted_items(
                 item_id TEXT PRIMARY KEY REFERENCES work_items(id),reason TEXT NOT NULL)""")
-            con.execute("INSERT OR REPLACE INTO market_exhausted_items VALUES(?,?)", (item_id, reason))
+            con.execute("INSERT OR REPLACE INTO market_exhausted_items(item_id,reason) VALUES(?,?)", (item_id, reason))
             self._market_unresolved(con, run_id, reason)
 
     def _market_exhausted(self, con, run_id):
@@ -780,13 +780,13 @@ class MarketStoreMixin:
         keywords = [r for r in rules if r["kind"] == "keyword"]
         for scope in dict.fromkeys(market_ids):
             if scope:
-                con.execute("""INSERT OR IGNORE INTO temp.excluded_ids SELECT ?,cc.company_id,r.id
+                con.execute("""INSERT OR IGNORE INTO temp.excluded_ids(market_id,company_id,rule_id) SELECT ?,cc.company_id,r.id
                     FROM exclusion_rules r JOIN company_categories cc ON cc.category_key=r.value_key
                     WHERE r.kind='category' AND (r.scope='global' OR r.market_id=?)
                     AND EXISTS(SELECT 1 FROM market_memberships m WHERE m.company_id=cc.company_id AND m.market_id=?)
                     ORDER BY r.created_at,r.rowid""", (scope, scope, scope))
             else:
-                con.execute("""INSERT OR IGNORE INTO temp.excluded_ids SELECT '',cc.company_id,r.id
+                con.execute("""INSERT OR IGNORE INTO temp.excluded_ids(market_id,company_id,rule_id) SELECT '',cc.company_id,r.id
                     FROM exclusion_rules r JOIN company_categories cc ON cc.category_key=r.value_key
                     WHERE r.kind='category' AND (r.scope='global' OR EXISTS(SELECT 1 FROM market_memberships m
                         WHERE m.company_id=cc.company_id AND m.market_id=r.market_id))
@@ -813,7 +813,7 @@ class MarketStoreMixin:
                         rule = next(r for r in group_rules if r["value_key"] in text)
                         hits.append((rule["created_at"], rule["id"], row["id"]))
             # Earliest rule first so INSERT OR IGNORE keeps it.
-            con.executemany("INSERT OR IGNORE INTO temp.excluded_ids VALUES(?,?,?)",
+            con.executemany("INSERT OR IGNORE INTO temp.excluded_ids(market_id,company_id,rule_id) VALUES(?,?,?)",
                             [(scope, company_id, rule_id) for _, rule_id, company_id in sorted(hits)])
         return True
 
@@ -1074,7 +1074,7 @@ class MarketStoreMixin:
                 raise Conflict("排除规则已达上限 200 条，请先删除不用的规则")
             rule = dict(id=ident(), scope=scope, market_id=market_id if scope == "market" else None, kind=kind,
                         value=value, value_key=key, created_at=stamp())
-            con.execute("INSERT INTO exclusion_rules VALUES(?,?,?,?,?,?,?)", tuple(rule.values()))
+            con.execute("INSERT INTO exclusion_rules(id,scope,market_id,kind,value,value_key,created_at) VALUES(?,?,?,?,?,?,?)", tuple(rule.values()))
             rule.update(reused=False, matched=self._rule_matches(con, rule))
             return rule
 
@@ -1087,7 +1087,7 @@ class MarketStoreMixin:
     def _write_category(self, con, company_id, category, source_url, timestamp):
         key = normalized(category)
         if key:
-            con.execute("""INSERT INTO company_categories VALUES(?,?,?,?,?,?)
+            con.execute("""INSERT INTO company_categories(company_id,category_key,category,source_url,first_seen,last_seen) VALUES(?,?,?,?,?,?)
                 ON CONFLICT(company_id,category_key) DO UPDATE SET
                 category=CASE WHEN excluded.last_seen>=last_seen THEN excluded.category ELSE category END,
                 source_url=CASE WHEN excluded.last_seen>=last_seen THEN excluded.source_url ELSE source_url END,

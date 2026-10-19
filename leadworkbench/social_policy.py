@@ -80,7 +80,7 @@ def observe(con, item, result):
     for value in (old["not_before"], result.get("not_before"), access.get("not_before")):
         if isinstance(value, (int, float)) and math.isfinite(value):
             deadline = max(deadline, value)
-    con.execute("""INSERT INTO social_platform_gates VALUES(?,?,?,?,?)
+    con.execute("""INSERT INTO social_platform_gates(platform,state,not_before,reason,failures) VALUES(?,?,?,?,?)
         ON CONFLICT(platform) DO UPDATE SET state=excluded.state,not_before=excluded.not_before,
         reason=excluded.reason,failures=excluded.failures""",
         (platform, state, deadline, message if retry else "", failures))
