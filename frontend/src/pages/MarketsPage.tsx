@@ -1,4 +1,5 @@
 import { api } from "../api";
+import { startConfirmText } from "../QueryPreview";
 import { date } from "../helpers";
 import type { Overview, Task } from "../types";
 import { Badge, Empty, Icon } from "../ui";
@@ -116,7 +117,7 @@ export function MarketsPage({
             {tasks.data.map(task=><tr key={task.id}><td><button className="text-button" onClick={()=>setTaskDetail(task)}>{task.name}</button><p className="muted">{task.keywords.join(' · ')}</p></td>
             <td>{[task.country,task.state,task.county,task.city].filter(Boolean).join(' / ')}{(task.geography?.county_ids.length||0)>1&&<small className="muted">跨 {task.geography?.county_ids.length} 个县或同级地区 · 完整城市范围</small>}</td><td>{task.latest_run?<Badge value={task.latest_run.status}/>:"尚未运行"}</td><td>{date(task.latest_run?.created_at)}</td>
             <td><div className="actions"><button onClick={()=>setTaskDetail(task)}>资料复核列表</button><button onClick={()=>openMarket(task.id)}>企业库</button>
-            <button disabled={busy||['running','queued','paused'].includes(task.latest_run?.status||'')} onClick={()=>act(()=>api(`/tasks/${encodeURIComponent(task.id)}/runs`,"POST"),"市场更新已加入运行队列")}>{task.latest_run?'更新市场':'开始检索'}</button></div></td></tr>)}
+            <button disabled={busy||['running','queued','paused'].includes(task.latest_run?.status||'')} onClick={()=>{if(window.confirm(startConfirmText(task.query_estimate)))act(()=>api(`/tasks/${encodeURIComponent(task.id)}/runs`,"POST"),"市场更新已加入运行队列");}}>{task.latest_run?'更新市场':'开始检索'}</button></div></td></tr>)}
           </tbody></table></div>
         ) : (
           <section className="panel">

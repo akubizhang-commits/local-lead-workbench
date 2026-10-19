@@ -48,6 +48,12 @@ async function fixture(options:{failCounties?:boolean;failZACounties?:boolean;de
    submitted.push(JSON.parse(String(init.body)));
    return new Response(JSON.stringify({id:'synthetic-task'}));
   }
+  if(path==='/api/industry-presets')return new Response('[]');
+  if(path==='/api/tasks/preview'&&init?.method==='POST'){
+   const body=JSON.parse(String(init.body));
+   return new Response(JSON.stringify({terms:body.keywords,query_terms:body.keywords.map((k:string)=>`${k} in ${body.city}`),
+    geometry:'text_only',initial_min:1,initial_max:1,max:1,keywords:body.keywords,existing_market:null}));
+  }
   assert.equal(init?.method||'GET','GET');
   const url=new URL(path,'http://fixture.invalid');
   assert.equal(url.pathname,'/api/regions');
@@ -113,6 +119,9 @@ async function fixture(options:{failCounties?:boolean;failZACounties?:boolean;de
  };
  const submit=async(expectSaved=true)=>{
   assert.equal(document.querySelector('input[name="name"]'),null);
+  // The preview is debounced 400 ms; the create button waits for it (design §8.3).
+  for(let i=0;i<40&&document.querySelector<HTMLButtonElement>('button.primary')?.disabled;i++)
+   await h.act(async()=>{await new Promise(resolve=>setTimeout(resolve,25));});
   await h.act(async()=>document.querySelector('form')!.dispatchEvent(
    new h.dom.window.Event('submit',{bubbles:true,cancelable:true})));
   await flush();
@@ -122,6 +131,12 @@ async function fixture(options:{failCounties?:boolean;failZACounties?:boolean;de
  const {TaskForm}=await import('../src/forms.tsx');
  await h.act(async()=>h.root.render(createElement(TaskForm,{onDone:()=>{},onCancel:()=>{}})));
  await flush();
+ // Keywords are required now (P1-21); every geography case searches one fixed term.
+ const keywords=document.querySelector<HTMLTextAreaElement>('textarea[name="keywords"]')!;
+ await h.act(async()=>{
+  Object.getOwnPropertyDescriptor(h.dom.window.HTMLTextAreaElement.prototype,'value')!.set!.call(keywords,'metal roofing supply');
+  keywords.dispatchEvent(new h.dom.window.Event('input',{bubbles:true}));
+ });
  return {...h,requests,submitted,input,fill,chooseCounty,choosePlace,submit,
   async cleanup(){try{releaseState();await h.cleanup();}finally{globalThis.FormData=savedFormData;}}};
 }

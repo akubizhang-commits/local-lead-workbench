@@ -16,7 +16,7 @@ test('coverage shows which search terms the round used, and nothing for legacy r
   assert.match(document.body.textContent!,/检索词（按关键词）：metal roofing supply/);
   await h.act(async()=>h.root.render(createElement(MarketSummary,{market:{...base,
    coverage:{...coverage,query_basis:'company_types',query_terms:['apparel wholesaler','clothing wholesaler']}}})));
-  assert.match(document.body.textContent!,/检索词（按企业类型默认）：apparel wholesaler、clothing wholesaler/);
+  assert.match(document.body.textContent!,/检索词（旧规则：按企业类型使用服装行业默认词）：apparel wholesaler、clothing wholesaler/);
   await h.act(async()=>h.root.render(createElement(MarketSummary,{market:{...base,coverage}})));
   assert.doesNotMatch(document.body.textContent!,/检索词/);
  } finally {await h.cleanup();}
