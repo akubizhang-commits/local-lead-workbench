@@ -154,3 +154,25 @@ sequenceDiagram
 | 操作系统 | fcntl、POSIX 信号；X 原生 Chrome 路径为 macOS | Windows 不能按当前脚本直接保证运行，需要适配与验证 |
 
 尚无容器编排、反向代理、TLS 终止、跨机器 Worker、集中监控或自动扩容拓扑。需要对外部署时必须重新设计认证与数据隔离，不应只把监听地址改为 0.0.0.0。
+
+## 2026-10-18：P1 第一批运行拓扑补充
+
+### 数据目录新增内容
+| 路径 | 权限 | 内容 |
+|---|---|---|
+| `logs/api.log`、`logs/worker.log`、`logs/export.log` | 目录 0700，文件 0600 | 每进程一份 JSON 行日志，5 MB × 5 份轮转；写入时隐藏令牌和密钥 |
+| `logs/retention.log` | 0600 | 保留策略每次执行的明细（相对路径、大小、原因），1 MB 轮转，最多 3 份 |
+| `run/maps.lock`、`run/maps/<pid>.json` | 0700 | Maps 守护进程的单实例锁和注册表；worker 启动时据此回收上次遗留的 scraper 进程组 |
+| `exports/<id>.<csv/xlsx>`、`exports/jobs/<id>.json` | 0700 / 0600 | 后台导出文件和作业状态，默认保留 7 天 |
+| `retention.json`、`retention.lock` | 0600 | 保留策略、首次确认状态和最近 20 次记录 |
+| `migrate.lock` | 0600 | 所有进程的迁移串行锁 |
+
+### start.sh 的行为
+先启动 API 并探测 `/api/session`，就绪后才启动 worker；初始化较慢时持续提示“仍在初始化数据库（已等待 N 秒）…”。API 处于受限模式（`X-Lead-Unavailable`）时不启动 worker，提示原因。数据目录不可写时直接退出。worker 意外退出时 5 分钟内最多自动重启 3 次（间隔 5/15/45 s），之后只提示。Ctrl+C 时先停 worker（最多等 10 s，让 Maps 守护进程清理），再停 API；API 关闭时会停止在途的导出子进程。
+
+### Maps 子进程
+worker 通过 `python -m leadworkbench.maps_guard` 启动 scraper：守护进程持有 `run/maps.lock`，worker 退出（包括 kill -9）导致 stdin EOF 时结束整个 scraper 进程组；同一时间只有一个 Maps 查询。
+
+### 诊断包的脱敏范围
+本机日志保持原样（排查时需要异常消息），只做令牌、密钥隐藏；生成诊断包时才额外去掉异常消息（只留帧行和异常类型）并把企业名、联系人姓名替换为 `<name>`，同时替换邮箱、网址、电话和主目录。诊断包只在用户点击时生成和下载，不会自动发送。
+

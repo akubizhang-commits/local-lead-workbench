@@ -299,7 +299,7 @@ Content-Type: application/json
 
 源码：`db.py:348–407,645–741`，`market_store.py:150–167`，`social_store.py:89–118`，`social_discovery_store.py:64–115,230–243`。
 
-API实例通过`asyncio.Lock`串行处理`/api/`请求；跨进程依靠SQLite事务、业务锁及revision，不能据此承诺全局单请求。SQLite连接timeout/busy_timeout为15秒，重要写操作使用`BEGIN IMMEDIATE`。
+（2026-10-18 P1 起）API 请求不再串行：普通 `/api/*` 并发执行，只有 `POST /api/backups/restore` 经维护闸门独占（见文末“P1 第一批”）。并发由 SQLite WAL、每次调用一个连接、busy_timeout 15 秒和“先读后写放进同一个 `BEGIN IMMEDIATE`”保证；`BEGIN IMMEDIATE` 统一走 `Store._begin`，对立即返回的 BUSY 最多重试 4 次。跨进程仍依靠 SQLite 事务、文件锁及 revision。
 
 | 操作 | 实际重复提交语义 |
 |---|---|
@@ -347,16 +347,16 @@ XLSX有Companies、Contacts、Locations、Sources四表。Contacts列为company_
 
 | HTTP状态 | 当前来源与响应 |
 |---|---|
-| 400 | 业务ValueError：`{"detail":"原因"}`，如市场与轮次不符、无官网、confirmed+unknown、未确认归属记账、无效计划/备份 |
+| 400 | `invalid`：`Invalid` 或含中文的裸 ValueError（过渡期），如市场与轮次不符、无官网、confirmed+unknown、未确认归属记账、无效计划/备份；英文 ValueError 视为程序错误 → 500 |
 | 401 | 缺失/错误本地token：`{"detail":"缺少本地访问令牌"}` |
 | 403 | Host/Origin/Sec-Fetch-Site边界拒绝；detail分别为仅允许本机访问/拒绝跨来源请求/拒绝跨站请求 |
-| 404 | KeyError统一`{"detail":"记录不存在"}`；未知GET `/api/...`兜底为`{"detail":"接口不存在"}` |
+| 404 | `not_found`：只有 `NotFound`（中文原因，如“记录不存在”“市场不存在”）；裸 KeyError 不再是 404，而是 500 `internal`。未知 `/api/...` 为 `unknown_endpoint`“接口不存在（界面与服务版本可能不一致，请刷新页面）” |
 | 409 | Conflict：revision冲突、状态不允许、策略耗尽无法继续、已审核、浏览器/恢复锁冲突、活动任务阻止恢复。恢复：Worker 仅在执行作业时持有 `worker.lock`、空闲时释放，恢复接口最多等待 5 秒拿锁，仍在处理作业时返回“后台正在处理作业，请等待当前作业完成或暂停相关任务后再恢复备份”；queued/running 普通或社媒轮次仍阻止恢复，paused 不阻止 |
 | 413 | Content-Length检查失败：`{"detail":"请求过大"}` |
 | 422 | FastAPI/Pydantic输入验证；`detail`为错误数组，每项只含 `loc/msg/type`，`msg` 为中文（网址校验、必填、长度、多余字段、非法 JSON 等均已翻译），不再含 input/ctx；不要按400字符串结构解析 |
 | 405 | 路由框架的方法不允许响应；没有业务层统一封装 |
-| 500 | 未捕获异常；没有统一业务错误码或稳定JSON承诺，SQLite错误不全部转换成400/409 |
-| 503 | 前端未构建兜底文本；不是所有后端离线的统一状态 |
+| 500 | `internal`：未知异常，detail 为通用中文提示加错误编号，异常文本不返回，日志 `logs/api.log` 有同一 request_id 的 ERROR；`db_corrupt`。存储错误另有 503/507（见文末码表） |
+| 503 | `db_busy`、`readonly_storage`、`maintenance`、`storage_unavailable`（启动降级）；前端未构建时仍是兜底文本 |
 
 例如非法分页的稳定形状是`{"detail":[{"loc":["query","page_size"],"type":"less_than_equal","msg":"…"}]}`；省略号仅表示本文未固定框架英文文案，实际JSON可能还有input/ctx。客户端应按HTTP码和结构处理，保留可读detail，不将HTTP200的blocked/no_results当网络失败。
 
@@ -513,3 +513,57 @@ Run.progress 增加 `social_total/social_done/social_accounts`；仅社媒父轮
 ### 新增错误文案（第 9 节）
 
 见上文各表；另有 400“仅市场检索轮次支持补查”、400“无效导出布局”（直接调用 Store 时）。
+
+## 2026-10-18：P1 第一批（稳定性与性能）
+
+### 错误格式与码表（第 9 节的补充）
+所有 `/api/*` 非 2xx 响应体为 `{"detail": <中文字符串，422 时为数组>, "code": <码>, "request_id": "req_…"}`，每个 `/api/*` 响应（含 2xx）带 `X-Request-ID`。request_id 由服务端生成，不接受客户端传入。
+
+| HTTP | code | 含义 |
+|---|---|---|
+| 400 | `invalid` | 输入或状态不合法（中文原因） |
+| 401 / 403 | `unauthorized` / `forbidden` | 令牌；Host / Origin / Sec-Fetch-Site |
+| 404 | `not_found` / `unknown_endpoint` | 记录不存在；未知接口 |
+| 409 | `conflict` | revision、状态、已审核、锁等（文案不变）；保留策略 `retention.lock` 5 秒拿不到时 detail 为“清理正在进行，请稍后再试” |
+| 409 | `export_busy`（附 `job_id`）/ `export_running` / `maintenance_busy` / `retention_plan_changed`（附新 `preview`） | 见下文各节 |
+| 410 | `export_expired` | 导出文件已按保留策略清理 |
+| 413 / 422 | `payload_too_large` / `validation` | 422 的 detail 仍是数组 |
+| 500 | `internal` / `db_corrupt` | 未知异常；数据库损坏 |
+| 503 | `db_busy`（带 `Retry-After`）/ `maintenance` / `readonly_storage` / `storage_unavailable` | 数据库忙；正在恢复备份；数据目录不可写；启动降级 |
+| 507 | `disk_full` | 磁盘空间不足 |
+
+启动降级：`Store()` 初始化失败（只读目录、迁移失败等）时进程照常监听，`/api/session` 返回 200 并带 `X-Lead-Unavailable: <code>`，诊断包接口可用，其余 `/api/*` 返回 503 和中文原因。
+
+### 维护闸门（第 7 节）
+普通 `/api/*` 共享进入闸门（恢复进行或排队时最多等 30 s，超时 503 `maintenance`）；`POST /api/backups/restore` 独占，写者优先，等在途请求最多 10 s，超时 409 `maintenance_busy`。`/api/session` 与 `POST /api/social/probe` 不经闸门（probe 只在读取设置时短暂共享，网络请求在闸门外）。不分页的 `GET /api/companies`、`GET /api/reviews` 数组改为流式输出，字节与原 JSON 相同，并带 `X-Total-Count`。
+
+### 后台导出作业（第 8 节）
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/api/export-jobs` | `ExportJobInput`（extra=forbid）：`format` 必填 csv/xlsx，`layout` 默认 `companies`，其余筛选与 `/api/exports` 相同。202 返回作业；已有 queued/running 作业时 409 `export_busy` 带 `job_id`（同时只允许一个） |
+| GET | `/api/export-jobs?limit=5` | 最近的作业，created_at 倒序，limit 1–20 |
+| GET | `/api/export-jobs/{id}` | 作业：status queued/running/succeeded/failed/cancelled，phase、processed/total、rows、size_bytes、expires_at、error{code,message} |
+| POST | `/api/export-jobs/{id}/cancel` | 已结束 409 `conflict` |
+| GET | `/api/export-jobs/{id}/file` | 未完成 409；文件已清理 410 `export_expired`；`Content-Disposition` 带 ASCII 回退名与 `filename*` |
+
+作业在独立子进程（`python -m leadworkbench.export_job`）里生成，状态是 `exports/jobs/<id>.json` 文件，不在数据库里；子进程意外退出或 API 重启后，作业在下一次相关请求时标记为 failed / `interrupted`。API 关闭时向子进程发 SIGTERM，最多等 5 s，作业记为 cancelled。导出进行中恢复备份返回 409 `export_running`。`GET /api/exports` 保留，响应头加 `Deprecation: true` 和 `Link: </api/export-jobs>; rel="successor-version"`，界面不再调用。
+
+### 分页（第 4 节）
+- `GET /api/reviews`：新增 `page`、`page_size`（1–200，默认 20）、`kind`。都不传时仍返回数组（已过时，带 `X-Total-Count`）；传任一个返回 `{items,total,page,page_size}`。排序改为 `created_at DESC, rowid DESC`（数组形式同样），原来同一时间记录顺序不确定的部分现在确定；超出最后一页返回空 items。
+- `GET /api/companies`：新增 `page`、`page_size`（默认 50）、`sort`；传参时返回与 `/api/company-page` 相同的信封，不传时仍返回数组（带 `X-Total-Count`）。
+
+### 诊断包
+`GET /api/diagnostics/bundle` → `application/zip`（`diagnostics-YYYYMMDD-HHMMSS.zip`），在内存里生成，白名单文件：manifest.json、environment.json（只有数字的聚合计数）、config.json、worker.json、runs.json、logs/{api,worker,export,retention}.log（合计 ≤ 5 MB）。打包时对令牌、密钥、邮箱、网址、电话、主目录、异常消息和企业/联系人名称脱敏，不含数据库、备份、导出文件、Maps 原始结果和社媒登录信息。降级模式下也可用，此时 manifest 写 `name_redaction: "skipped"`。
+
+### 保留策略
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/retention` | `{policy, state, confirmed_at, confirmed_policy, history(最近 5 条), usage, preview:{plan_id, total_files, total_bytes, items(≤500), truncated}}` |
+| PUT | `/api/retention/policy` | `{maps_raw_days 7–365, auto_backup_keep 1–100, export_days 1–90}`，三项必填、extra=forbid；任一项比已确认策略更严格时 state 回到 `awaiting_confirmation` |
+| POST | `/api/retention/confirm` | `{plan_id: 64 位十六进制}`；与当前清单不一致 409 `retention_plan_changed`（附新 preview）；成功返回 `{deleted, freed_bytes, errors}` 加 GET 结构，state 变为 `active`。数据目录只读时 503 `readonly_storage` |
+
+只删除 `runs/` 下的 Maps 原始结果目录、`backups/auto-*.sqlite3` 和已结束的导出文件，从不删除数据库记录；`backup-*`（含本批之前的全部备份）和其他名字的备份永不自动删除。`GET /api/overview` 增加 `retention: {state, pending_files, pending_bytes, export_days}`（缓存值，后台重算；首次为 null）。`GET /api/backups` 每项增加 `kind`（manual/auto/other）、`reason`（pre-restore/pre-repair）、`size_bytes`。恢复前的自动备份和修复迁移前的备份改名为 `auto-pre-restore-*`、`auto-pre-repair-*`。
+
+### 恢复（第 9 节“恢复流程”的更新）
+校验条件增加：备份的 `schema_migrations` 里有当前版本不认识的 id 时返回 400“该备份来自更新版本的应用，当前版本无法恢复”。复制完成后对目标库执行与启动相同的统一迁移执行器（含 R05–R08 的每次启动修复，以前要等下次启动才执行），效果等同“恢复后重启一次”。
+

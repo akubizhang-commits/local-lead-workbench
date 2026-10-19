@@ -728,6 +728,58 @@
               "default": "hide",
               "title": "Excluded"
             }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 200,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "newest",
+                "procurement",
+                "email",
+                "updated",
+                "tier"
+              ],
+              "type": "string",
+              "default": "newest",
+              "title": "Sort"
+            }
           }
         ],
         "responses": {
@@ -2005,12 +2057,75 @@
       "get": {
         "summary": "Reviews",
         "operationId": "reviews_api_reviews_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 200,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "",
+                "field_update",
+                "contact",
+                "duplicate_candidate"
+              ],
+              "type": "string",
+              "default": "",
+              "title": "Kind"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -2193,6 +2308,22 @@
         }
       }
     },
+    "/api/diagnostics/bundle": {
+      "get": {
+        "summary": "Diagnostics Bundle",
+        "operationId": "diagnostics_bundle_api_diagnostics_bundle_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/backups": {
       "get": {
         "summary": "Backups",
@@ -2217,6 +2348,94 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/retention": {
+      "get": {
+        "summary": "Retention View",
+        "operationId": "retention_view_api_retention_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/retention/policy": {
+      "put": {
+        "summary": "Retention Policy",
+        "operationId": "retention_policy_api_retention_policy_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetentionPolicyInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/retention/confirm": {
+      "post": {
+        "summary": "Retention Confirm",
+        "operationId": "retention_confirm_api_retention_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetentionConfirm"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -2441,6 +2660,191 @@
               "type": "string",
               "default": "",
               "title": "Best Tier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/export-jobs": {
+      "post": {
+        "summary": "Export Job Create",
+        "operationId": "export_job_create_api_export_jobs_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportJobInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Export Job List",
+        "operationId": "export_job_list_api_export_jobs_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 20,
+              "minimum": 1,
+              "default": 5,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/export-jobs/{id}": {
+      "get": {
+        "summary": "Export Job Detail",
+        "operationId": "export_job_detail_api_export_jobs__id__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/export-jobs/{id}/cancel": {
+      "post": {
+        "summary": "Export Job Cancel",
+        "operationId": "export_job_cancel_api_export_jobs__id__cancel_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/export-jobs/{id}/file": {
+      "get": {
+        "summary": "Export Job File",
+        "operationId": "export_job_file_api_export_jobs__id__file_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
             }
           }
         ],
@@ -2724,6 +3128,133 @@
         ],
         "title": "ExclusionRuleInput"
       },
+      "ExportJobInput": {
+        "properties": {
+          "format": {
+            "type": "string",
+            "enum": [
+              "csv",
+              "xlsx"
+            ],
+            "title": "Format"
+          },
+          "layout": {
+            "type": "string",
+            "enum": [
+              "companies",
+              "entries"
+            ],
+            "title": "Layout",
+            "default": "companies"
+          },
+          "q": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Q",
+            "default": ""
+          },
+          "status": {
+            "type": "string",
+            "maxLength": 40,
+            "title": "Status",
+            "default": ""
+          },
+          "type": {
+            "type": "string",
+            "maxLength": 40,
+            "title": "Type",
+            "default": ""
+          },
+          "market_id": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Market Id",
+            "default": ""
+          },
+          "run_id": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Run Id",
+            "default": ""
+          },
+          "contact": {
+            "type": "string",
+            "enum": [
+              "",
+              "email",
+              "procurement"
+            ],
+            "title": "Contact",
+            "default": ""
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "newest",
+              "procurement",
+              "email",
+              "updated",
+              "tier"
+            ],
+            "title": "Sort",
+            "default": "newest"
+          },
+          "segment": {
+            "type": "string",
+            "enum": [
+              "",
+              "new",
+              "existing",
+              "changed",
+              "not_seen"
+            ],
+            "title": "Segment",
+            "default": ""
+          },
+          "category": {
+            "items": {
+              "type": "string",
+              "maxLength": 120,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Category"
+          },
+          "excluded": {
+            "type": "string",
+            "enum": [
+              "hide",
+              "only",
+              "include"
+            ],
+            "title": "Excluded",
+            "default": "hide"
+          },
+          "best_tier": {
+            "type": "string",
+            "enum": [
+              "",
+              "named_procurement",
+              "named_role",
+              "named_unknown",
+              "department_email",
+              "general_email",
+              "form_phone",
+              "company_phone",
+              "none"
+            ],
+            "title": "Best Tier",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "format"
+        ],
+        "title": "ExportJobInput"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -2833,6 +3364,51 @@
           "name"
         ],
         "title": "Restore"
+      },
+      "RetentionConfirm": {
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Plan Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "plan_id"
+        ],
+        "title": "RetentionConfirm"
+      },
+      "RetentionPolicyInput": {
+        "properties": {
+          "maps_raw_days": {
+            "type": "integer",
+            "maximum": 365.0,
+            "minimum": 7.0,
+            "title": "Maps Raw Days"
+          },
+          "auto_backup_keep": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Auto Backup Keep"
+          },
+          "export_days": {
+            "type": "integer",
+            "maximum": 90.0,
+            "minimum": 1.0,
+            "title": "Export Days"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "maps_raw_days",
+          "auto_backup_keep",
+          "export_days"
+        ],
+        "title": "RetentionPolicyInput"
       },
       "ScheduleInput": {
         "properties": {

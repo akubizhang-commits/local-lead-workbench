@@ -1,10 +1,10 @@
 {
   "documentation_date": "2026-09-26",
   "scope": "Offline source, links, OpenAPI route set and in-memory DDL; no live DB, network or service changes",
-  "source_files": 129,
+  "source_files": 141,
   "local_links_checked": 106,
-  "api_business_operations": 58,
-  "openapi_operations_including_spa": 59,
+  "api_business_operations": 67,
+  "openapi_operations_including_spa": 68,
   "schema_tables": 47,
   "explicit_indexes": 27,
   "schema_integrity": "ok",

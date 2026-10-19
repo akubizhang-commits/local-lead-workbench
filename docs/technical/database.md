@@ -278,12 +278,12 @@ schedule按时区及anchor日历月计算next_due_at，occurrences复合PK防同
 ## 8. 并发、文件与备份恢复
 
 - 企业及company_social分别有revision乐观锁；批量企业状态先核对全部revision再更新，单事务原子。review还核对pending及字段旧值。数据库没有覆盖所有对象的统一revision机制。
-- API每实例串行锁；worker-single.lock用于单worker，worker.lock为worker操作/恢复互斥。SQLite事务仍是实际读写协调机制，不能声称仅有一个连接。
+- （P1 起）API 请求并发执行，只有恢复备份经维护闸门独占；worker-single.lock用于单worker，worker.lock为worker操作/恢复互斥，migrate.lock 串行化所有进程的迁移。SQLite事务仍是实际读写协调机制，不能声称仅有一个连接。
 - 配置/密钥/浏览器会话不全在SQLite：social-connections.json保存reader/proxy/max_posts等；social-secrets.json保存YouTube key且公开API只返回是否配置；专用浏览器目录保存登录会话。social_config仅存SearXNG配置。
 - worker-heartbeat.json、运行采集文件、geocoding缓存、浏览器目录与锁文件不是SQL表。数据库备份不会自动包含这些文件；仅恢复SQLite不等于恢复全部运行环境或登录态。
 - 备份使用sqlite3.Connection.backup生成backups目录文件，不是直接复制正在WAL写入的主文件。备份文件chmod0600。
-- restore检查文件名、版本、完整性和部分必需表；先备份当前库，复制后依次执行适用的 market、audit、social、market_social 迁移，再恢复中断项。旧备份补建 task_social_settings/market_social_runs/social_platform_gates，缺历史设置保持默认关闭；v1可升级。没有版本降级、独立回滚迁移或完整业务关联校验。
-- 当前未见自动数据保留期、历史归档清理或审计表定期裁剪。API返回条数上限不等于数据库删除旧记录。
+- restore检查文件名、版本、完整性、部分必需表和台账 id（有当前版本不认识的 id 时拒绝）；先生成 `auto-pre-restore-*` 备份，复制后对目标库执行统一迁移执行器（与启动相同，含 R01–R08），再恢复中断项。旧备份补建 task_social_settings/market_social_runs/social_platform_gates，缺历史设置保持默认关闭；v1可升级。没有版本降级、独立回滚迁移或完整业务关联校验。
+- （P1 起）文件保留策略只清理 runs/ 下的 Maps 原始结果、自动备份和导出文件，首次需用户确认；数据库记录从不自动删除，审计表也不裁剪。API返回条数上限不等于数据库删除旧记录。
 
 源码：`db.py:348–407,846–938`、`worker.py:18–94`、`social_connections.py`。敏感配置不应写进OpenAPI/schema附件；本次附件均未包含临时数据或密钥。
 
@@ -415,3 +415,44 @@ PY
 ### 结构附件
 
 `schema.current.sql` 于 2026-10-18 用临时 Store 重新生成（SHA256 清单加入 `p0_migrations.py`），数量见 `validation.json`。
+
+## 2026-10-18：P1 第一批
+
+### 统一迁移注册表（`leadworkbench/migrations.py`）
+所有打开数据库的入口（API、worker、恢复）都调用 `migrations.migrate(store, con)`：在 `{data}/migrate.lock`（fcntl，最多等 120 s）内按注册表顺序逐条执行，每条一个 `BEGIN IMMEDIATE` 事务，只用调用方的连接。`user_version` 仍为 2；`user_version > 2` 拒绝打开。台账表 `schema_migrations` 结构不变。
+
+| 序 | id | 内容 | 类型 |
+|---|---|---|---|
+| 1 | `0001_base_v1` | user_version==0 时建 12 张基础表和 2 个索引，设 user_version=1 | 一次性 |
+| 2 | `0002_market_v2` | user_version<2 时建市场 4 张表并回填，设 user_version=2 | 一次性 |
+| 3 | `0003_maps_access_policy` | maps_access_policy 表和单行 | 一次性 |
+| 4 | `0004_website_host_gates` | website_host_gates 表（新建时引导旧闸门） | 一次性 |
+| 5 | `0005_listing_aliases` | listing_aliases 表和索引 | 一次性 |
+| 6 | `R01_listing_aliases_backfill` | 别名回填 | 每次启动 |
+| 7 | `0006_audit_tables` | 6 张审计表和索引 | 一次性 |
+| 8 | `R02_contact_decisions_backfill` | contact_decisions 两段回填（带 P0 提议守卫） | 每次启动 |
+| 9 | `R03_accepted_overrides_backfill` | 已接受字段 → overrides | 每次启动 |
+| 10 | `0007_social_tables` | 社媒 7 张表 + social_migrations | 一次性 |
+| 11 | `0008_social_discovery_tables` | 社媒发现 4 张表和索引 | 一次性 |
+| 12 | `R04_social_work_missing_website` | 无官网的 social_work 改为 skipped | 每次启动 |
+| 13 | `0009_social_legacy_links` | legacy_links_v1（social_migrations 已有则直接记账） | 一次性 |
+| 14 | `0010_market_social_tables` | social_platform_gates、task_social_settings、market_social_runs | 一次性 |
+| 15 | `0011_market_exhausted_items` | market_exhausted_items（原为运行时按需建表，运行时那段仍保留） | 一次性 |
+| 16–22 | P0 的 7 项 | id、实现、相对顺序不变（见上节） | 一次性 |
+| 23–26 | `R05_resolve_branch_reviews`、`R06_resolve_empty_reviews`、`R07_resolve_format_reviews`、`R08_resolve_duplicate_reviews` | 原来启动末尾单独调用的 4 个 resolve | 每次启动 |
+
+- 一次性条目执行后写台账，不再执行；每次启动条目（`R` 开头）不写台账，行为与以前相同。异常回滚该条目并 ERROR `migration_failed`；P0 的 `SkipMigration`/`Pending` 语义沿用。
+- **冻结规则**：一次性条目发布后，实现的含义不能再改；schema 变化必须新增条目。只改写法的等价修改（例如 INSERT 写出列名）允许，等价性由 `tests/test_migration_ledger.py` 的升级快照比较保证（`tests/fixtures/expected_upgrade_*.json`，在 913ee04 上生成）。
+- 已知 id：注册表的一次性 id、`RETIRED` 里的历史 id，以及 `contact_facets_v{N}`（N ≤ 当前 FACET_VERSION）。台账里有未知 id 时启动只记 WARNING，恢复备份则拒绝。
+- 导出子进程用 `Store(migrate=False)`，只在 `migrations.ready()`（除修复项外的一次性条目全部已记账）时打开。
+- 备份源连接改为只读 URI 连接（`Store._backup_source()`）：持有 `BEGIN IMMEDIATE` 的连接不能做 backup 源（`backup_step` 一直 BUSY，测试已固定）。
+
+### INSERT 显式列名
+`leadworkbench/` 里所有 INSERT 都写出列名（`tests/test_sql_explicit_columns.py` 静态检查）。P0 facets 触发器体也改为 `INSERT OR IGNORE INTO contact_facets_dirty(contact_id) VALUES(…)`；触发器用 `CREATE TRIGGER IF NOT EXISTS` 建，已升级的库保留旧文本，这张表只有一列，新旧文本行为相同，所以不新增重建触发器的迁移。
+
+### 备份命名
+手动备份仍为 `backup-<ts>-<id>.sqlite3`；自动备份为 `auto-pre-restore-<ts>-<id>.sqlite3`（恢复前）、`auto-pre-repair-<ts>-<id>.sqlite3`（修复迁移前）。本批之前的 `backup-*`、`contact-quality-*` 等一律视为手动备份，永不自动删除。
+
+### 文件型状态（不在数据库里）
+`retention.json`（保留策略与确认状态，0600；恢复备份不会改变它）、`exports/jobs/<id>.json`（导出作业）、`run/maps/<guard_pid>.json`（Maps 守护进程注册表）、`logs/*.log`。保留策略从不删除数据库记录。
+
