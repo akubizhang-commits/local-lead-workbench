@@ -70,9 +70,14 @@ def source_identity(method, url):
     return host, parts.path.rstrip("/") or "/", tuple(sorted(query))
 
 
-def semantic_value(field, value):
+def semantic_value(field, value, country=None):
+    """Comparison key of a field value. Phones use E.164 only when a country is
+    given (new write paths); without it the digits-only key is unchanged (R07/R08)."""
     if field == "phone":
         from .company_comparison import phone_format_key
+        if country is not None:
+            from .review_policy import phone_compare_key
+            return phone_compare_key(value, country) or normalized(value)
         return phone_format_key(value) or normalized(value)
     if field == "business_types":
         try:
@@ -252,7 +257,8 @@ class MarketStoreMixin:
                 return ("maps:listing", next(iter(keys)))
         return source_identity(method, url)
 
-    def _market_observed_field(self, con, company, field, value, url, evidence, timestamp, method, run_id, query):
+    def _market_observed_field(self, con, company, field, value, url, evidence, timestamp, method, run_id, query,
+                               country=None):
         if field == "business_types":
             if isinstance(value, str):
                 try:
@@ -270,14 +276,14 @@ class MarketStoreMixin:
             (company["id"], field, method))
             if self._observation_source_identity(con, method, row["source_url"]) == identity), None)
         old = company[field]
-        manual = field in json.loads(company["overrides"]) and bool(semantic_value(field, old))
-        material = previous is not None and semantic_value(field, previous["value"]) != semantic_value(field, value)
+        manual = field in json.loads(company["overrides"]) and bool(semantic_value(field, old, country))
+        material = previous is not None and semantic_value(field, previous["value"], country) != semantic_value(field, value, country)
         run_created = con.execute("SELECT created_at FROM runs WHERE id=?", (run_id,)).fetchone()[0]
         if (previous is None and not manual and company["created_at"] < run_created
-                and not semantic_value(field, old) and semantic_value(field, value)):
+                and not semantic_value(field, old, country) and semantic_value(field, value, country)):
             material = True  # A historical blank was filled, not initial ingestion.
         self._observe(con, company["id"], field, value, url, evidence, timestamp, method, run_id, query)
-        if (semantic_value(field, old) != semantic_value(field, value)
+        if (semantic_value(field, old, country) != semantic_value(field, value, country)
                 and (previous is None or material or old in ("", "[]"))):
             outcome = None
             if manual:

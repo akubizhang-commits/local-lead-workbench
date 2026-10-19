@@ -20,6 +20,7 @@ from .social_store import SocialStoreMixin
 from .market_social import MarketSocialMixin
 from .contact_projection import group_contact_records, contact_key
 from .company_comparison import website_key, brief, distinct_branches, branch_identity, equivalent_format
+from . import review_policy
 
 UTC = timezone.utc
 BACKUP_KINDS = ("manual", "pre-restore", "pre-repair")
@@ -397,12 +398,13 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         """After a field decision, close same-value siblings and re-base competing ones."""
         from .market_store import semantic_value
         field = review["field"]
-        wanted = semantic_value(field, review["new_value"])
+        country = self._company_country(con, review["company_id"])
+        wanted = semantic_value(field, review["new_value"], country)
         note = "；同值建议已接受，自动关闭" if decision == "accept" else "；同值建议已拒绝，自动关闭"
         closed = 0
         for other in con.execute("""SELECT id,new_value FROM reviews WHERE company_id=? AND kind='field_update'
                 AND field=? AND status='pending' AND id!=?""", (review["company_id"], field, review["id"])).fetchall():
-            if semantic_value(field, other["new_value"]) == wanted:
+            if semantic_value(field, other["new_value"], country) == wanted:
                 con.execute("UPDATE reviews SET status='auto_closed',evidence=COALESCE(evidence,'') || ? WHERE id=?",
                             (note, other["id"]))
                 closed += 1
@@ -469,6 +471,11 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         con.execute("""INSERT OR IGNORE INTO observations(id,company_id,field,value,source_url,evidence,observed_at,method,run_id,query,fingerprint) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
                     (uid(), id, field, value, url, evidence[:4000], timestamp, method, run_id, query, fingerprint))
 
+    @staticmethod
+    def _company_country(con, company_id):
+        row = con.execute("SELECT country FROM companies WHERE id=?", (company_id,)).fetchone()
+        return row[0] if row else ""
+
     def _review(self, con, id, kind, field, old, new, url, evidence, *, revision=None):
         """Single write path for reviews. Returns 'created', 'merged' or 'duplicate'.
 
@@ -483,10 +490,11 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                 or con.execute("SELECT 1 FROM review_evidence WHERE fingerprint=?", (fingerprint,)).fetchone()):
             return "duplicate"
         from .market_store import semantic_value
-        wanted = semantic_value(field, new)
+        country = self._company_country(con, id)
+        wanted = semantic_value(field, new, country)
         match = next((r for r in con.execute("""SELECT id,old_value,new_value FROM reviews WHERE company_id=?
                 AND kind='field_update' AND field=? AND status='pending' ORDER BY created_at,rowid""", (id, field))
-                if semantic_value(field, r["new_value"]) == wanted), None)
+                if semantic_value(field, r["new_value"], country) == wanted), None)
         if match:
             con.execute("INSERT INTO review_evidence(review_id,fingerprint,source_url,evidence,observed_at) VALUES(?,?,?,?,?)",
                         (match["id"], fingerprint, url, evidence[:4000], now()))
@@ -505,7 +513,8 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             return
         if self._market_run(con, run_id):
             return self._market_observed_field(
-                con, company, field, value, url, evidence, timestamp, method, run_id, query)
+                con, company, field, value, url, evidence, timestamp, method, run_id, query,
+                country=company["country"])
         self._observe(con, company["id"], field, value, url, evidence, timestamp, method, run_id, query)
         if field == "business_types":
             if isinstance(value, str):
@@ -517,7 +526,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                 return
             value = encode(value)
         old = company[field]
-        if equivalent_format(field, old, value):
+        if review_policy.equivalent(field, old, value, country=company["country"]):
             return
         # All competing non-empty values need review. No auto overrides.
         if old is not None and str(old).strip() not in ("", "[]"):
