@@ -14,9 +14,7 @@ def timestamp():return datetime.now(timezone.utc).isoformat()
 def uid():return uuid.uuid4().hex
 
 
-class SocialDiscoveryStoreMixin:
-    def _migrate_social_discovery(self,con):
-        con.executescript('''
+SOCIAL_DISCOVERY_DDL = '''
         CREATE TABLE IF NOT EXISTS social_config(key TEXT PRIMARY KEY,value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS social_runs(id TEXT PRIMARY KEY,status TEXT NOT NULL,created_at TEXT NOT NULL,
             finished_at TEXT,company_ids TEXT NOT NULL,settings TEXT NOT NULL,sample TEXT NOT NULL);
@@ -27,12 +25,19 @@ class SocialDiscoveryStoreMixin:
         CREATE TABLE IF NOT EXISTS social_page_observations(id TEXT PRIMARY KEY,entity_id TEXT NOT NULL REFERENCES social_entities(id),
             run_id TEXT NOT NULL REFERENCES social_runs(id),payload TEXT NOT NULL,observed_at TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS social_work_state ON social_work(state,run_id);
-        ''')
+'''
 
+
+class SocialDiscoveryStoreMixin:
+    def _social_discovery_ddl(self,con):
+        """0008."""
+        from .migrations import statements
+        for statement in statements(SOCIAL_DISCOVERY_DDL):
+            con.execute(statement)
+    def _social_work_missing_website(self,con):
+        """R04."""
         con.execute('''UPDATE social_work SET state='skipped',result=json_set(result,'$.status','skipped','$.reason','missing_website')
             WHERE stage='website' AND target='' AND state='no_results' ''')
-        con.commit()
-
     def social_settings(self):
         with self.connect() as con:row=con.execute("SELECT value FROM social_config WHERE key='searxng_url'").fetchone()
         value=row['value'] if row else ''

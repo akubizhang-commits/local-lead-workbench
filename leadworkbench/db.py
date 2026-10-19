@@ -77,6 +77,27 @@ def calendar_next(anchor: datetime, after: datetime, months: int, zone: str):
         n += 1
 
 
+AUDIT_DDL = """
+            CREATE TABLE IF NOT EXISTS task_metadata(
+                task_id TEXT PRIMARY KEY REFERENCES tasks(id),
+                created_by_user_id TEXT DEFAULT NULL);
+            CREATE TABLE IF NOT EXISTS task_geography(
+                task_id TEXT PRIMARY KEY REFERENCES tasks(id),
+                payload TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS contact_decisions(
+                contact_id TEXT PRIMARY KEY REFERENCES contacts(id),
+                adoption_status TEXT NOT NULL,decided_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS contact_versions(
+                id TEXT PRIMARY KEY,contact_id TEXT NOT NULL REFERENCES contacts(id),
+                payload TEXT NOT NULL,observed_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS company_manual_checks(
+                company_id TEXT PRIMARY KEY REFERENCES companies(id),checked_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS review_evidence(
+                review_id TEXT NOT NULL REFERENCES reviews(id),
+                fingerprint TEXT NOT NULL UNIQUE,
+                source_url TEXT,evidence TEXT,observed_at TEXT NOT NULL);
+            CREATE INDEX IF NOT EXISTS review_evidence_review ON review_evidence(review_id);
+"""
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS companies(
  id TEXT PRIMARY KEY,name TEXT NOT NULL,address TEXT NOT NULL DEFAULT '',phone TEXT NOT NULL DEFAULT '',
@@ -148,79 +169,34 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             # Readers in other processes (export child): never initialise the schema.
             self._open_ready()
             return
-        from .migrations import migrate_lock
-        # The whole initialisation is serialised across processes (P1-5).
-        with migrate_lock(self.directory):
-            with self.connect() as con:
-                version = con.execute("PRAGMA user_version").fetchone()[0]
-                if version > 2:
-                    raise Invalid("数据库版本高于应用版本")
-                con.execute("PRAGMA journal_mode=WAL")
-                if version == 0:
-                    con.executescript(SCHEMA)
-                if version < 2:
-                    self._migrate_market(con)
-                self._migrate_audit(con)
-                self._migrate_social(con)
-                self._migrate_market_social(con)
-                from .p0_migrations import migrate_p0
-                migrate_p0(self, con)
-                self._facets_enabled = bool(con.execute(
-                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='contact_facets'").fetchone())
-            self.path.chmod(0o600)
-            self.resolve_branch_reviews()
-            self.resolve_empty_reviews()
-            self.resolve_format_reviews()
-            self.resolve_duplicate_reviews()
+        from . import migrations
+        # One executor for every historical step, serialised across processes (P1-9).
+        with self.connect() as con:
+            migrations.migrate(self, con)
+            self._facets_enabled = bool(con.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='contact_facets'").fetchone())
+        self.path.chmod(0o600)
 
     def _open_ready(self):
         from .migrations import SchemaNotReady
         if not self.path.exists():
             raise SchemaNotReady()
+        from .migrations import ready
         with self.connect() as con:
-            if con.execute("PRAGMA user_version").fetchone()[0] != 2:
-                raise SchemaNotReady()
-            from .p0_migrations import MIGRATIONS
-            wanted = {id for id, _ in MIGRATIONS} - {"p0_20261018_repair_rejected"}
-            try:
-                done = {row[0] for row in con.execute("SELECT id FROM schema_migrations")}
-            except sqlite3.OperationalError as exc:
-                raise SchemaNotReady() from exc
-            if not wanted <= done:
+            if not ready(con):
                 raise SchemaNotReady()
             self._facets_enabled = bool(con.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='contact_facets'").fetchone())
 
-    def _migrate_audit(self, con):
-        from .maps_policy import DDL
-        con.executescript(DDL)
-        from .website_policy import migrate as migrate_website_policy
-        migrate_website_policy(con)
-        self._migrate_source_aliases(con)
-        con.executescript("""
-            CREATE TABLE IF NOT EXISTS task_metadata(
-                task_id TEXT PRIMARY KEY REFERENCES tasks(id),
-                created_by_user_id TEXT DEFAULT NULL);
-            CREATE TABLE IF NOT EXISTS task_geography(
-                task_id TEXT PRIMARY KEY REFERENCES tasks(id),
-                payload TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS contact_decisions(
-                contact_id TEXT PRIMARY KEY REFERENCES contacts(id),
-                adoption_status TEXT NOT NULL,decided_at TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS contact_versions(
-                id TEXT PRIMARY KEY,contact_id TEXT NOT NULL REFERENCES contacts(id),
-                payload TEXT NOT NULL,observed_at TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS company_manual_checks(
-                company_id TEXT PRIMARY KEY REFERENCES companies(id),checked_at TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS review_evidence(
-                review_id TEXT NOT NULL REFERENCES reviews(id),
-                fingerprint TEXT NOT NULL UNIQUE,
-                source_url TEXT,evidence TEXT,observed_at TEXT NOT NULL);
-            CREATE INDEX IF NOT EXISTS review_evidence_review ON review_evidence(review_id);
-        """)
-        # Backfill decisions, including exclusions superseded by later observations.
-        # Decisions on contact change proposals never exclude the contact (P0-2):
-        # once the proposals table exists, those reviews are not legacy decisions.
+    def _audit_ddl(self, con):
+        """0006: the audit side tables (one statement at a time, no implicit COMMIT)."""
+        from .migrations import statements
+        for statement in statements(AUDIT_DDL):
+            con.execute(statement)
+    def _contact_decisions_backfill(self, con):
+        """R02: backfill decisions, including exclusions superseded by later observations.
+        Decisions on contact change proposals never exclude the contact (P0-2):
+        once the proposals table exists, those reviews are not legacy decisions."""
         proposals = con.execute("""SELECT 1 FROM sqlite_master WHERE type='table'
             AND name='contact_change_proposals'""").fetchone()
         def guard(alias):
@@ -235,7 +211,8 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         con.execute("""INSERT OR IGNORE INTO contact_decisions
             SELECT id,CASE review_status WHEN 'reject' THEN 'excluded' ELSE 'accepted' END,observed_at
             FROM contacts WHERE review_status IN ('accept','reject')""")
-        # Adopted legacy values gain the same protection if still current.
+    def _accepted_overrides_backfill(self, con):
+        """R03: adopted legacy values gain the same protection if still current."""
         for review in con.execute("""SELECT * FROM reviews WHERE kind='field_update' AND status='accept'
                                       ORDER BY created_at,rowid""").fetchall():
             field = review["field"]
@@ -337,75 +314,83 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
 
     def resolve_empty_reviews(self):
         with self.connect() as con:
-            count = 0
-            for r in con.execute("SELECT * FROM reviews WHERE status='pending' ORDER BY created_at DESC,rowid DESC").fetchall():
-                if r["old_value"] not in (None, "", "[]"):
+            self._begin(con)
+            return self._resolve_empty_reviews_locked(con)
+    def _resolve_empty_reviews_locked(self, con):
+        count = 0
+        for r in con.execute("SELECT * FROM reviews WHERE status='pending' ORDER BY created_at DESC,rowid DESC").fetchall():
+            if r["old_value"] not in (None, "", "[]"):
+                continue
+            if r["kind"] == "contact":
+                contact = con.execute("SELECT * FROM contacts WHERE id=? AND company_id=?", (r["new_value"],r["company_id"])).fetchone()
+                if not contact:
                     continue
-                if r["kind"] == "contact":
-                    contact = con.execute("SELECT * FROM contacts WHERE id=? AND company_id=?", (r["new_value"],r["company_id"])).fetchone()
-                    if not contact:
-                        continue
-                    conflict = con.execute("SELECT 1 FROM reviews WHERE kind='contact' AND new_value=? AND status='pending' AND COALESCE(old_value,'')!=''", (r["new_value"],)).fetchone()
-                    if contact["review_status"] == "pending" and not conflict:
-                        con.execute("UPDATE contacts SET review_status='auto_recorded' WHERE id=?",(contact["id"],))
-                elif r["kind"] == "field_update" and r["field"] in {"name","phone","address","website","business_types"}:
-                    field = r["field"]
-                    row = con.execute(f"SELECT {field} FROM companies WHERE id=?",(r["company_id"],)).fetchone()
-                    if not row or not r["new_value"]:
-                        continue
-                    if row[0] in (None,"","[]"):
-                        con.execute(f"UPDATE companies SET {field}=?,revision=revision+1 WHERE id=?",(r["new_value"],r["company_id"]))
-                        con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",(uid(),r["company_id"],field,row[0],r["new_value"],now(),"自动补全旧空字段"))
-                    elif row[0] != r["new_value"]:
-                        continue
-                else:
+                conflict = con.execute("SELECT 1 FROM reviews WHERE kind='contact' AND new_value=? AND status='pending' AND COALESCE(old_value,'')!=''", (r["new_value"],)).fetchone()
+                if contact["review_status"] == "pending" and not conflict:
+                    con.execute("UPDATE contacts SET review_status='auto_recorded' WHERE id=?",(contact["id"],))
+            elif r["kind"] == "field_update" and r["field"] in {"name","phone","address","website","business_types"}:
+                field = r["field"]
+                row = con.execute(f"SELECT {field} FROM companies WHERE id=?",(r["company_id"],)).fetchone()
+                if not row or not r["new_value"]:
                     continue
-                con.execute("UPDATE reviews SET status='auto_recorded' WHERE id=?",(r["id"],))
-                count += 1
+                if row[0] in (None,"","[]"):
+                    con.execute(f"UPDATE companies SET {field}=?,revision=revision+1 WHERE id=?",(r["new_value"],r["company_id"]))
+                    con.execute("INSERT INTO changes VALUES(?,?,?,?,?,?,?)",(uid(),r["company_id"],field,row[0],r["new_value"],now(),"自动补全旧空字段"))
+                elif row[0] != r["new_value"]:
+                    continue
+            else:
+                continue
+            con.execute("UPDATE reviews SET status='auto_recorded' WHERE id=?",(r["id"],))
+            count += 1
         return count
 
     def resolve_format_reviews(self):
         with self.connect() as con:
-            count = 0
-            for review in con.execute("SELECT * FROM reviews WHERE kind='field_update' AND status='pending'").fetchall():
-                if equivalent_format(review["field"], review["old_value"], review["new_value"]):
-                    con.execute("UPDATE reviews SET status='auto_recorded',evidence=COALESCE(evidence,'') || ? WHERE id=?",
-                                ("；格式等价，保留现有值，无需审核", review["id"]))
-                    count += 1
+            self._begin(con)
+            return self._resolve_format_reviews_locked(con)
+    def _resolve_format_reviews_locked(self, con):
+        count = 0
+        for review in con.execute("SELECT * FROM reviews WHERE kind='field_update' AND status='pending'").fetchall():
+            if equivalent_format(review["field"], review["old_value"], review["new_value"]):
+                con.execute("UPDATE reviews SET status='auto_recorded',evidence=COALESCE(evidence,'') || ? WHERE id=?",
+                            ("；格式等价，保留现有值，无需审核", review["id"]))
+                count += 1
         return count
 
     def resolve_duplicate_reviews(self):
         """Idempotently fold legacy same-value pending field reviews into one review each."""
-        from .market_store import semantic_value
         with self.connect() as con:
             self._begin(con)
-            con.execute("""INSERT OR IGNORE INTO review_evidence
-                SELECT r.id,COALESCE(r.fingerprint,r.id),r.source_url,r.evidence,COALESCE(r.created_at,'')
-                FROM reviews r WHERE r.kind='field_update'
-                AND NOT EXISTS (SELECT 1 FROM review_evidence e WHERE e.review_id=r.id)""")
-            groups = {}
-            for r in con.execute("""SELECT * FROM reviews WHERE kind='field_update' AND status='pending'
-                                    ORDER BY created_at,rowid""").fetchall():
-                groups.setdefault((r["company_id"], r["field"], semantic_value(r["field"], r["new_value"])), []).append(r)
-            closed = 0
-            for (company_id, field, wanted), rows in groups.items():
-                primary, *others = rows
-                for other in others:
-                    con.execute("UPDATE review_evidence SET review_id=? WHERE review_id=?", (primary["id"], other["id"]))
-                    con.execute("UPDATE reviews SET status='auto_closed',evidence=COALESCE(evidence,'') || ? WHERE id=?",
-                                ("；与同值建议合并", other["id"]))
-                    closed += 1
-                if field not in {"name", "phone", "address", "website", "business_types"}:
-                    continue
-                row = con.execute(f"SELECT {field} FROM companies WHERE id=?", (company_id,)).fetchone()
-                if not row:
-                    continue
-                if semantic_value(field, row[0]) == wanted:
-                    con.execute("UPDATE reviews SET status='auto_closed',evidence=COALESCE(evidence,'') || ? WHERE id=?",
-                                ("；当前值已与建议一致", primary["id"]))
-                    closed += 1
-                elif primary["old_value"] != row[0]:
-                    con.execute("UPDATE reviews SET old_value=? WHERE id=?", (row[0], primary["id"]))
+            return self._resolve_duplicate_reviews_locked(con)
+    def _resolve_duplicate_reviews_locked(self, con):
+        from .market_store import semantic_value
+        con.execute("""INSERT OR IGNORE INTO review_evidence
+            SELECT r.id,COALESCE(r.fingerprint,r.id),r.source_url,r.evidence,COALESCE(r.created_at,'')
+            FROM reviews r WHERE r.kind='field_update'
+            AND NOT EXISTS (SELECT 1 FROM review_evidence e WHERE e.review_id=r.id)""")
+        groups = {}
+        for r in con.execute("""SELECT * FROM reviews WHERE kind='field_update' AND status='pending'
+                                ORDER BY created_at,rowid""").fetchall():
+            groups.setdefault((r["company_id"], r["field"], semantic_value(r["field"], r["new_value"])), []).append(r)
+        closed = 0
+        for (company_id, field, wanted), rows in groups.items():
+            primary, *others = rows
+            for other in others:
+                con.execute("UPDATE review_evidence SET review_id=? WHERE review_id=?", (primary["id"], other["id"]))
+                con.execute("UPDATE reviews SET status='auto_closed',evidence=COALESCE(evidence,'') || ? WHERE id=?",
+                            ("；与同值建议合并", other["id"]))
+                closed += 1
+            if field not in {"name", "phone", "address", "website", "business_types"}:
+                continue
+            row = con.execute(f"SELECT {field} FROM companies WHERE id=?", (company_id,)).fetchone()
+            if not row:
+                continue
+            if semantic_value(field, row[0]) == wanted:
+                con.execute("UPDATE reviews SET status='auto_closed',evidence=COALESCE(evidence,'') || ? WHERE id=?",
+                            ("；当前值已与建议一致", primary["id"]))
+                closed += 1
+            elif primary["old_value"] != row[0]:
+                con.execute("UPDATE reviews SET old_value=? WHERE id=?", (row[0], primary["id"]))
         return closed
 
     def _close_same_value_reviews(self, con, review, decision):
@@ -429,14 +414,17 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
     def resolve_branch_reviews(self):
         # Upgrade old pending suggestions without changing either company.
         with self.connect() as con:
-            count = 0
-            for review in con.execute("SELECT * FROM reviews WHERE kind='duplicate_candidate' AND status='pending'").fetchall():
-                left = con.execute("SELECT * FROM companies WHERE id=?", (review["old_value"],)).fetchone()
-                right = con.execute("SELECT * FROM companies WHERE id=?", (review["new_value"],)).fetchone()
-                if left and right and distinct_branches(left, right):
-                    con.execute("UPDATE reviews SET status='auto_separate',evidence=evidence || ? WHERE id=?",
-                        ("；同名同官网、地址和电话不同，自动保留独立门店",review["id"]))
-                    count += 1
+            self._begin(con)
+            return self._resolve_branch_reviews_locked(con)
+    def _resolve_branch_reviews_locked(self, con):
+        count = 0
+        for review in con.execute("SELECT * FROM reviews WHERE kind='duplicate_candidate' AND status='pending'").fetchall():
+            left = con.execute("SELECT * FROM companies WHERE id=?", (review["old_value"],)).fetchone()
+            right = con.execute("SELECT * FROM companies WHERE id=?", (review["new_value"],)).fetchone()
+            if left and right and distinct_branches(left, right):
+                con.execute("UPDATE reviews SET status='auto_separate',evidence=evidence || ? WHERE id=?",
+                    ("；同名同官网、地址和电话不同，自动保留独立门店",review["id"]))
+                count += 1
         return count
 
     def _decorate_operating(self, con, company):
@@ -1519,7 +1507,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         name = f"{prefix}-{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}-{uid()[:8]}.sqlite3"
         target = folder / name
         try:
-            with self.connect() as source, closing(sqlite3.connect(target)) as dest:
+            with self._backup_source() as source, closing(sqlite3.connect(target)) as dest:
                 source.backup(dest)
                 # Rollback-journal header: a lone file opens without -wal/-shm on every SQLite build.
                 dest.execute("PRAGMA journal_mode=DELETE")
@@ -1537,6 +1525,12 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         target.chmod(0o600)
         return {"name": name, "created_at": now()}
 
+    def _backup_source(self):
+        """Read-only source for backups: never writes, never counts as an open Store connection.
+        (A connection holding BEGIN IMMEDIATE cannot be a backup source: backup_step stays BUSY.)"""
+        con = sqlite3.connect(self.path.as_uri() + "?mode=ro", uri=True, timeout=15)
+        con.execute("PRAGMA busy_timeout=15000")
+        return closing(con)
     def restore(self, name):
         if Path(name).name != name or not name.endswith(".sqlite3"):
             raise Invalid("无效备份名称")
@@ -1565,20 +1559,23 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                         source.execute("SELECT run_id FROM market_runs LIMIT 1")
                         source.execute("SELECT company_id FROM market_memberships LIMIT 1")
                         source.execute("SELECT company_id FROM run_companies LIMIT 1")
+                    from .migrations import is_known
+                    ledger = []
+                    if source.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                                      "AND name='schema_migrations'").fetchone():
+                        ledger = [row[0] for row in source.execute("SELECT id FROM schema_migrations")]
                 except sqlite3.DatabaseError as exc:
                     raise Invalid("备份损坏或版本不兼容，请选择其他备份") from exc
+                if any(not is_known(id) for id in ledger):
+                    raise Invalid("该备份来自更新版本的应用，当前版本无法恢复")
                 self.backup(kind="pre-restore")
                 with self.connect() as dest:
                     source.backup(dest)
-                    if version == 1:
-                        self._migrate_market(dest)
-                    self._migrate_audit(dest)
-                    self._migrate_social(dest)
-                    self._migrate_market_social(dest)
-                    from .p0_migrations import migrate_p0
-                    migrate_p0(self, dest)
+                    dest.commit()
+                    # The same executor as start-up, including R05–R08 (inside migrate.lock).
+                    from .migrations import migrate
+                    migrate(self, dest)
         finally:
             _remove_database_files(tmp)
         self.recover()
         self.recover_social()
-        self.resolve_duplicate_reviews()

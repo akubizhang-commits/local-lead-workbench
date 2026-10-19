@@ -7,6 +7,7 @@ import threading
 import pytest
 
 from leadworkbench.db import Store
+from leadworkbench.migrations import ONCE_IDS
 from leadworkbench.p0_migrations import MIGRATIONS
 from legacy_db import load_legacy
 
@@ -29,6 +30,12 @@ def full_dump(path):
     with closing(sqlite3.connect(path)) as con:
         return [line for line in con.iterdump() if not line.startswith(("ANALYZE", "INSERT INTO sqlite_stat"))
                 and "sqlite_stat" not in line]
+
+
+def assert_ledger(ids):
+    """P1-9: the ledger holds every once entry of the unified registry; P0 keeps its relative order."""
+    assert ids == list(ONCE_IDS)
+    assert [i for i in ids if i in dict(MIGRATIONS)] == [id for id, _ in MIGRATIONS]
 
 
 def ledger(store):
@@ -71,7 +78,7 @@ def test_upgrade_keeps_legacy_rows_and_records_ledger(tmp_path, fixture):
         if table != "contact_decisions":  # repair deletes the decision rows that wrongly excluded
             assert len(after[table]) >= len(rows), table
     assert changed_rows(before, after) == allowed
-    assert ledger(store) == [id for id, _ in MIGRATIONS]
+    assert_ledger(ledger(store))
     with store.connect() as con:
         names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='index'")}
         assert INDEXES <= names
@@ -100,7 +107,7 @@ def test_restored_legacy_backup_is_upgraded(tmp_path):
     (store.directory / "backups").mkdir(exist_ok=True)
     shutil.copyfile(path, store.directory / "backups" / "legacy.sqlite3")
     store.restore("legacy.sqlite3")
-    assert ledger(store) == [id for id, _ in MIGRATIONS]
+    assert_ledger(ledger(store))
     with store.connect() as con:
         assert con.execute("SELECT 1 FROM sqlite_master WHERE name='contacts_company'").fetchone()
         assert con.execute("SELECT count(*) FROM contacts").fetchone()[0] == 5
@@ -126,4 +133,4 @@ def test_two_processes_starting_together_apply_each_item_once(tmp_path):
     assert errors == []
     with closing(sqlite3.connect(tmp_path / "workbench.sqlite3")) as con:
         rows = [r[0] for r in con.execute("SELECT id FROM schema_migrations")]
-    assert sorted(rows) == sorted(id for id, _ in MIGRATIONS)
+    assert sorted(rows) == sorted(ONCE_IDS)

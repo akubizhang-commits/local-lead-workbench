@@ -9,7 +9,7 @@ import sys
 import pytest
 
 from leadworkbench.db import Store
-from leadworkbench.p0_migrations import MIGRATIONS
+from leadworkbench.migrations import ONCE_IDS
 from legacy_db import legacy_code_tmp, load_legacy
 
 
@@ -57,7 +57,7 @@ def test_upgrade_restores_wrongly_excluded_contacts(tmp_path):
 def test_backup_failure_skips_repair_only(tmp_path, monkeypatch):
     load_legacy(tmp_path)
 
-    def broken(self):
+    def broken(self, **kwargs):
         raise OSError("disk full")
 
     monkeypatch.setattr(Store, "backup", broken)
@@ -65,7 +65,7 @@ def test_backup_failure_skips_repair_only(tmp_path, monkeypatch):
     with store.connect() as con:
         ledger = [r[0] for r in con.execute("SELECT id FROM schema_migrations")]
     assert "p0_20261018_repair_rejected" not in ledger
-    assert len(ledger) == len(MIGRATIONS) - 1
+    assert len(ledger) == len(ONCE_IDS) - 1
     assert contact(store, "bob@alpha.example")["adoption_status"] == "excluded"
     monkeypatch.undo()
     assert contact(Store(tmp_path), "bob@alpha.example")["adoption_status"] is None

@@ -299,7 +299,12 @@ async def test_8_streamed_body_never_touches_the_store(client, monkeypatch):
         response = real_array(rows)
         returned["at"] = time.monotonic()
         return response
+    real_source = Store._backup_source
+    def backup_source(self):
+        calls.append(time.monotonic())
+        return real_source(self)
     monkeypatch.setattr(Store, "connect", connect)
+    monkeypatch.setattr(Store, "_backup_source", backup_source)
     monkeypatch.setattr(api_module, "json_array", array)
     async with http.stream("GET", "/api/companies") as response:
         body = b"".join([chunk async for chunk in response.aiter_bytes()])

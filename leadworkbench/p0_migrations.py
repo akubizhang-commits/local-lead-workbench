@@ -1,7 +1,8 @@
 """Forward-only, idempotent, ledgered P0 migrations (design §1.1).
 
-Each item runs as ``BEGIN IMMEDIATE -> ledger check -> work -> ledger row -> COMMIT``
-so two processes starting at once never apply an item twice. Items never change
+The items are entries of the unified registry in ``migrations.py``, whose executor
+runs each as ``BEGIN IMMEDIATE -> ledger check -> work -> ledger row -> COMMIT``
+inside migrate.lock, so two processes starting at once never apply an item twice. Items never change
 existing rows of the legacy tables except the user-approved repair item.
 ``user_version`` stays 2: all new tables are side tables, triggers are plain SQL.
 """
@@ -9,11 +10,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import logging
-import time
 
 log = logging.getLogger(__name__)
 
-LEDGER = "CREATE TABLE IF NOT EXISTS schema_migrations(id TEXT PRIMARY KEY, applied_at TEXT NOT NULL)"
 
 INDEXES = """
 CREATE INDEX IF NOT EXISTS contacts_company ON contacts(company_id);
@@ -237,38 +236,6 @@ MIGRATIONS = _registry()
 
 
 def migrate_p0(store, con):
-    if con.in_transaction:
-        con.commit()
-    con.execute(LEDGER)
-    if con.in_transaction:
-        con.commit()
-    for id, step in MIGRATIONS:
-        while True:
-            start = time.perf_counter()
-            store._begin(con)
-            try:
-                if con.execute("SELECT 1 FROM schema_migrations WHERE id=?", (id,)).fetchone():
-                    con.rollback()
-                    break
-                finished = True
-                try:
-                    step(store, con)
-                except Pending:
-                    finished = False
-                if finished:
-                    con.execute("INSERT INTO schema_migrations VALUES(?,?)", (id, now()))
-                con.commit()
-            except SkipMigration as exc:
-                con.rollback()
-                log.warning("P0 迁移 %s 已跳过，未写入台账：%s", id, exc, extra={"event": "migration_skipped", "id": id})
-                break
-            except BaseException:
-                con.rollback()
-                log.exception("P0 迁移 %s 失败，未写入台账", id, extra={"event": "migration_failed", "id": id})
-                raise
-            elapsed = time.perf_counter() - start
-            log.info("P0 迁移 %s 用时 %.2fs", id, elapsed,
-                     extra={"event": "migration", "id": id, "duration_ms": round(elapsed * 1000)})
-            if finished:
-                break
-    con.execute("PRAGMA optimize")
+    """Compatibility wrapper: P0 items now run inside the unified executor (P1-9)."""
+    from .migrations import migrate
+    migrate(store, con)

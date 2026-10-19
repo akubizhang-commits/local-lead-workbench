@@ -16,9 +16,7 @@ def ident(text):
     return hashlib.sha256(text.encode()).hexdigest()[:32]
 
 
-class SocialStoreMixin(SocialDiscoveryStoreMixin):
-    def _migrate_social(self, con):
-        con.executescript('''
+SOCIAL_DDL = '''
         CREATE TABLE IF NOT EXISTS social_entities(
             id TEXT PRIMARY KEY, platform TEXT NOT NULL, kind TEXT NOT NULL, url TEXT NOT NULL UNIQUE,
             label TEXT NOT NULL, created_at TEXT NOT NULL);
@@ -38,14 +36,21 @@ class SocialStoreMixin(SocialDiscoveryStoreMixin):
             id TEXT PRIMARY KEY,company_id TEXT NOT NULL REFERENCES companies(id),entity_id TEXT NOT NULL REFERENCES social_entities(id),
             state TEXT NOT NULL,note TEXT NOT NULL,created_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS social_migrations(name TEXT PRIMARY KEY);
-        ''')
-        self._migrate_social_discovery(con)
-        self._begin(con)
+'''
+
+
+class SocialStoreMixin(SocialDiscoveryStoreMixin):
+    def _social_ddl(self, con):
+        """0007: the social tables, one statement at a time."""
+        from .migrations import statements
+        for statement in statements(SOCIAL_DDL):
+            con.execute(statement)
+    def _social_legacy_links_locked(self, con):
+        """0009: legacy links once; the social_migrations row keeps older code agreeing it is done."""
         if not con.execute("SELECT 1 FROM social_migrations WHERE name='legacy_links_v1'").fetchone():
             for c in con.execute('SELECT id FROM companies WHERE merged_into IS NULL').fetchall():
                 self._sync_social(con,c['id'])
             con.execute("INSERT INTO social_migrations VALUES('legacy_links_v1')")
-
     def _save_social(self,con,cid,url,source_url,evidence,method,observed_at):
         r=classify_link(url)
         eid=ident(r['url']) if r['kind']!='excluded' else None

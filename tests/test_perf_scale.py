@@ -126,7 +126,7 @@ def test_first_start_migration_on_9423c53_database(tmp_path, caplog):
                         str(COMPANIES), str(CONTACTS), "legacy"], env=env, cwd=code, check=True)
     finally:
         shutil.rmtree(code, ignore_errors=True)
-    caplog.set_level(logging.INFO, logger="leadworkbench.p0_migrations")
+    caplog.set_level(logging.INFO, logger="leadworkbench.migrations")
     start = time.perf_counter()
     Store(target)
     total = time.perf_counter() - start

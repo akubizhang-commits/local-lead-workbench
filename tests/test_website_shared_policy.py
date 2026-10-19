@@ -79,6 +79,8 @@ def test_upgrade_preserves_unresolved_legacy_host_gate_without_resurrecting_it(t
         con.execute("UPDATE work_items SET state='blocked',result=? WHERE run_id=?",
                     (json.dumps({'checkpoint': checkpoint}), run['id']))
         con.execute("DROP TABLE website_host_gates")
+        # A database from before the unified ledger (P1-9) has no 0004 row either.
+        con.execute("DELETE FROM schema_migrations WHERE id='0004_website_host_gates'")
     upgraded = Store(tmp_path)
     assert WebsiteAccessPolicy(upgraded).gates()['brand.example'] == gate
     with upgraded.connect() as con:

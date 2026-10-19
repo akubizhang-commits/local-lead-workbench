@@ -27,15 +27,21 @@ def options(payload):
     return dict(auto_social=enabled, social_platforms=platforms, social_read_posts=posts)
 
 
-class MarketSocialMixin:
-    def _migrate_market_social(self, con):
-        con.executescript(POLICY_DDL + """
+MARKET_SOCIAL_DDL = """
         CREATE TABLE IF NOT EXISTS task_social_settings(
             task_id TEXT PRIMARY KEY REFERENCES tasks(id), payload TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS market_social_runs(
             market_run_id TEXT PRIMARY KEY REFERENCES runs(id),
             social_run_id TEXT NOT NULL UNIQUE REFERENCES social_runs(id));
-        """)
+"""
+
+
+class MarketSocialMixin:
+    def _market_social_ddl(self, con):
+        """0010: social_policy, task_social_settings, market_social_runs."""
+        from .migrations import statements
+        for statement in statements(POLICY_DDL + MARKET_SOCIAL_DDL):
+            con.execute(statement)
 
     def _task_social_options(self, con, task_id):
         row = con.execute("SELECT payload FROM task_social_settings WHERE task_id=?", (task_id,)).fetchone()

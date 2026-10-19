@@ -123,21 +123,26 @@ CREATE INDEX market_runs_market ON market_runs(market_id,run_id);
 class MarketStoreMixin:
     def _migrate_source_aliases(self, con):
         """Idempotent extension migration; no merging of historical companies."""
+        self._source_aliases_ddl(con)
+        self._source_aliases_backfill(con)
+    def _source_aliases_ddl(self, con):
+        """0005."""
         con.execute("""CREATE TABLE IF NOT EXISTS listing_aliases(
             alias TEXT PRIMARY KEY,source_key TEXT NOT NULL REFERENCES listings(source_key))""")
         con.execute("CREATE INDEX IF NOT EXISTS listing_alias_source ON listing_aliases(source_key)")
+    def _source_aliases_backfill(self, con):
+        """R01: Store.ingest outside market mode still writes no aliases; this step covers it."""
         from .sources.maps import listing_aliases
         for row in con.execute("""SELECT source_key,source_url FROM listings l WHERE NOT EXISTS
             (SELECT 1 FROM listing_aliases a WHERE a.alias=l.source_key)""").fetchall():
             for alias in listing_aliases(row["source_key"], row["source_url"]):
                 con.execute("INSERT OR IGNORE INTO listing_aliases VALUES(?,?)", (alias, row["source_key"]))
 
-    def _migrate_market(self, con):
-        """One transaction, including legacy membership backfill and version bump."""
-        self._begin(con)
-        for statement in MIGRATION.split(";"):
-            if statement.strip():
-                con.execute(statement)
+    def _migrate_market_locked(self, con):
+        """0002: inside the executor's transaction, including legacy membership backfill and version bump."""
+        from .migrations import statements
+        for statement in statements(MIGRATION):
+            con.execute(statement)
         con.execute('UPDATE tasks SET "limit"=0')
         for task in con.execute("SELECT * FROM tasks ORDER BY created_at,id").fetchall():
             con.execute("INSERT OR IGNORE INTO market_keys VALUES(?,?)",
