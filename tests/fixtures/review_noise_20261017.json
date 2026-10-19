@@ -1,0 +1,253 @@
+{
+ "source": "product-review-2026-10-17: product/05-reviews.json, qa/live/07-reviews-after-scan1.json, qa/live/09-scan2-manual-protect.json",
+ "groups": {
+  "product": {
+   "companies": [
+    {
+     "key": "omni",
+     "name": "Omni Sheet Metal, Inc.",
+     "phone": "+1 408-435-5020",
+     "website": "https://omnisheetmetal.com/",
+     "address": "1010 Olinder Ct, San Jose, CA 95122, United States",
+     "city": "San Jose",
+     "country": "US",
+     "business_types": [],
+     "overrides": [],
+     "pages": [
+      {
+       "url": "https://omnisheetmetal.com/",
+       "html": "<html><head><title>Omni Sheet Metal – Roofing, Panel Systems, Ornamental, Sun Control, Silicon Valley</title></head><body><main><p>Call us <a href=\"tel: (408) 435-5020\">(408) 435-5020</a></p></main></body></html>"
+      }
+     ]
+    },
+    {
+     "key": "superior",
+     "name": "Superior Roof Metals",
+     "phone": "+1 408-539-1935",
+     "website": "https://superiorroofmetals.com/",
+     "address": "890 Faulstich Ct, San Jose, CA 95112, United States",
+     "city": "San Jose",
+     "country": "US",
+     "business_types": [
+      "retailer"
+     ],
+     "overrides": [],
+     "pages": [
+      {
+       "url": "https://superiorroofmetals.com/",
+       "html": "<html><head><title>Superior Roof Metals</title><meta property=\"og:site_name\" content=\"Superior Roof Metals\"></head><body><main><p>Roofing and gutter supplies with a retail counter open to contractors and homeowners.</p><p><a href=\"tel:4082950911\">(408) 295-0911</a></p></main></body></html>"
+      },
+      {
+       "url": "https://superiorroofmetals.com/careers/",
+       "html": "<html><head><title>Careers</title></head><body><main><h1>Careers</h1><p>e Fabricator plays a critical role in the operation and maintenance of machinery in our sheet metal manufacturing plant. This position is responsible for ensuring smooth production operations across a range of metal products, maintaining product quality, and adhering to safety standards.</p></main></body></html>"
+      }
+     ]
+    },
+    {
+     "key": "qxo_left",
+     "name": "QXO",
+     "phone": "+1 408-293-5947",
+     "website": "https://www.qxo.com/",
+     "address": "200 San Jose Ave, San Jose, CA 95125, United States",
+     "city": "San Jose",
+     "country": "US",
+     "business_types": [],
+     "overrides": [],
+     "pages": []
+    },
+    {
+     "key": "qxo_right",
+     "name": "QXO",
+     "phone": "+1 408-491-7663",
+     "website": "https://locations.qxo.com/CA/San-Jose/San-Jose-CA-95112/142?utm_source=Google+Business&utm_medium=gmb&utm_term=na&utm_content=Google-San-Jose-CA-142&utm_campaign=Locations",
+     "address": "1202 S Sixth St, San Jose, CA 95112, United States",
+     "city": "San Jose",
+     "country": "US",
+     "business_types": [],
+     "overrides": [],
+     "pages": []
+    }
+   ],
+   "baseline": [
+    {
+     "company": "superior",
+     "kind": "field_update",
+     "field": "business_types",
+     "old_value": "[\"retailer\"]",
+     "new_value": "[\"manufacturer\"]",
+     "source_url": "https://superiorroofmetals.com/careers/",
+     "evidence": "e Fabricator plays a critical role in the operation and maintenance of machinery in our sheet metal manufacturing plant. This position is responsible for ensuring smooth production operations across a range of metal products, maintaining product quality, and adhering to safety standards."
+    },
+    {
+     "company": "superior",
+     "kind": "field_update",
+     "field": "phone",
+     "old_value": "+1 408-539-1935",
+     "new_value": "4082950911",
+     "source_url": "https://superiorroofmetals.com/",
+     "evidence": " | (408) 295-0911 | tel:4082950911"
+    },
+    {
+     "company": "omni",
+     "kind": "field_update",
+     "field": "phone",
+     "old_value": "+1 408-435-5020",
+     "new_value": "(408) 435-5020",
+     "source_url": "https://omnisheetmetal.com/",
+     "evidence": " | (408) 435-5020 | tel: (408) 435-5020"
+    },
+    {
+     "company": "omni",
+     "kind": "field_update",
+     "field": "name",
+     "old_value": "Omni Sheet Metal, Inc.",
+     "new_value": "Omni Sheet Metal – Roofing, Panel Systems, Ornamental, Sun Control, Silicon Valley",
+     "source_url": "https://omnisheetmetal.com/",
+     "evidence": " | Omni Sheet Metal – Roofing, Panel Systems, Ornamental, Sun Control, Silicon Valley"
+    },
+    {
+     "company": "qxo_right",
+     "kind": "duplicate_candidate",
+     "field": "company",
+     "old_value": "qxo_left",
+     "new_value": "qxo_right",
+     "source_url": "https://www.google.com/maps/place/QXO/data=!4m7!3m6!1s0x808e3331592edb0d:0x406dc136df5c44!8m2!3d37.320292!4d-121.8722996!16s%2Fg%2F11bbrlp6g7!19sChIJDdsuWTEzjoARRFzfNsFtQAA?authuser=0&hl=en&g_ep=EgoyMDI2MTAxMy4wIJJjKgBIAVAD&rclk=1",
+     "evidence": "同名来源证据不足；不自动合并"
+    }
+   ]
+  },
+  "qa07": {
+   "companies": [
+    {
+     "key": "omni",
+     "name": "Omni Sheet Metal, Inc.",
+     "phone": "+1 408-435-5020",
+     "website": "https://omnisheetmetal.com/",
+     "address": "1010 Olinder Ct, San Jose, CA 95122, United States",
+     "city": "San Jose",
+     "country": "US",
+     "business_types": [],
+     "overrides": [],
+     "pages": [
+      {
+       "url": "https://omnisheetmetal.com/",
+       "html": "<html><head><title>Omni Sheet Metal – Roofing, Panel Systems, Ornamental, Sun Control, Silicon Valley</title></head><body><main><p>Call us <a href=\"tel: (408) 435-5020\">(408) 435-5020</a></p></main></body></html>"
+      }
+     ]
+    },
+    {
+     "key": "qxo_left",
+     "name": "QXO",
+     "phone": "+1 408-491-7663",
+     "website": "https://locations.qxo.com/CA/San-Jose/San-Jose-CA-95112/142?utm_source=Google+Business&utm_medium=gmb&utm_term=na&utm_content=Google-San-Jose-CA-142&utm_campaign=Locations",
+     "address": "1202 S Sixth St, San Jose, CA 95112, United States",
+     "city": "San Jose",
+     "country": "US",
+     "business_types": [],
+     "overrides": [],
+     "pages": []
+    },
+    {
+     "key": "qxo_right",
+     "name": "QXO",
+     "phone": "+1 408-293-5947",
+     "website": "https://www.qxo.com/",
+     "address": "200 San Jose Ave, San Jose, CA 95125, United States",
+     "city": "San Jose",
+     "country": "US",
+     "business_types": [],
+     "overrides": [],
+     "pages": []
+    }
+   ],
+   "baseline": [
+    {
+     "company": "omni",
+     "kind": "field_update",
+     "field": "phone",
+     "old_value": "+1 408-435-5020",
+     "new_value": "(408) 435-5020",
+     "source_url": "https://omnisheetmetal.com/",
+     "evidence": " | (408) 435-5020 | tel: (408) 435-5020"
+    },
+    {
+     "company": "omni",
+     "kind": "field_update",
+     "field": "name",
+     "old_value": "Omni Sheet Metal, Inc.",
+     "new_value": "Omni Sheet Metal – Roofing, Panel Systems, Ornamental, Sun Control, Silicon Valley",
+     "source_url": "https://omnisheetmetal.com/",
+     "evidence": " | Omni Sheet Metal – Roofing, Panel Systems, Ornamental, Sun Control, Silicon Valley"
+    },
+    {
+     "company": "qxo_right",
+     "kind": "duplicate_candidate",
+     "field": "company",
+     "old_value": "qxo_left",
+     "new_value": "qxo_right",
+     "source_url": "https://www.google.com/maps/place/QXO/data=!4m7!3m6!1s0x808e333eb0a9b9b1:0x375d4e7071533aa4!8m2!3d37.3094458!4d-121.8744223!16s%2Fg%2F1tgn4zgg!19sChIJsbmpsD4zjoARpDpTcXBOXTc?authuser=0&hl=en&g_ep=EgoyMDI2MTAxMy4wIJJjKgBIAVAD&rclk=1",
+     "evidence": "同名来源证据不足；不自动合并"
+    }
+   ]
+  },
+  "qa09": {
+   "companies": [
+    {
+     "key": "superior",
+     "name": "Superior Roof Metals (人工修正)",
+     "phone": "+1 408-000-0000",
+     "website": "https://superiorroofmetals.com/",
+     "address": "890 Faulstich Ct, San Jose, CA 95112, United States",
+     "city": "San Jose",
+     "country": "US",
+     "business_types": [
+      "retailer"
+     ],
+     "overrides": [
+      "name",
+      "phone"
+     ],
+     "pages": [
+      {
+       "url": "https://superiorroofmetals.com/",
+       "html": "<html><head><title>Superior Roof Metals</title><meta property=\"og:site_name\" content=\"Superior Roof Metals\"></head><body><main><p>Roofing and gutter supplies with a retail counter open to contractors and homeowners.</p><p><a href=\"tel:4082950911\">(408) 295-0911</a></p></main></body></html>"
+      },
+      {
+       "url": "https://superiorroofmetals.com/careers/",
+       "html": "<html><head><title>Careers</title></head><body><main><h1>Careers</h1><p>e Fabricator plays a critical role in the operation and maintenance of machinery in our sheet metal manufacturing plant. This position is responsible for ensuring smooth production operations across a range of metal products, maintaining product quality, and adhering to safety standards.</p></main></body></html>"
+      }
+     ]
+    }
+   ],
+   "baseline": [
+    {
+     "company": "superior",
+     "kind": "field_update",
+     "field": "business_types",
+     "old_value": "[\"retailer\"]",
+     "new_value": "[\"manufacturer\"]",
+     "source_url": "https://superiorroofmetals.com/careers/",
+     "evidence": "e Fabricator plays a critical role in the operation and maintenance of machinery in our sheet metal manufacturing plant. This position is responsible for ensuring smooth production operations across a range of metal products, maintaining product quality, and adhering to safety standards."
+    },
+    {
+     "company": "superior",
+     "kind": "field_update",
+     "field": "phone",
+     "old_value": "+1 408-000-0000",
+     "new_value": "4082950911",
+     "source_url": "https://superiorroofmetals.com/",
+     "evidence": " | (408) 295-0911 | tel:4082950911"
+    },
+    {
+     "company": "superior",
+     "kind": "field_update",
+     "field": "name",
+     "old_value": "Superior Roof Metals (人工修正)",
+     "new_value": "Superior Roof Metals",
+     "source_url": "https://superiorroofmetals.com/",
+     "evidence": " |  | og:site_name=Superior Roof Metals"
+    }
+   ]
+  }
+ }
+}
