@@ -727,8 +727,16 @@ def create_app(data_dir=None, *, allowed_hosts=None):
         return list_regions(parent_id, kind, county_id)
 
     @app.get("/api/tasks")
-    def tasks():
-        return store.tasks()
+    def tasks(archived: Literal["exclude", "only", "include"] = "exclude"):
+        return store.tasks(archived)
+
+    @app.post("/api/tasks/{id}/archive")
+    def archive_task(id: str):
+        return store.archive_market(id)
+
+    @app.post("/api/tasks/{id}/restore")
+    def restore_task(id: str):
+        return store.restore_market(id)
 
     @app.post("/api/tasks")
     def create_task(body: TaskInput):

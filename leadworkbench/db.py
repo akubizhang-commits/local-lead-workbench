@@ -159,6 +159,9 @@ PRAGMA user_version=1;
 """
 
 
+ARCHIVED_FILTER = {"include": "", "exclude": "WHERE st.archived_at IS NULL", "only": "WHERE st.archived_at IS NOT NULL"}
+
+
 class Store(MarketAdminMixin, MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMixin):
     _facets_enabled = False
     _cities_enabled = False
@@ -1171,16 +1174,20 @@ class Store(MarketAdminMixin, MarketSocialMixin, RunActivityMixin, MarketStoreMi
             metadata = con.execute("SELECT created_by_user_id FROM task_metadata WHERE task_id=?", (id,)).fetchone()
             task["created_by_user_id"] = metadata[0] if metadata else None
             task.update(self._task_social_options(con, id))
+            task["archived_at"] = self._archived_at(con, id)
             geography = con.execute("SELECT payload FROM task_geography WHERE task_id=?", (id,)).fetchone()
             if geography:
                 task["geography"] = json.loads(geography["payload"])
                 task["county"] = task["geography"].get("county", "")
             return self._market_task_details(con, task, _tier_stats)
 
-    def tasks(self):
+    def tasks(self, archived="include"):
+        if archived not in ARCHIVED_FILTER:
+            raise Invalid("无效归档筛选")
         self._refresh_facets()
         with self.connect() as con:
-            ids = [r[0] for r in con.execute("SELECT id FROM tasks ORDER BY created_at DESC")]
+            ids = [r[0] for r in con.execute(f"""SELECT t.id FROM tasks t LEFT JOIN task_state st ON st.task_id=t.id
+                {ARCHIVED_FILTER[archived]} ORDER BY t.created_at DESC""")]
             stats = self._market_tier_stats(con, ids)
         return [self.task(i, stats) for i in ids]
 
@@ -1219,6 +1226,7 @@ class Store(MarketAdminMixin, MarketSocialMixin, RunActivityMixin, MarketStoreMi
         task = self.task(id)
         with self.connect() as con:
             self._begin(con)
+            self._ensure_not_archived(con, id)
             return self._start(con, task=task)
 
     def refresh(self, id):
@@ -1265,6 +1273,8 @@ class Store(MarketAdminMixin, MarketSocialMixin, RunActivityMixin, MarketStoreMi
                 target = "paused"
             elif action == "resume" and state in {"paused", "blocked", "partial", "failed"}:
                 target = "queued"
+                self._ensure_not_archived(con, run["task_id"])
+                self._ensure_recheck_resumable(con, run)
                 market = self._market_run(con, id)
                 retryable = self.market_retryable_items(con, id) if market else None
                 social_retry=self._market_social_retryable(con,id)
@@ -1494,7 +1504,8 @@ class Store(MarketAdminMixin, MarketSocialMixin, RunActivityMixin, MarketStoreMi
                         con.execute("UPDATE schedules SET enabled=0 WHERE id=?", (s["id"],))
                         continue
                 prior = con.execute("SELECT 1 FROM occurrences WHERE schedule_id=? AND due_at=?", (s["id"], s["next_due_at"])).fetchone()
-                if not prior:
+                # Archived markets never run on schedule; only the due time moves on (D7).
+                if not prior and not (s["task_id"] and self._archived_at(con, s["task_id"])):
                     task = self.row(con.execute("SELECT * FROM tasks WHERE id=?", (s["task_id"],)).fetchone()) if s["task_id"] else None
                     run = self._start(con, task=task, company_id=s["company_id"])
                     if run["status"] == "paused":

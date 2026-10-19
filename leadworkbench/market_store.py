@@ -680,6 +680,8 @@ class MarketStoreMixin:
             self._begin(con)
             run = self.row(con.execute("SELECT * FROM runs WHERE id=?", (id,)).fetchone())
             market = self._market_run(con, id)
+            if market:
+                self._ensure_not_archived(con, market["market_id"])
             if not market:
                 raise Invalid("仅市场检索轮次支持补查")
             block = self._relocate_block(con, run, json.loads(market["plan"]))

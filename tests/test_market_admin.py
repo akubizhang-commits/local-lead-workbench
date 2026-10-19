@@ -132,3 +132,152 @@ def test_edit_preview_of_a_municipality_stays_text_only(client):
                                                          state_id=p["state_id"], place_id=p["id"]))
     body = client.post("/api/tasks/preview", json={"market_id": za["id"], "keywords": ["steel"]}).json()
     assert body["geometry"] == "text_only"
+
+
+# ---- archive and restore (design §6.2) -------------------------------------------
+
+from datetime import datetime, timezone  # noqa: E402
+
+from db_hash import content_hash  # noqa: E402
+
+UTC = timezone.utc
+
+
+def archive(client, task_id):
+    return client.post(f"/api/tasks/{task_id}/archive")
+
+
+def count(store, table):
+    with store.connect() as con:
+        return con.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+
+
+def test_busy_markets_cannot_be_archived(client):
+    store = client.store
+    task = create(client, ["metal roofing supply"])
+    run = store.start_task(task["id"])
+    response = archive(client, task["id"])
+    assert response.status_code == 409 and response.json()["code"] == "market_busy"
+    assert response.json()["detail"] == "该市场还有未结束的轮次（排队、运行或暂停中），请先取消后再归档。已取得的企业会保留。"
+    store.control(run["id"], "pause")
+    assert archive(client, task["id"]).status_code == 409
+    store.control(run["id"], "cancel")
+    archived = archive(client, task["id"])
+    assert archived.status_code == 200 and archived.json()["archived_at"]
+    assert archive(client, task["id"]).json()["archived_at"] == archived.json()["archived_at"]  # idempotent
+    assert [c["new_value"] for c in changes(store, task["id"], "archive")] == ["archived"]
+
+
+def test_archived_markets_leave_the_default_list(client):
+    a, b = create(client, ["metal roofing supply"]), create(client, ["sheet metal supplier"])
+    archive(client, a["id"])
+    assert [t["id"] for t in client.get("/api/tasks").json()] == [b["id"]]
+    assert [t["id"] for t in client.get("/api/tasks", params={"archived": "only"}).json()] == [a["id"]]
+    assert {t["id"] for t in client.get("/api/tasks", params={"archived": "include"}).json()} == {a["id"], b["id"]}
+    assert client.get("/api/tasks", params={"archived": "bogus"}).status_code == 422
+    again = client.post("/api/tasks", json={**SAN_JOSE, "keywords": ["metal roofing supply"], "company_types": ["wholesale"]})
+    assert again.json()["id"] == a["id"] and again.json()["archived_at"]
+    preview = client.post("/api/tasks/preview", json={**SAN_JOSE, "keywords": ["metal roofing supply"],
+                                                      "company_types": ["wholesale"]}).json()
+    assert preview["existing_market"]["archived"] is True
+
+
+def test_every_write_entry_point_refuses_an_archived_market(client):
+    store = client.store
+    task = create(client, ["metal roofing supply"])
+    run = store.start_task(task["id"])
+    with store.connect() as con:
+        con.execute("UPDATE work_items SET state='failed' WHERE run_id=?", (run["id"],))
+    store.finalize(run["id"])
+    disabled = store.create_schedule(task_id=task["id"], kind="discovery", enabled=False)
+    assert archive(client, task["id"]).status_code == 200
+    calls = [
+        client.post(f"/api/tasks/{task['id']}/runs"),
+        client.post("/api/schedules", json={"task_id": task["id"], "kind": "discovery"}),
+        client.patch(f"/api/schedules/{disabled['id']}", json={"enabled": True}),
+        client.post(f"/api/tasks/{task['id']}/social", json={}),
+        client.patch(f"/api/tasks/{task['id']}/social-settings", json={"auto_social": False}),
+        client.post(f"/api/runs/{run['id']}/relocate"),
+        client.post(f"/api/runs/{run['id']}/resume"),
+        client.patch(f"/api/tasks/{task['id']}", json={"keywords": ["sheet metal supplier"]}),
+    ]
+    for response in calls:
+        assert response.status_code == 409, response.request.url
+        assert response.json()["code"] == "market_archived"
+        assert response.json()["detail"] == "市场已归档，请先恢复后再操作。"
+    # Pausing or cancelling is never blocked; disabling a plan is allowed.
+    assert client.patch(f"/api/schedules/{disabled['id']}", json={"interval_months": 2}).status_code == 200
+
+
+def test_archive_changes_only_state_tables(client):
+    store = client.store
+    task = create(client, ["metal roofing supply"])
+    tables = [t for t in ("companies", "tasks", "runs", "market_keys", "market_memberships", "reviews", "observations",
+                          "contacts", "exclusion_rules")]
+    before = content_hash(store.path, tables=tables)
+    archive(client, task["id"])
+    client.post(f"/api/tasks/{task['id']}/restore")
+    assert content_hash(store.path, tables=tables) == before
+
+
+def test_dispatch_skips_archived_market_plans(client):
+    store = client.store
+    task = create(client, ["metal roofing supply"])
+    plan = store.create_schedule(task_id=task["id"], kind="discovery")
+    archive(client, task["id"])
+    with store.connect() as con:
+        con.execute("UPDATE schedules SET next_due_at='2026-01-01T00:00:00+00:00' WHERE id=?", (plan["id"],))
+    runs, occurrences = count(store, "runs"), count(store, "occurrences")
+    store.dispatch_due()
+    assert (count(store, "runs"), count(store, "occurrences")) == (runs, occurrences)
+    after = store.schedule(plan["id"])
+    assert after["enabled"] is True and after["next_due_at"] > datetime.now(UTC).isoformat()
+
+
+@pytest.mark.parametrize("dispatched_while_archived", [True, False])
+def test_restore_never_catches_up(client, dispatched_while_archived):
+    store = client.store
+    task = create(client, ["metal roofing supply"])
+    plan = store.create_schedule(task_id=task["id"], kind="discovery")
+    archive(client, task["id"])
+    with store.connect() as con:
+        con.execute("UPDATE schedules SET next_due_at='2026-01-01T00:00:00+00:00' WHERE id=?", (plan["id"],))
+    if dispatched_while_archived:
+        store.dispatch_due()
+    runs, occurrences = count(store, "runs"), count(store, "occurrences")
+    restored = client.post(f"/api/tasks/{task['id']}/restore")
+    assert restored.status_code == 200 and restored.json()["archived_at"] is None
+    store.dispatch_due()
+    assert (count(store, "runs"), count(store, "occurrences")) == (runs, occurrences)
+    after = store.schedule(plan["id"])
+    assert after["next_due_at"] > datetime.now(UTC).isoformat() and after["anchor"] == plan["anchor"]
+    assert [c["new_value"] for c in changes(store, task["id"], "archive")] == ["archived", "active"]
+    assert client.post(f"/api/tasks/{task['id']}/restore").status_code == 200  # idempotent
+    assert len(changes(store, task["id"], "archive")) == 2
+
+
+def test_restore_keeps_a_plan_that_was_not_due(client):
+    store = client.store
+    task = create(client, ["metal roofing supply"])
+    plan = store.create_schedule(task_id=task["id"], kind="discovery")
+    archive(client, task["id"])
+    client.post(f"/api/tasks/{task['id']}/restore")
+    assert store.schedule(plan["id"])["next_due_at"] == plan["next_due_at"]
+
+
+def test_restore_fills_a_legacy_plan_without_anchor(client):
+    store = client.store
+    task = create(client, ["metal roofing supply"])
+    archive(client, task["id"])
+    with store.connect() as con:
+        con.execute("""INSERT INTO schedules(id,task_id,company_id,kind,interval_months,timezone,next_due_at,enabled,anchor)
+            VALUES('legacy',?,NULL,'discovery',NULL,NULL,'2026-01-01T00:00:00+00:00',1,NULL)""", (task["id"],))
+    response = client.post(f"/api/tasks/{task['id']}/restore")
+    assert response.status_code == 200, response.text
+    after = store.schedule("legacy")
+    assert after["anchor"] and after["interval_months"] == 1 and after["next_due_at"] > datetime.now(UTC).isoformat()
+
+
+def test_missing_market_archive_is_404(client):
+    assert archive(client, "nope").status_code == 404
+    assert client.post("/api/tasks/nope/restore").status_code == 404

@@ -164,7 +164,7 @@ async def test_3_restore_is_exclusive(client, monkeypatch):
         time.sleep(1)
         with lock:
             log.append(("restore", "out", time.monotonic()))
-    def tasks():
+    def tasks(*args):
         with lock:
             log.append(("tasks", "in", time.monotonic()))
         time.sleep(0.2)
@@ -191,7 +191,7 @@ async def test_3_restore_is_exclusive(client, monkeypatch):
 async def test_4_restore_times_out_while_a_request_runs(client, monkeypatch):
     http, app = client
     app.state.gate.exclusive_wait = 0.5
-    monkeypatch.setattr(app.state.store, "tasks", lambda: time.sleep(2) or [])
+    monkeypatch.setattr(app.state.store, "tasks", lambda *args: time.sleep(2) or [])
     monkeypatch.setattr(app.state.store, "restore", lambda name: pytest.fail("restore must not start"))
     slow = asyncio.create_task(http.get("/api/tasks"))
     await asyncio.sleep(0.1)

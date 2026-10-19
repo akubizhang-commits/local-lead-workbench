@@ -18,6 +18,9 @@ SCHEDULE_EXISTS = "该市场已有启用中的定时计划（每 {n} 个月，�
 SCHEDULE_FILLED = "补齐计划缺失的设置后重新计算下次时间"
 MARKET_ARCHIVED = "市场已归档，请先恢复后再操作。"
 MARKET_EXISTS = "已有相同地区和关键词的目标市场「{name}」，请直接使用该市场。"
+MARKET_BUSY = "该市场还有未结束的轮次（排队、运行或暂停中），请先取消后再归档。已取得的企业会保留。"
+RECHECK_RUNNING = "该市场已有批量官网复核在进行中（已完成 {done} / {total} 家），请等待完成或取消后再发起。"
+ACTIVE = ("queued", "running", "paused")
 KEYWORDS_REASON = "用户修改关键词；下一轮起按新关键词检索，已有企业保留"
 
 
@@ -343,3 +346,63 @@ class MarketAdminMixin:
             other = self._other_market(con, self._market_identities(con, payload), market_id)
         return {**estimate_queries(payload), "keywords": new, "existing_market": other,
                 "existing_market_scope": "edit"}
+
+    # ---- archive and restore (design §6.2) -------------------------------------
+
+    def _active_recheck(self, con, market_id, exclude_run=None):
+        return con.execute(f"""SELECT r.* FROM market_recheck_runs b JOIN runs r ON r.id=b.run_id
+            WHERE b.market_id=? AND r.status IN ({','.join('?' * len(ACTIVE))}) AND r.id<>?
+            ORDER BY b.created_at DESC LIMIT 1""", (market_id, *ACTIVE, exclude_run or "")).fetchone()
+
+    def _recheck_conflict(self, run):
+        progress = json.loads(run["progress"] or "{}")
+        return Conflict(RECHECK_RUNNING.format(done=progress.get("enrichment_done", 0),
+                                               total=progress.get("enrichment_total", 0)), code="recheck_running")
+
+    def _ensure_recheck_resumable(self, con, run):
+        """Resuming a batch re-check: its market must be active and have no other running batch."""
+        snapshot = run["snapshot"] if isinstance(run["snapshot"], dict) else json.loads(run["snapshot"] or "{}")
+        if snapshot.get("batch") != "website_recheck":
+            return
+        self._ensure_not_archived(con, snapshot.get("market_id"))
+        other = self._active_recheck(con, snapshot.get("market_id"), run["id"])
+        if other:
+            raise self._recheck_conflict(other)
+
+    def _market_change(self, con, market_id, field, old, new, reason):
+        con.execute("""INSERT INTO market_changes(id,market_id,field,old_value,new_value,reason,created_at)
+            VALUES(?,?,?,?,?,?,?)""", (ident(), market_id, field, old, new, reason, stamp()))
+
+    def archive_market(self, id):
+        with self.connect() as con:
+            self._begin(con)
+            if not con.execute("SELECT 1 FROM tasks WHERE id=?", (id,)).fetchone():
+                raise NotFound("市场不存在")
+            if not self._archived_at(con, id):
+                busy = con.execute(f"""SELECT 1 FROM runs WHERE task_id=? AND status IN ({','.join('?' * len(ACTIVE))})
+                    LIMIT 1""", (id, *ACTIVE)).fetchone() or self._active_recheck(con, id)
+                if busy:
+                    raise Conflict(MARKET_BUSY, code="market_busy")
+                now = stamp()
+                con.execute("""INSERT INTO task_state(task_id,archived_at,updated_at) VALUES(?,?,?)
+                    ON CONFLICT(task_id) DO UPDATE SET archived_at=excluded.archived_at,updated_at=excluded.updated_at""",
+                            (id, now, now))
+                self._market_change(con, id, "archive", "active", "archived", "用户归档市场；企业和历史记录保留")
+                log.info("market archived", extra={"event": "market_archived", "market_id": id})
+        return self.task(id)
+
+    def restore_market(self, id):
+        now = datetime.now(UTC)
+        with self.connect() as con:
+            self._begin(con)
+            if not con.execute("SELECT 1 FROM tasks WHERE id=?", (id,)).fetchone():
+                raise NotFound("市场不存在")
+            if self._archived_at(con, id):
+                con.execute("UPDATE task_state SET archived_at=NULL,updated_at=? WHERE task_id=?", (now.isoformat(), id))
+                # No catch-up run: an overdue enabled plan moves to its next period (D7).
+                for schedule in con.execute("SELECT * FROM schedules WHERE task_id=? AND enabled=1", (id,)).fetchall():
+                    self._reschedule_if_overdue(con, schedule, now)
+                self._market_change(con, id, "archive", "archived", "active", "用户恢复市场")
+                log.info("market restored", extra={"event": "market_restored", "market_id": id})
+        return self.task(id)
+

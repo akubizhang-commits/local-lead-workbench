@@ -63,6 +63,7 @@ class MarketSocialMixin:
             self._begin(con)
             if not con.execute("SELECT 1 FROM tasks WHERE id=?", (task_id,)).fetchone():
                 raise NotFound("记录不存在")
+            self._ensure_not_archived(con, task_id)
             value = options({**self._task_social_options(con, task_id), **changes})
             con.execute("INSERT INTO task_social_settings(task_id,payload) VALUES(?,?) ON CONFLICT(task_id) DO UPDATE SET payload=excluded.payload",
                         (task_id, json.dumps(value)))
@@ -197,6 +198,7 @@ class MarketSocialMixin:
         cfg = options(dict(auto_social=True, social_platforms=list(PLATFORMS) if platforms is None else platforms, social_read_posts=read_posts))
         with self.connect() as con:
             self._begin(con)
+            self._ensure_not_archived(con, task_id)
             companies = [r[0] for r in con.execute("""SELECT c.id FROM market_memberships m JOIN companies c ON c.id=m.company_id
                 WHERE m.market_id=? AND c.merged_into IS NULL AND c.status!='do_not_contact'""", (task_id,))]
             if not companies:

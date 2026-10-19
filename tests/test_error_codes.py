@@ -48,6 +48,8 @@ MISSING = [
     ("POST", "/api/reviews/missing/decision", {"decision": "accept"}),
     ("PATCH", "/api/schedules/missing", {"enabled": True}),
     ("PATCH", "/api/tasks/missing", {"keywords": ["x"]}),
+    ("POST", "/api/tasks/missing/archive", None),
+    ("POST", "/api/tasks/missing/restore", None),
     ("GET", "/api/export-jobs/missing", None),
     ("POST", "/api/export-jobs/missing/cancel", None),
     ("GET", "/api/export-jobs/missing/file", None),
@@ -77,7 +79,7 @@ def test_1_missing_id_is_not_found_with_request_id(api, method, path, body):
 
 def test_2_bare_key_error_is_internal_and_logged(api, monkeypatch, caplog):
     client, app = api
-    monkeypatch.setattr(app.state.store, "tasks", lambda: {}["secret-key-x"])
+    monkeypatch.setattr(app.state.store, "tasks", lambda *args: {}["secret-key-x"])
     with caplog.at_level(logging.ERROR, logger="leadworkbench.api"):
         response = client.get("/api/tasks")
     assert response.status_code == 500
@@ -103,7 +105,7 @@ def test_2_bare_key_error_is_internal_and_logged(api, monkeypatch, caplog):
 ])
 def test_3_storage_errors_are_classified(api, monkeypatch, message, status, code):
     client, app = api
-    def failing():
+    def failing(*args):
         raise sqlite3.OperationalError(message)
     monkeypatch.setattr(app.state.store, "tasks", failing)
     response = client.get("/api/tasks")
@@ -116,7 +118,7 @@ def test_3_storage_errors_are_classified(api, monkeypatch, message, status, code
 def test_4_request_id_reaches_thread_pool_logs(api, monkeypatch, caplog):
     client, app = api
     seen = []
-    def logging_tasks():
+    def logging_tasks(*args):
         logging.getLogger("leadworkbench.db").warning("inside store")
         seen.append(errors.REQUEST_ID.get())
         return []
@@ -157,7 +159,7 @@ def test_6_validation_keeps_array_detail(api):
 @pytest.mark.parametrize("message,status", [("internal check failed", 500), ("请选择地区", 400)])
 def test_7_untyped_value_errors(api, monkeypatch, message, status):
     client, app = api
-    def failing():
+    def failing(*args):
         raise ValueError(message)
     monkeypatch.setattr(app.state.store, "tasks", failing)
     response = client.get("/api/tasks")
