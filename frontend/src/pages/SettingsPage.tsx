@@ -1,4 +1,4 @@
-import { api } from "../api";
+import { api, download } from "../api";
 import { date } from "../helpers";
 import { useResource } from "../hooks";
 import { Schedules } from "../Schedules";
@@ -99,6 +99,7 @@ export function SettingsPage({
       </section>
       <SocialSettings />
       <Schedules version={version} />
+      <DiagnosticsPanel busy={busy} act={act} />
       <section className="panel">
         <div className="section-title">
           <h3>备份与恢复</h3>
@@ -146,5 +147,33 @@ export function SettingsPage({
         </Resource>
       </section>
     </>
+  );
+}
+
+/** Local date for the saved file name: 诊断包-YYYY-MM-DD.zip. */
+export function diagnosticsFileName(now = new Date()) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `诊断包-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.zip`;
+}
+
+export function DiagnosticsPanel({ busy, act }: { busy: boolean; act: Action }) {
+  return (
+    <section className="panel diagnostics-panel" aria-labelledby="diagnostics-title">
+      <div className="section-title">
+        <h3 id="diagnostics-title">诊断信息</h3>
+        <button
+          disabled={busy}
+          onClick={() =>
+            act(() => download("/diagnostics/bundle", diagnosticsFileName()), "诊断包已下载")
+          }
+        >
+          <Icon name="detail" size={16} />
+          导出诊断包
+        </button>
+      </div>
+      <p className="muted">
+        诊断包包含最近的运行日志、版本和脱敏后的配置，用于排查问题；不包含企业、联系人等业务数据，也不包含令牌、密钥和登录信息。
+      </p>
+    </section>
   );
 }

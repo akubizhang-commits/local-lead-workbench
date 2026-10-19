@@ -508,7 +508,7 @@ def create_app(data_dir=None, *, allowed_hosts=None):
         if not length.isdigit() or int(length) > 1_000_000:
             return error_response(413, "payload_too_large", "请求过大")
         unavailable = app.state.unavailable
-        if api and unavailable and request.url.path != "/api/session":
+        if api and unavailable and request.url.path not in ("/api/session", "/api/diagnostics/bundle"):
             return error_response(503, unavailable[0], unavailable[1])
         # Requests run concurrently; only restoring a backup is exclusive (P1-1).
         # The worker additionally shares the operation file lock.
@@ -856,8 +856,20 @@ def create_app(data_dir=None, *, allowed_hosts=None):
     def settings():
         if fault_enabled("internal"):
             raise RuntimeError("LEAD_TEST_FAULT=internal")
-        return {"data_dir": str(store.directory), "version": "0.1.0", "network_mode": "direct-public",
+        return settings_payload()
+
+    def settings_payload():
+        return {"data_dir": str(app.state.data_dir), "version": "0.1.0", "network_mode": "direct-public",
                 "paid_services": False, "ai_enabled": False}
+
+    @app.get("/api/diagnostics/bundle")
+    def diagnostics_bundle():
+        # Shared gate (middleware), thread pool (sync route), in memory only; works in degraded mode (§6.4).
+        from . import diagnostics
+        content = diagnostics.build(app.state.data_dir, store, settings=settings_payload(), token=token)
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        return Response(content, media_type="application/zip",
+                        headers={"Content-Disposition": f'attachment; filename="diagnostics-{stamp}.zip"'})
 
     @app.get("/api/backups")
     def backups():
