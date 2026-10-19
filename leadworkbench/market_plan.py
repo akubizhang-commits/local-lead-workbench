@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 import fcntl
+import functools
 import hashlib
 import json
 import math
@@ -500,3 +501,74 @@ async def plan_market(config, data_dir: Path) -> dict:
         plan.update(unresolved=unresolved, incomplete_reason=incomplete_reason,
                     geocoder_retry_at=datetime.fromtimestamp(retry_at, timezone.utc).isoformat() if retry_at else None)
     return plan
+
+
+def _estimate_terms(config) -> set[str]:
+    """Same terms as plan_market: keywords, or the legacy apparel defaults by company type."""
+    terms = {' '.join(str(k).split()).casefold() for k in config.get('keywords') or [] if str(k).strip()}
+    if not terms:
+        for kind in config.get('company_types') or []:
+            terms.update(TYPE_QUERIES.get(str(kind).strip().casefold(), ()))
+    return terms
+
+
+@functools.lru_cache(maxsize=256)
+def _estimate_cached(terms: tuple, location: str, place_id, bbox, scope):
+    """(geometry, initial_min, initial_max, max, query_terms); immutable for the cache.
+
+    The catalogue maximum simulates a whole round as the worker runs it: all
+    17 x T initial jobs first, then breadth-first splits, each accepted only
+    while the round stays within MAX_DISCOVERY_JOBS (keys deduplicate)."""
+    from collections import deque
+    from .market_worker import MAX_DISCOVERY_JOBS
+    query_terms = tuple(f'{term} in {location}' for term in terms)
+    count = len(terms)
+    if bbox is not None:
+        bounds = list(bbox)
+        geo = [round((bounds[0] + bounds[1]) / 2, 10), round((bounds[2] + bounds[3]) / 2, 10)]
+        jobs = []
+        for query in query_terms:
+            root = _job(query, geo, bounds, 0)
+            jobs.append(root)
+            jobs.extend(_grid(root, 4, 1))
+        seen = {job['key'] for job in jobs}
+        queue = deque(jobs)
+        while queue:
+            children = split_job(queue.popleft())
+            if children and len(seen) + len(children) <= MAX_DISCOVERY_JOBS:
+                for child in children:
+                    if child['key'] not in seen:
+                        seen.add(child['key'])
+                        queue.append(child)
+        return 'catalogue', 17 * count, 17 * count, len(seen), query_terms
+    if scope == 'whole_municipality':
+        return 'text_only', count, count, count, query_terms
+    return 'geocoder', count, 17 * count, None, query_terms
+
+
+def estimate_queries(config) -> dict:
+    """Expected Maps queries of one round; local catalogue only, never the network (design §8.2)."""
+    city = ' '.join(str(config.get('city') or '').split())
+    state = ' '.join(str(config.get('state') or '').split())
+    country = str(config.get('country_code', config.get('country')) or '').strip().lower()
+    terms = tuple(sorted(_estimate_terms(config)))
+    location = ', '.join(part for part in (city, state, country.upper()) if part)
+    geography = config.get('geography') or {}
+    place_id, scope = geography.get('place_id'), geography.get('scope')
+    bbox = None
+    if place_id:
+        from .regions import index
+        place = index().get(place_id) or {}
+        if place.get('bbox') and place.get('geo'):
+            try:
+                bbox = tuple(_bbox(place['bbox']))
+            except ValueError:
+                bbox = None
+    if bbox is None and scope != 'whole_municipality' and country:
+        fallback = _catalogue_fallback(country, state, city)
+        if fallback:
+            bbox = tuple(fallback[0]['bbox'])
+    geometry, initial_min, initial_max, maximum, query_terms = _estimate_cached(
+        terms, location, place_id, bbox, scope)
+    return {'terms': list(terms), 'query_terms': list(query_terms), 'geometry': geometry,
+            'initial_min': initial_min, 'initial_max': initial_max, 'max': maximum}

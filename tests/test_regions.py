@@ -58,7 +58,7 @@ def test_region_api_filters_and_invalid_parent(tmp_path):
         response=client.get('/api/regions?parent_id=US-NY&kind=place&county_id=US-COUNTY-06037')
         assert response.status_code==400
         assert client.get('/api/regions?parent_id=unknown&kind=place').json()==[]
-        task=client.post('/api/tasks',json=selection())
+        task=client.post('/api/tasks',json={**selection(),'keywords':['clothing wholesaler']})
         assert task.status_code==200,task.text
         assert task.json()['geography']['verified_selection'] is True
 
@@ -193,7 +193,7 @@ def test_region_configuration_api(tmp_path):
         assert all('dataset' not in c for c in configs)
         assert len(client.get('/api/regions?parent_id=ZA').json()) == 9
         payload = za_selection('metropolitan_municipality')
-        response = client.post('/api/tasks',json=payload)
+        response = client.post('/api/tasks',json={**payload,'keywords':['clothing wholesaler']})
         assert response.status_code == 200, response.text
         assert response.json()['geography']['scope'] == 'whole_municipality'
 

@@ -30,7 +30,15 @@ def test_private_ip_website_is_chinese_and_does_not_echo_input(client):
 
 def test_task_without_keywords_or_types(client):
     body = detail(client.post("/api/tasks", json={"state": "California", "city": "San Jose"}))
-    assert body[0]["msg"] == "请选择目标企业类型或填写关键词"
+    assert body[0]["msg"] == "请填写检索关键词，或从预设行业中选择一个"
+    assert body[0]["loc"] == ["body", "keywords"]
+def test_task_with_only_company_types_needs_keywords(client):
+    body = detail(client.post("/api/tasks", json={"state": "California", "city": "San Jose",
+                                                  "company_types": ["wholesale"]}))
+    assert [(e["loc"], e["msg"]) for e in body] == [(["body", "keywords"], "请填写检索关键词，或从预设行业中选择一个")]
+def test_task_with_unknown_industry_reports_only_the_industry(client):
+    body = detail(client.post("/api/tasks", json={"state": "California", "city": "San Jose", "industry": "unknown"}))
+    assert [(e["loc"], e["msg"]) for e in body] == [(["body", "industry"], "未知的预设行业")]
 
 
 @pytest.mark.parametrize("payload,expected", [

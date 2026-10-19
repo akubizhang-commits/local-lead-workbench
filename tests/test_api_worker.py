@@ -40,7 +40,7 @@ def test_invalid_task_and_private_website_rejected(client):
 
 def test_market_api_ignores_old_quantity_limit_and_reuses_same_market(client):
     payload = dict(mode="market", name="Fixture", country="US", state="California", city="Los Angeles",
-                   company_types=["wholesale"], keywords=[], auto_enrich=False, limit=1000)
+                   company_types=["wholesale"], keywords=["clothing wholesaler"], auto_enrich=False, limit=1000)
     first = client.post("/api/tasks", json=payload)
     assert first.status_code == 200
     assert first.json()["limit"] == 0

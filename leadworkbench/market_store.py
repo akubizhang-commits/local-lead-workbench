@@ -125,6 +125,17 @@ CREATE INDEX market_runs_market ON market_runs(market_id,run_id);
 """
 
 
+def prepare_market_payload(payload):
+    """validate_selection, then preset expansion: shared by create and preview (design §8.2, R3-4)."""
+    from .regions import validate_selection
+    from .industry_presets import merge_keywords
+    payload = validate_selection(payload)
+    if payload.get("industry"):
+        payload = {**payload, "keywords": merge_keywords(
+            payload.get("keywords", []), payload["industry"], payload.get("company_types", []))}
+    return payload
+
+
 class MarketStoreMixin:
     def _migrate_source_aliases(self, con):
         """Idempotent extension migration; no merging of historical companies."""
@@ -183,32 +194,45 @@ class MarketStoreMixin:
                     (canonical(snapshot), canonical(progress), "queued" if run["status"] == "running" else run["status"], run["id"]))
         con.execute("PRAGMA user_version=2")
 
+    def _market_identities(self, con, payload):
+        """[market_key, *place_id aliases]; no validation and no preset expansion (design §8.2, R3-4).
+
+        Aliases are the pre-catalogue keys of the state's unambiguous place names."""
+        key = market_key({**payload, "country": payload.get("country") or "US"})
+        aliases = []
+        if payload.get("place_id"):
+            from .regions import index, unique_place_id
+            place = index()[payload["place_id"]]
+            for city_name in {place["name"], place["official_name"]}:
+                if unique_place_id(payload.get("country"), payload.get("state"), city_name) == payload["place_id"]:
+                    aliases.append(market_key({**payload, "place_id": None, "city": city_name}))
+        return [key, *aliases]
+
+    def _find_market(self, con, identities):
+        """(task_id or None, matched by primary key). A legacy alias counts only if it names one market."""
+        row = con.execute("SELECT task_id FROM market_keys WHERE identity=?", (identities[0],)).fetchone()
+        if row:
+            return row[0], True
+        matches = {row[0] for alias in identities[1:]
+                   if (row := con.execute("SELECT task_id FROM market_keys WHERE identity=?", (alias,)).fetchone())}
+        return (next(iter(matches)) if len(matches) == 1 else None), False
+
     def create_market(self, payload):
-        from .regions import validate_selection
         from .market_social import options
         social_options = options(payload)
-        payload = validate_selection(payload)
-        key = market_key({**payload, "country": payload.get("country") or "US"})
+        payload = prepare_market_payload(payload)
         with self.connect() as con:
             self._begin(con)
-            prior = con.execute("SELECT task_id FROM market_keys WHERE identity=?", (key,)).fetchone()
-            legacy_keys = []
+            identities = self._market_identities(con, payload)
+            key = identities[0]
+            prior, primary = self._find_market(con, identities)
             # Reuse a pre-catalogue market only if the state's place name is
             # unambiguous. Do not merge a city and CDP just because names match.
-            if not prior and payload.get("place_id"):
-                from .regions import index, unique_place_id
-                place = index()[payload["place_id"]]
-                for city_name in {place["name"], place["official_name"]}:
-                    if unique_place_id(payload.get("country"), payload.get("state"), city_name) == payload["place_id"]:
-                        legacy_keys.append(market_key({**payload, "place_id": None, "city": city_name}))
-                matches = [con.execute("SELECT task_id FROM market_keys WHERE identity=?", (alias,)).fetchone()
-                           for alias in legacy_keys]
-                matches = [row for row in matches if row]
-                if len({row[0] for row in matches}) == 1:
-                    prior = matches[0]
-                    con.execute("INSERT OR IGNORE INTO market_keys(identity,task_id) VALUES(?,?)", (key, prior[0]))
+            legacy_keys = [] if primary else identities[1:]
+            if prior and not primary:
+                con.execute("INSERT OR IGNORE INTO market_keys(identity,task_id) VALUES(?,?)", (key, prior))
             if prior:
-                task_id = prior[0]
+                task_id = prior
             else:
                 task_id = ident()
                 con.execute("INSERT INTO tasks(id,name,country,state,city,keywords,company_types,\"limit\",auto_enrich,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)", (
@@ -227,6 +251,23 @@ class MarketStoreMixin:
                 con.execute("INSERT OR IGNORE INTO task_geography(task_id,payload) VALUES(?,?)",
                             (task_id, canonical(payload["geography"])))
         return self.task(task_id)
+
+    def preview_market(self, payload):
+        """Read-only preview of a new market: expanded keywords, query estimate, existing market."""
+        from .market_plan import estimate_queries
+        payload = prepare_market_payload(payload)
+        with self.connect() as con:
+            existing, _ = self._find_market(con, self._market_identities(con, payload))
+            market = self._existing_market(con, existing)
+        keywords = sorted({normalized(v) for v in payload.get("keywords", []) if normalized(v)})
+        return {**estimate_queries({**payload, "keywords": keywords}), "keywords": keywords,
+                "existing_market": market}
+
+    def _existing_market(self, con, task_id):
+        if not task_id:
+            return None
+        row = con.execute("SELECT id,name FROM tasks WHERE id=?", (task_id,)).fetchone()
+        return {"id": row["id"], "name": row["name"], "archived": False} if row else None
 
     def _market_run(self, con, run_id):
         return con.execute("SELECT * FROM market_runs WHERE run_id=?", (run_id,)).fetchone() if run_id else None
@@ -660,6 +701,11 @@ class MarketStoreMixin:
             discovery=con.execute("SELECT id FROM runs WHERE task_id=? AND kind='discovery' ORDER BY created_at DESC LIMIT 1",(task["id"],)).fetchone()
             run_id=discovery[0] if discovery else None
         task["mode"] = "market"
+        from .market_plan import TYPE_QUERIES, estimate_queries
+        task["query_estimate"] = estimate_queries(task)
+        task["needs_keywords"] = not task.get("keywords")
+        task["legacy_terms"] = [] if task.get("keywords") else sorted(
+            {term for kind in task.get("company_types") or [] for term in TYPE_QUERIES.get(kind, ())})
         task["market_stats"] = self._market_stats(con, task["id"], run_id)
         if not tier_stats or task["id"] not in tier_stats:
             tier_stats = self._market_tier_stats(con, [task["id"]])

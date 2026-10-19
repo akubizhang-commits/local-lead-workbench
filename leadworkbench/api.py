@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from starlette.concurrency import run_in_threadpool
 import json
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
+from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator, ConfigDict
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from contextvars import ContextVar
 import logging
@@ -29,6 +29,7 @@ from .errors import (INTERNAL, REQUEST_ID, Busy, DomainError, NotFound, classify
                      test_fault as fault_enabled)
 from . import logging_setup
 from .export import export_data
+from .industry_presets import merge_keywords
 from .sources.website import normalize_url
 from .validation_messages import translate_errors
 from .worker import worker_lock
@@ -178,6 +179,37 @@ class MarketSocialRunInput(MarketSocialSelectionInput):
         return self
 
 
+KEYWORDS_REQUIRED = "请填写检索关键词，或从预设行业中选择一个"
+
+
+def industry_valid(value):
+    from .industry_presets import BY_ID, UNKNOWN
+    if value is not None and value not in BY_ID:
+        raise ValueError(UNKNOWN)
+    return value or None
+
+
+def keywords_required(value, info):
+    """Blank/length checks, then "keywords or a preset" reported on the keywords field (design §8.2)."""
+    if any(not k.strip() or len(k) > 160 for k in value):
+        raise ValueError("关键词不能为空或过长")
+    value = list(dict.fromkeys(k.strip() for k in value))
+    if "industry" not in info.data:
+        return value  # The industry itself is invalid; one error is enough.
+    if not value and not info.data["industry"]:
+        raise ValueError(KEYWORDS_REQUIRED)
+    return value
+
+
+def ensure_keyword_limit(keywords):
+    """After preset expansion at most 30 keywords; raised as a 422 on body.keywords (D12)."""
+    from .industry_presets import MAX_KEYWORDS, TOO_MANY
+    from .market_store import normalized
+    if len({normalized(k) for k in keywords if normalized(k)}) > MAX_KEYWORDS:
+        raise RequestValidationError([{"type": "value_error", "loc": ("body", "keywords"), "msg": TOO_MANY,
+                                       "input": None, "ctx": {"error": ValueError(TOO_MANY)}}])
+
+
 class TaskInput(TaskSocialSettingsInput):
     mode: Literal["market"] = "market"
     # Compatibility only: display names are generated from search conditions.
@@ -189,18 +221,23 @@ class TaskInput(TaskSocialSettingsInput):
     county_id: str | None = Field(default=None, max_length=40)
     place_id: str | None = Field(default=None, max_length=40)
     county: str = Field(default="", max_length=120)
-    keywords: list[str] = Field(default_factory=list, max_length=30)
+    # Declared before keywords: the keywords validator reads it from info.data.
+    industry: str | None = Field(default=None, max_length=40)
+    keywords: list[str] = Field(default_factory=list, max_length=30, validate_default=True)
     company_types: list[Literal["wholesale", "retail", "import"]] = Field(default_factory=list, max_length=8)
     # Accept older clients, but a market never uses a company-count cutoff.
     limit: int | None = Field(default=None, exclude=True, ge=1)
     auto_enrich: bool = True
 
+    @field_validator("industry")
+    @classmethod
+    def industry_valid(cls, value):
+        return industry_valid(value)
+
     @field_validator("keywords")
     @classmethod
-    def keywords_valid(cls, value):
-        if any(not k.strip() or len(k) > 160 for k in value):
-            raise ValueError("关键词不能为空或过长")
-        return list(dict.fromkeys(k.strip() for k in value))
+    def keywords_valid(cls, value, info: ValidationInfo):
+        return keywords_required(value, info)
 
     @field_validator("country")
     @classmethod
@@ -212,8 +249,8 @@ class TaskInput(TaskSocialSettingsInput):
 
     @model_validator(mode="after")
     def target_required(self):
-        if not self.keywords and not self.company_types:
-            raise ValueError("请选择目标企业类型或填写关键词")
+        if self.industry:
+            self.keywords = merge_keywords(self.keywords, self.industry, self.company_types)
         if not all(v.strip() for v in (self.city, self.state)):
             raise ValueError("州省和城市不能为空")
         self.city, self.state = (v.strip() for v in (self.city, self.state))
@@ -642,7 +679,19 @@ def create_app(data_dir=None, *, allowed_hosts=None):
 
     @app.post("/api/tasks")
     def create_task(body: TaskInput):
+        ensure_keyword_limit(body.keywords)
         return store.create_market(body.model_dump())
+
+    @app.post("/api/tasks/preview")
+    def preview_task(body: TaskInput):
+        # Same validation and order as create; no writes and no network (design §8.2).
+        ensure_keyword_limit(body.keywords)
+        return store.preview_market(body.model_dump())
+
+    @app.get("/api/industry-presets")
+    def industry_presets():
+        from .industry_presets import presets
+        return presets()
 
     @app.patch("/api/tasks/{id}/social-settings")
     def task_social_settings(id: str, body: TaskSocialSettingsInput):
