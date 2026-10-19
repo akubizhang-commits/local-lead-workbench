@@ -22,6 +22,7 @@ from .contact_projection import group_contact_records, contact_key
 from .company_comparison import website_key, brief, distinct_branches, branch_identity, equivalent_format
 
 UTC = timezone.utc
+BACKUP_KINDS = ("manual", "pre-restore", "pre-repair")
 log = logging.getLogger(__name__)
 
 
@@ -1508,10 +1509,14 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                                     s["interval_months"], s["timezone"])
                 con.execute("UPDATE schedules SET next_due_at=? WHERE id=?", (due.isoformat(), s["id"]))
 
-    def backup(self):
+    def backup(self, kind="manual"):
+        """``manual`` -> backup-*; automatic ones -> auto-<reason>-* (retention keeps the newest N, §10.2)."""
+        if kind not in BACKUP_KINDS:
+            raise ValueError(f"unknown backup kind: {kind}")
         folder = self.directory / "backups"
         folder.mkdir(exist_ok=True)
-        name = f"backup-{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}-{uid()[:8]}.sqlite3"
+        prefix = "backup" if kind == "manual" else f"auto-{kind}"
+        name = f"{prefix}-{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}-{uid()[:8]}.sqlite3"
         target = folder / name
         try:
             with self.connect() as source, closing(sqlite3.connect(target)) as dest:
@@ -1562,7 +1567,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                         source.execute("SELECT company_id FROM run_companies LIMIT 1")
                 except sqlite3.DatabaseError as exc:
                     raise Invalid("备份损坏或版本不兼容，请选择其他备份") from exc
-                self.backup()
+                self.backup(kind="pre-restore")
                 with self.connect() as dest:
                     source.backup(dest)
                     if version == 1:

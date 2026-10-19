@@ -23,7 +23,7 @@ SITE = "https://zeta-unique.example.com/contact"
 KEY = "AIzaSyTESTKEY0123456789abcdefghijklmno"
 PROXY = "http://user:pw@proxy.example:8080"
 WHITELIST = {"manifest.json", "environment.json", "config.json", "worker.json", "runs.json",
-             "logs/api.log", "logs/worker.log", "logs/export.log"}
+             "logs/api.log", "logs/worker.log", "logs/export.log", "logs/retention.log"}
 
 
 @pytest.fixture(autouse=True)

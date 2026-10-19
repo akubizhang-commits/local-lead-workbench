@@ -44,9 +44,15 @@ export interface RegionConfig {
   attribution:string;
   hint:string;
 }
-export interface Overview {maps_policy?:{manual_required:boolean;retry_after_seconds:number;message:string};companies:number;contacts:number;tasks:number;pending_reviews:number;running_runs:number;queued_runs?:number;worker?:{alive:boolean;last_seen:string|null;problem?:{code:string;message:string}};source_status:Record<'maps'|'website',{available:boolean;message:string}>}
+export interface Overview {maps_policy?:{manual_required:boolean;retry_after_seconds:number;message:string};companies:number;contacts:number;tasks:number;pending_reviews:number;running_runs:number;queued_runs?:number;worker?:{alive:boolean;last_seen:string|null;problem?:{code:string;message:string}};source_status:Record<'maps'|'website',{available:boolean;message:string}>;retention?:{state:'awaiting_confirmation'|'active';pending_files:number|null;pending_bytes:number|null;export_days?:number}}
 export interface Settings {data_dir:string;version:string;network_mode:string;paid_services:boolean;ai_enabled:boolean}
-export interface Backup {name:string;created_at:string}
+export interface Backup {name:string;created_at:string;kind?:'manual'|'auto'|'other';reason?:'pre-restore'|'pre-repair'|null;size_bytes?:number}
+export interface RetentionPolicy {maps_raw_days:number;auto_backup_keep:number;export_days:number}
+export interface RetentionItem {category:'maps_raw'|'auto_backup'|'export';path:string;size_bytes:number;reason:string}
+export interface RetentionView {policy:RetentionPolicy;state:'awaiting_confirmation'|'active';confirmed_at:string|null;confirmed_policy:RetentionPolicy|null;
+ history:{at:string;trigger:'confirm'|'auto';deleted:number;freed_bytes:number;errors:number}[];
+ usage:{runs_bytes:number;backups_bytes:number;exports_bytes:number;logs_bytes:number};
+ preview:{plan_id:string;total_files:number;total_bytes:number;items:RetentionItem[];truncated:boolean}}
 
 export interface CompanyPage {items:Company[];total:number;page:number;page_size:number;excluded_total?:number}
 export interface ReviewPage {items:Review[];total:number;page:number;page_size:number}

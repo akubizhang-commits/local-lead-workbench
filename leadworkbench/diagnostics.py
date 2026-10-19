@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parent.parent
 VERSION = "0.1.0"
 LOG_BUDGET = 5_000_000
 NAME_BUDGET_SECONDS = 10.0
-PROCESSES = ("api", "worker", "export")
+PROCESSES = ("api", "worker", "export", "retention")
 NOTE = "不含企业、联系人数据，不含令牌、密钥和登录信息"
 SKIPPED_NOTE = "数据库不可用，未做名称脱敏；日志中已去掉异常消息"
 PARTIAL_NOTE = "名称脱敏超过 10 秒，之后只扫描 WARNING 及以上的日志行"
@@ -339,7 +339,14 @@ def _config(data_dir: Path, store, settings):
             "youtube_api_key": "已设置" if secrets.get("youtube_api_key") else "未设置",
         },
         "environment": {name: name in os.environ for name in ENV_FLAGS},
+        "retention": _retention(data_dir),
     }
+
+
+def _retention(data_dir):
+    from .retention import peek
+    state = peek(data_dir)
+    return {key: state[key] for key in ("policy", "state", "confirmed_at", "confirmed_policy")}
 
 
 def _worker(data_dir: Path, con):

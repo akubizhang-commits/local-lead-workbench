@@ -39,6 +39,9 @@ export function exportBody(filters: Filters | Record<string, unknown>, format: "
 }
 
 const number = (value: number) => value.toLocaleString("en-US");
+export function formatBytes(bytes: number | null) {
+  return size(bytes);
+}
 function size(bytes: number | null) {
   if (bytes === null) return "";
   if (bytes < 1024) return `${bytes} B`;

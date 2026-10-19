@@ -321,6 +321,24 @@ class Restore(Input):
     name: str = Field(min_length=1, max_length=200)
 
 
+class RetentionPolicyInput(Input):
+    maps_raw_days: int = Field(ge=7, le=365)
+    auto_backup_keep: int = Field(ge=1, le=100)
+    export_days: int = Field(ge=1, le=90)
+
+
+class RetentionConfirm(Input):
+    plan_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+def backup_kind(name):
+    """manual / auto (with reason) / other; legacy backup-* are manual (decision D3)."""
+    match = re.fullmatch(r"auto-(pre-restore|pre-repair)-.+\.sqlite3", name)
+    if match:
+        return "auto", match.group(1)
+    return ("manual" if name.startswith("backup-") else "other"), None
+
+
 class ExclusionRuleInput(Input):
     scope: Literal["global", "market"]
     market_id: str | None = Field(default=None, min_length=1, max_length=100)
@@ -443,6 +461,8 @@ def create_app(data_dir=None, *, allowed_hosts=None):
     hosts = allowed_hosts or {"127.0.0.1", "localhost", "::1"}
     from .maintenance import MaintenanceGate
     gate = app.state.gate = MaintenanceGate()
+    from . import retention
+    summaries = app.state.retention_summary = retention.SummaryCache(app.state.data_dir, gate)
     # Fast requests regain the GIL sooner while a CPU-heavy one runs (§7.6, step 1).
     sys.setswitchinterval(0.001)
     def unhandled(exc):
@@ -585,6 +605,8 @@ def create_app(data_dir=None, *, allowed_hosts=None):
         from .maps_policy import status as maps_status
         with store.connect() as con:
             counts['maps_policy'] = maps_status(con)
+        # Cached; recomputed in a background thread, never on this request (§10.6).
+        counts["retention"] = {**summaries.get(), "export_days": retention.export_days(app.state.data_dir)}
         counts["source_status"] = {
             "maps": {"available": available, "message": "本地程序已安装；可用性以实际运行结果为准" if available else "未安装本地 Maps 程序，请运行 scripts/install_maps.sh"},
             "website": {"available": True, "message": "公开静态网页提取；登录或动态页面可能需人工核验"},
@@ -873,8 +895,31 @@ def create_app(data_dir=None, *, allowed_hosts=None):
 
     @app.get("/api/backups")
     def backups():
-        return [{"name": p.name, "created_at": datetime.fromtimestamp(p.stat().st_mtime, timezone.utc).isoformat()}
-                for p in sorted((store.directory / "backups").glob("*.sqlite3"), reverse=True)]
+        result = []
+        for p in sorted((store.directory / "backups").glob("*.sqlite3"), reverse=True):
+            info = p.stat()
+            kind, reason = backup_kind(p.name)
+            result.append({"name": p.name, "created_at": datetime.fromtimestamp(info.st_mtime, timezone.utc).isoformat(),
+                           "kind": kind, "reason": reason, "size_bytes": info.st_size})
+        return result
+
+    @app.get("/api/retention")
+    def retention_view():
+        summaries.invalidate()
+        return retention.view(app.state.data_dir)
+
+    @app.put("/api/retention/policy")
+    def retention_policy(body: RetentionPolicyInput):
+        summaries.invalidate()
+        return retention.set_policy(app.state.data_dir, body.model_dump())
+
+    @app.post("/api/retention/confirm")
+    def retention_confirm(body: RetentionConfirm):
+        summaries.invalidate()
+        result = retention.run(app.state.data_dir, "confirm", expected_plan=body.plan_id)
+        summaries.invalidate()
+        state = result.pop("state")
+        return {**result, **retention.view(app.state.data_dir, state)}
 
     @app.post("/api/backups")
     def backup():

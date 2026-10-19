@@ -1,6 +1,8 @@
 import { api, download } from "../api";
 import { date } from "../helpers";
 import { useResource } from "../hooks";
+import { formatBytes } from "../ExportJobs";
+import { RetentionPanel } from "../RetentionPanel";
 import { Schedules } from "../Schedules";
 import { SocialSettings } from "../SocialSettings";
 import type { Backup, Overview, Settings } from "../types";
@@ -99,6 +101,11 @@ export function SettingsPage({
       </section>
       <SocialSettings />
       <Schedules version={version} />
+      <RetentionPanel
+        version={version}
+        workerAlive={overview.error || overview.loading ? undefined : !!overview.data?.worker?.alive}
+        onChanged={refresh}
+      />
       <DiagnosticsPanel busy={busy} act={act} />
       <section className="panel">
         <div className="section-title">
@@ -125,7 +132,11 @@ export function SettingsPage({
                   <Icon name="detail" />
                   <div>
                     <strong>{b.name}</strong>
-                    <small>{date(b.created_at)}</small>
+                    <small>
+                      {date(b.created_at)}
+                      {b.size_bytes !== undefined && <> · {formatBytes(b.size_bytes)}</>}
+                    </small>
+                    <span className={`badge backup-kind backup-${b.kind || "manual"}`}>{backupLabel(b)}</span>
                   </div>
                   <button
                     disabled={busy}
@@ -176,4 +187,11 @@ export function DiagnosticsPanel({ busy, act }: { busy: boolean; act: Action }) 
       </p>
     </section>
   );
+}
+
+/** Backup category labels (§12); legacy backup-* files are manual (decision D3). */
+export function backupLabel(b: Backup) {
+  if (b.kind === "auto") return b.reason === "pre-repair" ? "自动备份（修复前）" : "自动备份（恢复前）";
+  if (b.kind === "other") return "其他备份（不自动删除）";
+  return "手动备份";
 }

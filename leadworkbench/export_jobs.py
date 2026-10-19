@@ -72,8 +72,9 @@ def file_path(data_dir, job) -> Path:
 
 
 def export_days(data_dir) -> int:
-    """Retention for finished export files (decision D1: 7 days by default)."""
-    return DEFAULT_EXPORT_DAYS
+    """Retention for finished export files (decision D1: 7 days by default, set in retention.json)."""
+    from .retention import export_days as configured
+    return configured(data_dir)
 
 
 def expires_at(data_dir, finished_at) -> str:

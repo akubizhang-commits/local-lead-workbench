@@ -188,7 +188,7 @@ def _repair_rejected(store, con):
     if not candidates:
         return
     try:
-        backup = store.backup()["name"]
+        backup = store.backup(kind="pre-repair")["name"]
     except Exception as exc:
         raise SkipMigration(f"修复前备份失败：{exc}") from exc
     stamp = now()

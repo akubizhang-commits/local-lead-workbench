@@ -8,6 +8,7 @@ import { TaskActivityPage } from "./pages/TaskActivityPage";
 import { backFromRefreshDetail, defaultFilters, updateListFilters, type View } from "./navigation";
 import { ChangesPage } from "./pages/ChangesPage";
 import { CompaniesPage } from "./pages/CompaniesPage";
+import { RetentionMarker } from "./RetentionPanel";
 import { CompanyDetailPage } from "./pages/CompanyDetailPage";
 import { MarketsPage } from "./pages/MarketsPage";
 import { ReviewsPage } from "./pages/ReviewsPage";
@@ -196,6 +197,7 @@ export default function App() {
               {id === "reviews" && !!overview.data?.pending_reviews && (
                 <em>{overview.data.pending_reviews}</em>
               )}
+              {id === "settings" && <RetentionMarker overview={overview.data} />}
             </button>
           ))}
         </nav>
@@ -384,6 +386,7 @@ export default function App() {
               setPage={setPage}
               openCompany={openCompany}
               quickStatus={quickStatus}
+              exportDays={overview.data?.retention?.export_days}
             />
           )}
           {view === "detail" && (

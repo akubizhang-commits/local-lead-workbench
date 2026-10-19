@@ -81,6 +81,7 @@ export function CompaniesPage({
   setPage,
   openCompany,
   quickStatus,
+  exportDays,
 }: {
   version: number;
   filters: Filters;
@@ -92,6 +93,7 @@ export function CompaniesPage({
   setPage: (update: (page: number) => number) => void;
   openCompany: (id: string) => void;
   quickStatus: (company: Company, status: string) => void;
+  exportDays?: number;
 }) {
   const tasks = useResource<Task[]>("/tasks", version, true);
   const companies = useResource<CompanyPage>(
@@ -282,7 +284,7 @@ export function CompaniesPage({
           ))}
         </div>
       </div>
-      <ExportJobsPanel state={exports} />
+      <ExportJobsPanel state={exports} exportDays={exportDays} />
       {!!Object.keys(selection).length && <div className="batch-toolbar" aria-label="批量客户匹配状态">
         <span>已选 {Object.keys(selection).length} 家（仅当前页）</span>
         <label>

@@ -157,6 +157,18 @@ STORE_RETRY_SECONDS = 120
 STORE_BACKOFF = (0.5, 1, 2, 4, 5)
 LOOP_BACKOFF = (1, 2, 5, 10, 30)
 LOOP_MAX_FAILURES = 20
+# Retention (P1-8): first run 60 s after start, then every 6 hours, only while worker.lock is held.
+RETENTION_FIRST_DELAY = 60
+RETENTION_INTERVAL = 6 * 3600
+
+
+def run_retention(directory):
+    from . import retention
+    try:
+        return retention.run(directory, "auto")
+    except Exception:  # never let clean-up stop the worker
+        log.warning("retention run failed", exc_info=True, extra={"event": "retention_failed"})
+        return None
 STARTING = {"code": "starting", "message": "后台采集等待数据库初始化…"}
 
 
@@ -243,6 +255,7 @@ async def serve(directory):
             store.recover()
             store.recover_social()
             failures = 0
+            retention_due = time.monotonic() + RETENTION_FIRST_DELAY
             while True:
                 try:
                     if not op.held and not op.try_acquire():
@@ -252,6 +265,9 @@ async def serve(directory):
                     # Invariant: turn() is the only place lanes start and it runs only
                     # while op is held, so "op not held" implies no lane task exists.
                     await scheduler.turn(store, process_run_item, process_social_item)
+                    if time.monotonic() >= retention_due:
+                        retention_due = time.monotonic() + RETENTION_INTERVAL
+                        await asyncio.to_thread(run_retention, directory)
                     if await scheduler.idle(grace=worker_scheduler.IDLE_GRACE_SECONDS):
                         op.release()
                 except Exception as exc:
