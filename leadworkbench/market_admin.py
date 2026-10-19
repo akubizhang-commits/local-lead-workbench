@@ -156,3 +156,98 @@ class MarketAdminMixin:
                 schedule["waiting_reason"] = "旧任务已暂停，本期更新将延后；继续或取消旧任务后再调度" if paused and schedule["enabled"] and schedule["next_due_at"] <= now() else ""
             return result
 
+    # ---- round summaries (design §7.4) -------------------------------------------
+
+    @staticmethod
+    def _best_rank_sql():
+        from .market_store import COMPANY_RANK_SQL, USABLE_FROM, usable_contact_sql
+        return f"""SELECT m.company_id,COALESCE(s.best_rank,{COMPANY_RANK_SQL}) rank
+            FROM market_memberships m JOIN companies c ON c.id=m.company_id
+            LEFT JOIN (SELECT f.company_id,min(f.tier_rank) best_rank FROM {USABLE_FROM}
+                       WHERE {usable_contact_sql()} GROUP BY f.company_id) s ON s.company_id=m.company_id
+            WHERE m.market_id=? AND c.merged_into IS NULL"""
+
+    def _write_round_baseline(self, con, run_id, market_id):
+        """Entry tiers at round start, plus the pending marker meaning "this round has a baseline"."""
+        if self._facets_enabled:
+            self._refresh_facets_locked(con)
+        con.execute(f"INSERT OR IGNORE INTO market_round_baselines(run_id,company_id,rank) "
+                    f"SELECT ?,company_id,rank FROM ({self._best_rank_sql()})", (run_id, market_id))
+        con.execute("INSERT OR IGNORE INTO market_round_summaries(run_id,market_id,payload,created_at) VALUES(?,?,?,?)",
+                    (run_id, market_id, canonical({"pending": True}), stamp()))
+
+    def _round_summary_payload(self, con, run, market_id, with_tiers):
+        from .contact_tiers import RANK_TIER
+        stats = self._market_stats(con, market_id, run["id"])
+        coverage = self._market_coverage(con, run["id"])
+        entries = 0
+        for (result,) in con.execute("SELECT result FROM work_items WHERE run_id=? AND stage='refresh'", (run["id"],)):
+            try:
+                entries += int((json.loads(result or "{}").get("summary") or {}).get("entries_added") or 0)
+            except (ValueError, TypeError, AttributeError):
+                continue
+        round_no = con.execute("""SELECT count(*) FROM runs WHERE task_id=? AND kind='discovery'
+            AND created_at<=?""", (market_id, run["created_at"])).fetchone()[0]
+        payload = {"run_id": run["id"], "round": round_no, "status": run["status"],
+                   "finished_at": run["finished_at"], **{k: stats[k] for k in ("new", "existing", "changed", "not_seen", "total")},
+                   "entries_added": entries, "queries_done": coverage["done"], "queries_planned": coverage["planned"],
+                   "tiers_available": False, "tier_improved": None, "tier_worsened": None, "tier_delta": None}
+        if with_tiers:
+            baseline = dict(con.execute("SELECT company_id,rank FROM market_round_baselines WHERE run_id=?",
+                                        (run["id"],)).fetchall())
+            current = dict(con.execute(self._best_rank_sql(), (market_id,)).fetchall())
+            delta = {}
+            for ranks, sign in ((current, 1), (baseline, -1)):
+                for rank in ranks.values():
+                    code = RANK_TIER.get(rank, "none")
+                    delta[code] = delta.get(code, 0) + sign
+            payload.update(tiers_available=True,
+                           tier_improved=sum(1 for c, r in current.items() if c in baseline and r < baseline[c]),
+                           tier_worsened=sum(1 for c, r in current.items() if c in baseline and r > baseline[c]),
+                           tier_delta={k: v for k, v in sorted(delta.items()) if v})
+        return payload
+
+    @staticmethod
+    def _summary_has_baseline(row):
+        if not row:
+            return False
+        try:
+            payload = json.loads(row["payload"])
+        except ValueError:
+            return False
+        return bool(payload.get("pending") or payload.get("tiers_available"))
+
+    def _write_round_summary(self, con, run_id, state):
+        """Final summary of a market discovery round; a failure never blocks the round itself."""
+        con.execute("SAVEPOINT round_summary")
+        try:
+            run = dict(con.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone())
+            run["status"] = state
+            market_id = self._market_run(con, run_id)["market_id"]
+            stored = con.execute("SELECT payload FROM market_round_summaries WHERE run_id=?", (run_id,)).fetchone()
+            with_tiers = self._summary_has_baseline(stored)
+            if with_tiers and self._facets_enabled:
+                self._refresh_facets_locked(con)
+            payload = self._round_summary_payload(con, run, market_id, with_tiers)
+            con.execute("INSERT OR REPLACE INTO market_round_summaries(run_id,market_id,payload,created_at) VALUES(?,?,?,?)",
+                        (run_id, market_id, canonical(payload), stamp()))
+            con.execute("RELEASE round_summary")
+        except Exception as exc:
+            con.execute("ROLLBACK TO round_summary")
+            con.execute("RELEASE round_summary")
+            log.warning("round summary failed for %s", run_id,
+                        extra={"event": "round_summary_failed", "run_id": run_id, "error_type": type(exc).__name__})
+
+    def _round_summary(self, con, market_id):
+        """Summary of the latest finished discovery round; read-only (never writes)."""
+        run = con.execute("""SELECT * FROM runs WHERE task_id=? AND kind='discovery'
+            AND status IN ('completed','partial','blocked','failed','cancelled')
+            ORDER BY created_at DESC,rowid DESC LIMIT 1""", (market_id,)).fetchone()
+        if not run or not self._market_run(con, run["id"]):
+            return None
+        stored = con.execute("SELECT payload FROM market_round_summaries WHERE run_id=?", (run["id"],)).fetchone()
+        if stored:
+            payload = json.loads(stored["payload"])
+            if not payload.get("pending"):
+                return payload
+        return self._round_summary_payload(con, dict(run), market_id, False)

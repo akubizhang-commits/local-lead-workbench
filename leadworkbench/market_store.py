@@ -707,6 +707,7 @@ class MarketStoreMixin:
         task["legacy_terms"] = [] if task.get("keywords") else sorted(
             {term for kind in task.get("company_types") or [] for term in TYPE_QUERIES.get(kind, ())})
         task["market_stats"] = self._market_stats(con, task["id"], run_id)
+        task["round_summary"] = self._round_summary(con, task["id"])
         if not tier_stats or task["id"] not in tier_stats:
             tier_stats = self._market_tier_stats(con, [task["id"]])
         tiers = tier_stats[task["id"]]

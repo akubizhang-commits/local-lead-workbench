@@ -1196,6 +1196,7 @@ class Store(MarketAdminMixin, MarketSocialMixin, RunActivityMixin, MarketStoreMi
                      "等待本地 worker", None, now(), None, encode(snapshot)))
         if market_mode:
             con.execute("INSERT INTO market_runs(run_id,market_id) VALUES(?,?)", (id, task_id))
+            self._write_round_baseline(con, id, task_id)
         for target in dict.fromkeys(targets):
             con.execute("INSERT INTO work_items(id,run_id,stage,target,state,result) VALUES(?,?,?,?,?,?)",
                         (uid(), id, "planning" if market_mode else kind, target, "pending", None))
@@ -1303,6 +1304,8 @@ class Store(MarketAdminMixin, MarketSocialMixin, RunActivityMixin, MarketStoreMi
             con.execute("UPDATE runs SET status=?,message=?,finished_at=?,error=NULL WHERE id=?",
                         (target, {"paused": "已暂停", "queued": "等待继续", "cancelled": "已取消"}[target],
                          now() if target == "cancelled" else None, id))
+            if target == "cancelled" and run["kind"] == "discovery" and self._market_run(con, id):
+                self._write_round_summary(con, id, "cancelled")
             self._control_market_social(con, id, action)
         return self.run(id)
 
@@ -1455,6 +1458,8 @@ class Store(MarketAdminMixin, MarketSocialMixin, RunActivityMixin, MarketStoreMi
             con.execute("UPDATE runs SET status=?,message=?,error=?,finished_at=? WHERE id=?",
                         (state, message,
                          "\n".join(messages) or None, now(), id))
+            if market and run["kind"] == "discovery":
+                self._write_round_summary(con, id, state)
 
     def recover(self):
         # Caller must hold the exclusive worker lock: no other worker owns these items.
