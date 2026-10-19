@@ -18,6 +18,7 @@ from .run_activity import RunActivityMixin
 from .market_store import MarketStoreMixin
 from .social_store import SocialStoreMixin
 from .market_social import MarketSocialMixin
+from .market_admin import MarketAdminMixin
 from .contact_projection import group_contact_records, contact_key
 from .company_comparison import website_key, brief, distinct_branches, branch_identity, equivalent_format
 from . import review_policy
@@ -158,7 +159,7 @@ PRAGMA user_version=1;
 """
 
 
-class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMixin):
+class Store(MarketAdminMixin, MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMixin):
     _facets_enabled = False
 
     def __init__(self, directory: Path | str, *, migrate=True):
@@ -1464,33 +1465,6 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             con.execute("""UPDATE work_items SET state='pending' WHERE state='running' AND run_id IN
                 (SELECT id FROM runs WHERE status IN ('queued','running','paused'))""")
             con.execute("UPDATE runs SET status='queued',message='恢复中断任务' WHERE status='running'")
-
-    def create_schedule(self, *, task_id=None, company_id=None, kind, interval_months=3, timezone="Asia/Shanghai", enabled=True):
-        if bool(task_id) == bool(company_id) or kind not in {"discovery", "refresh"}:
-            raise Invalid("计划必须指定唯一目标")
-        if not 1 <= interval_months <= 24 or (kind == "discovery") != bool(task_id):
-            raise Invalid("计划类型或周期错误")
-        if task_id:
-            self.task(task_id)
-        else:
-            self.company(company_id)
-        anchor = datetime.now(UTC)
-        next_due = calendar_next(anchor, anchor, interval_months, timezone).isoformat()
-        id = uid()
-        with self.connect() as con:
-            con.execute("INSERT INTO schedules(id,task_id,company_id,kind,interval_months,timezone,next_due_at,enabled,anchor) VALUES(?,?,?,?,?,?,?,?,?)",
-                        (id, task_id, company_id, kind, interval_months, timezone, next_due, int(enabled), anchor.isoformat()))
-        return next(s for s in self.schedules() if s["id"] == id)
-
-    def schedules(self):
-        with self.connect() as con:
-            result = [self.row(r) for r in con.execute("SELECT * FROM schedules ORDER BY next_due_at")]
-            for schedule in result:
-                paused = con.execute("""SELECT id FROM runs WHERE status='paused' AND
-                    COALESCE(task_id,'')=? AND COALESCE(company_id,'')=? LIMIT 1""",
-                    (schedule["task_id"] or "", schedule["company_id"] or "")).fetchone()
-                schedule["waiting_reason"] = "旧任务已暂停，本期更新将延后；继续或取消旧任务后再调度" if paused and schedule["enabled"] and schedule["next_due_at"] <= now() else ""
-            return result
 
     def dispatch_due(self):
         timestamp = now()

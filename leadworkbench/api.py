@@ -332,7 +332,8 @@ class ScheduleInput(Input):
     task_id: str | None = None
     company_id: str | None = None
     kind: Literal["discovery", "refresh"]
-    interval_months: int = Field(default=3, ge=1, le=24)
+    # None: 1 month for a market (discovery), 3 for a company re-check (refresh).
+    interval_months: int | None = Field(default=None, ge=1, le=24)
     timezone: str = "Asia/Shanghai"
     enabled: bool = True
 
@@ -350,8 +351,27 @@ class Decision(Input):
     decision: Literal["accept", "reject"]
 
 
-class Toggle(Input):
-    enabled: bool
+class SchedulePatch(Input):
+    enabled: bool | None = None
+    interval_months: int | None = Field(default=None, ge=1, le=24)
+    timezone: str | None = None
+
+    @field_validator("timezone")
+    @classmethod
+    def valid_timezone(cls, value):
+        if value is None:
+            return value
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError("无效时区") from exc
+        return value
+
+    @model_validator(mode="after")
+    def something_changes(self):
+        if self.enabled is None and self.interval_months is None and self.timezone is None:
+            raise ValueError("请至少修改一项")
+        return self
 
 
 class Restore(Input):
@@ -909,19 +929,16 @@ def create_app(data_dir=None, *, allowed_hosts=None):
         return store.changes()
 
     @app.get("/api/schedules")
-    def schedules():
-        return store.schedules()
+    def schedules(task_id: str | None = Query(default=None, min_length=1, max_length=64)):
+        return store.schedules(task_id)
 
     @app.post("/api/schedules")
     def create_schedule(body: ScheduleInput):
         return store.create_schedule(**body.model_dump())
 
     @app.patch("/api/schedules/{id}")
-    def toggle(id: str, body: Toggle):
-        with store.connect() as con:
-            if not con.execute("UPDATE schedules SET enabled=? WHERE id=?", (int(body.enabled), id)).rowcount:
-                raise NotFound("计划不存在")
-        return next(s for s in store.schedules() if s["id"] == id)
+    def update_schedule(id: str, body: SchedulePatch):
+        return store.update_schedule(id, **body.model_dump())
 
     @app.get("/api/settings")
     def settings():
