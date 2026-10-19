@@ -1,6 +1,5 @@
 """Unified migration ledger (P1-9, design §3.2)."""
 from contextlib import closing
-import hashlib
 import json
 import multiprocessing
 from pathlib import Path
@@ -17,18 +16,27 @@ from leadworkbench.market_social import MARKET_SOCIAL_DDL
 from leadworkbench.market_store import MIGRATION
 from leadworkbench.maps_policy import DDL as MAPS_DDL
 from leadworkbench.p0_migrations import INDEXES, MIGRATIONS as P0
+from leadworkbench.p1b_migrations import MIGRATIONS as P1B
 from leadworkbench.social_discovery_store import SOCIAL_DISCOVERY_DDL
 from leadworkbench.social_policy import DDL as POLICY_DDL
 from leadworkbench.social_store import SOCIAL_DDL
+from db_hash import content_hash
 from legacy_db import FIXTURES, UPGRADE_FIXTURES, dump_database, load_upgrade_fixture, normalize
 
 # Differences the refactor is allowed to introduce; everything else must equal the snapshot.
-EXPECTED_NEW_TABLES = {"market_exhausted_items"}  # 0011 creates it at start-up instead of on demand
+EXPECTED_NEW_TABLES = {"market_exhausted_items",  # 0011 creates it at start-up instead of on demand
+                       # P1 batch 2 side tables (design §2.1, §3)
+                       "task_state", "market_changes", "market_recheck_runs", "market_round_baselines",
+                       "market_round_summaries", "review_resolutions", "company_cities", "company_cities_dirty"}
+EXPECTED_NEW_OBJECTS = {"market_changes_market", "market_recheck_market", "schedules_one_enabled_market",
+                        "market_round_summaries_market", "company_cities_key", "companies_city_insert",
+                        "companies_city_update", "memberships_city_insert"}
+P1B_IDS = {id for id, _ in P1B}
 ONCE_IDS_0001_0011 = {
     "0001_base_v1", "0002_market_v2", "0003_maps_access_policy", "0004_website_host_gates",
     "0005_listing_aliases", "0006_audit_tables", "0007_social_tables", "0008_social_discovery_tables",
     "0009_social_legacy_links", "0010_market_social_tables", "0011_market_exhausted_items"}
-EXPECTED_NEW_LEDGER = ONCE_IDS_0001_0011
+EXPECTED_NEW_LEDGER = ONCE_IDS_0001_0011 | P1B_IDS
 # work_items is not listed: 0002 archives legacy capped discovery items into the run snapshot and
 # replaces them with one planning item (unchanged historical behaviour, covered by 0a).
 LEGACY_TABLES = ("companies", "contacts", "reviews", "observations", "listings", "tasks", "runs",
@@ -44,11 +52,6 @@ def ledger(path):
         return con.execute("SELECT id, applied_at FROM schema_migrations ORDER BY rowid").fetchall()
 
 
-def content_hash(path):
-    with closing(sqlite3.connect(path)) as con:
-        return hashlib.sha256("\n".join(con.iterdump()).encode()).hexdigest()
-
-
 def counts(path, tables):
     with closing(sqlite3.connect(path)) as con:
         present = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
@@ -57,12 +60,15 @@ def counts(path, tables):
 
 def test_registry_shape():
     ids = [entry.id for entry in migrations.REGISTRY]
-    assert len(ids) == 26 and len(set(ids)) == 26
+    assert len(ids) == 33 and len(set(ids)) == 33
     assert [i for i in ids if i[0] == "R"] == [f"R0{n}" + i[3:] for n, i in
                                                enumerate((i for i in ids if i[0] == "R"), 1)]
-    assert set(migrations.ONCE_IDS) == ONCE_IDS_0001_0011 | {id for id, _ in P0}
+    assert set(migrations.ONCE_IDS) == ONCE_IDS_0001_0011 | {id for id, _ in P0} | P1B_IDS
     p0_positions = [ids.index(id) for id, _ in P0]
     assert p0_positions == sorted(p0_positions)
+    p1b_positions = [ids.index(id) for id, _ in P1B]
+    assert p1b_positions == sorted(p1b_positions)
+    assert min(p1b_positions) > ids.index("R08_resolve_duplicate_reviews")
 
 
 @pytest.mark.parametrize("name", UPGRADE_FIXTURES)
@@ -72,9 +78,13 @@ def test_0a_upgrade_matches_frozen_snapshot(tmp_path, name):
     Store(tmp_path)
     after = normalize(dump_database(path), snapshot["volatile"])
     frozen_names = {n for n in snapshot["sqlite_master_names"] if not n.startswith("sqlite_stat")}
-    assert set(after["sqlite_master_names"]) == frozen_names | EXPECTED_NEW_TABLES
+    assert set(after["sqlite_master_names"]) == frozen_names | EXPECTED_NEW_TABLES | EXPECTED_NEW_OBJECTS
     assert set(after["ledger_ids"]) == set(snapshot["ledger_ids"]) | EXPECTED_NEW_LEDGER
-    for table in EXPECTED_NEW_TABLES:
+    # company_cities is filled for every company; the other new tables stay empty.
+    cities = after["tables"].pop("company_cities")
+    assert len(cities) == len(after["tables"]["companies"])
+    assert {row["company_id"] for row in cities} == {row["id"] for row in after["tables"]["companies"]}
+    for table in EXPECTED_NEW_TABLES - {"company_cities"}:
         assert after["tables"].pop(table) == []
     assert after["tables"] == snapshot["tables"]
 
@@ -148,12 +158,14 @@ def test_2_second_start_is_idempotent(tmp_path, name):
     Store(tmp_path)
     first_ledger, first_hash = ledger(path), content_hash(path)
     with closing(sqlite3.connect(path)) as con:
-        master = con.execute("SELECT type, name, sql FROM sqlite_master ORDER BY name").fetchall()
+        master = con.execute("SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_stat%' "
+                             "ORDER BY name").fetchall()
     Store(tmp_path)
     assert ledger(path) == first_ledger
     assert content_hash(path) == first_hash
     with closing(sqlite3.connect(path)) as con:
-        assert con.execute("SELECT type, name, sql FROM sqlite_master ORDER BY name").fetchall() == master
+        assert con.execute("SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_stat%' "
+                           "ORDER BY name").fetchall() == master
 
 
 def test_3_p0_database_only_gains_the_new_ledger_rows(tmp_path):
@@ -165,10 +177,17 @@ def test_3_p0_database_only_gains_the_new_ledger_rows(tmp_path):
         con.commit()
     p0_rows = dict(ledger(path))
     assert set(p0_rows) == {id for id, _ in P0}
+    with closing(sqlite3.connect(path)) as con:
+        changes = con.execute("SELECT count(*) FROM market_changes").fetchone()[0]
+        cities = con.execute("SELECT * FROM company_cities ORDER BY company_id").fetchall()
     Store(tmp_path)
     after = dict(ledger(path))
     assert {id: after[id] for id in p0_rows} == p0_rows  # P0 items did not run again
-    assert set(after) - set(p0_rows) == ONCE_IDS_0001_0011
+    assert set(after) - set(p0_rows) == ONCE_IDS_0001_0011 | P1B_IDS
+    # Re-running the p1b entries is safe: no new audit rows, identical derived city rows.
+    with closing(sqlite3.connect(path)) as con:
+        assert con.execute("SELECT count(*) FROM market_changes").fetchone()[0] == changes
+        assert con.execute("SELECT * FROM company_cities ORDER BY company_id").fetchall() == cities
 
 
 def _start(directory):

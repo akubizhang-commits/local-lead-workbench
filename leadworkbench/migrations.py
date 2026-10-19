@@ -4,7 +4,7 @@ Every process that opens the database (API, worker, restore) runs ``migrate()``:
 inside the cross-process ``{data}/migrate.lock`` it walks REGISTRY in order, one
 transaction per entry, on the caller's connection only.
 
-- ``once`` entries (ids ``0001_…``–``0011_…`` and the P0 ids) run once per database
+- ``once`` entries (ids ``0001_…``–``0011_…``, the P0 ids and the P1 batch 2 ``p1b_…`` ids) run once per database
   and are recorded in ``schema_migrations``. FREEZE RULE: once an entry has shipped,
   its implementation must never change meaning; schema changes need a new entry.
   (Equivalent rewrites such as explicit INSERT column lists are allowed; the frozen
@@ -136,6 +136,7 @@ class Entry:
 
 def _registry():
     from .p0_migrations import MIGRATIONS as P0
+    from .p1b_migrations import MIGRATIONS as P1B
     return (
         Entry("0001_base_v1", "once", _base_v1),
         Entry("0002_market_v2", "once", _market_v2),
@@ -157,6 +158,7 @@ def _registry():
         Entry("R06_resolve_empty_reviews", "each", _method("_resolve_empty_reviews_locked")),
         Entry("R07_resolve_format_reviews", "each", _method("_resolve_format_reviews_locked")),
         Entry("R08_resolve_duplicate_reviews", "each", _method("_resolve_duplicate_reviews_locked")),
+        *(Entry(id, "once", step) for id, step in P1B),
     )
 
 

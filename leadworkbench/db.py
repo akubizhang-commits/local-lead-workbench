@@ -265,6 +265,14 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         con.executemany("DELETE FROM contact_facets_dirty WHERE contact_id=?", [(r["dirty_id"],) for r in rows])
         return len(rows)
 
+    def _refresh_cities_locked(self, con, limit=None):
+        """Recompute dirty company_cities rows inside the caller's write transaction (design §5.2)."""
+        from .company_cities import refresh_rows
+        dirty = [r[0] for r in con.execute("SELECT company_id FROM company_cities_dirty"
+                                          + (" LIMIT ?" if limit else ""), (limit,) if limit else ())]
+        refresh_rows(con, dirty)
+        con.executemany("DELETE FROM company_cities_dirty WHERE company_id=?", [(i,) for i in dirty])
+        return len(dirty)
     def _refresh_facets(self):
         """Read entry points call this before opening their own read connection."""
         if getattr(self._local, "depth", 0) > 0:
