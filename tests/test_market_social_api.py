@@ -202,7 +202,8 @@ def test_missing_task_uses_existing_not_found_response(api, method, suffix):
     client, _ = api
     response = client.request(method, f"/api/tasks/missing/{suffix}", json={})
     assert response.status_code == 404
-    assert response.json() == {"detail": "记录不存在"}
+    assert {k: response.json()[k] for k in ("detail", "code")} == {"detail": "记录不存在", "code": "not_found"}
+    assert response.json()["request_id"] == response.headers["X-Request-ID"]
 
 
 @pytest.mark.parametrize("platform", ["facebook", "instagram", "x"])
@@ -267,4 +268,4 @@ def test_store_conflicts_use_existing_api_response(api, monkeypatch, method, suf
     monkeypatch.setattr(store, store_method, conflict)
     response = client.request(method, f"/api/tasks/{task['id']}/{suffix}", json={})
     assert response.status_code == 409
-    assert response.json() == {"detail": "Fixture concurrent edit"}
+    assert {k: response.json()[k] for k in ("detail", "code")} == {"detail": "Fixture concurrent edit", "code": "conflict"}

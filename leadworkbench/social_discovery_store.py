@@ -7,6 +7,7 @@ from .social import search_queries
 from .sources.social_discovery import validate_endpoint,PLATFORMS
 from .social_run_policy import execution_signature
 from .social_projection import project_account, social_target as classify_link
+from .errors import Invalid, NotFound
 
 
 def timestamp():return datetime.now(timezone.utc).isoformat()
@@ -62,9 +63,9 @@ class SocialDiscoveryStoreMixin:
                     (uid(),rid,cid,stage,target,timestamp()))
 
     def create_social_run(self,company_ids=None,pilot=False,read_only=False,platform_search=False,profile_only=False,*,_retry_from=None):
-        if profile_only and platform_search:raise ValueError('补充已有账号资料与站内搜索不能同时选择')
+        if profile_only and platform_search:raise Invalid('补充已有账号资料与站内搜索不能同时选择')
         if profile_only:read_only=True
-        if read_only and platform_search:raise ValueError('读取已有账号与站内搜索不能同时选择')
+        if read_only and platform_search:raise Invalid('读取已有账号与站内搜索不能同时选择')
         settings=self.social_settings()
         from .social_connections import load_connections
         settings['connections']=load_connections(self.directory)
@@ -75,16 +76,16 @@ class SocialDiscoveryStoreMixin:
             con.execute('BEGIN IMMEDIATE')
             sample=self.social_pilot_sample(con) if pilot else []
             ids=[r['id'] for r in sample] if pilot else list(dict.fromkeys(company_ids or []))
-            if not ids or len(ids)>20:raise ValueError('请选择1–20家企业；试点自动分层选取最多20家')
+            if not ids or len(ids)>20:raise Invalid('请选择1–20家企业；试点自动分层选取最多20家')
             companies=[]
             for cid in ids:
                 r=con.execute('SELECT * FROM companies WHERE id=? AND merged_into IS NULL',(cid,)).fetchone()
-                if not r:raise KeyError(cid)
-                if r['status']=='do_not_contact':raise ValueError('拒绝联系的企业不加入社媒开发任务')
+                if not r:raise NotFound("企业不存在或已合并")
+                if r['status']=='do_not_contact':raise Invalid('拒绝联系的企业不加入社媒开发任务')
                 companies.append(dict(r))
             if read_only and not any(con.execute("""SELECT 1 FROM company_social cs JOIN social_entities e ON cs.entity_id=e.id
                 WHERE cs.company_id=? AND cs.status!='excluded' AND e.kind='account' LIMIT 1""",(c['id'],)).fetchone() for c in companies):
-                raise ValueError('尚无可读取账号，请先添加候选账号链接或运行发现')
+                raise Invalid('尚无可读取账号，请先添加候选账号链接或运行发现')
             if _retry_from:
                 self._resume_social_website_hosts(con,_retry_from,ids)
             encoded=json.dumps(sorted(ids))
@@ -120,7 +121,7 @@ class SocialDiscoveryStoreMixin:
     def social_run(self,rid):
         with self.connect() as con:
             run=con.execute('SELECT * FROM social_runs WHERE id=?',(rid,)).fetchone()
-            if not run:raise KeyError(rid)
+            if not run:raise NotFound("社媒记录不存在")
             out=dict(run);out.pop('settings')
             parent=self._social_parent(con,rid)
             if parent:out.update(parent_run_id=parent['id'],task_id=parent['task_id'])
@@ -234,7 +235,7 @@ class SocialDiscoveryStoreMixin:
         with self.connect() as con:
             con.execute('BEGIN IMMEDIATE')
             item=con.execute('SELECT * FROM social_work WHERE id=?',(item_id,)).fetchone()
-            if not item:raise KeyError(item_id)
+            if not item:raise NotFound("社媒记录不存在")
             run=con.execute('SELECT status,settings FROM social_runs WHERE id=?',(item['run_id'],)).fetchone()
             company=con.execute('SELECT status,merged_into FROM companies WHERE id=?',(item['company_id'],)).fetchone()
             parent=self._social_parent(con,item['run_id'])
@@ -321,27 +322,27 @@ class SocialDiscoveryStoreMixin:
     def cancel_social_run(self,rid):
         with self.connect() as con:
             con.execute('BEGIN IMMEDIATE')
-            if not con.execute('SELECT 1 FROM social_runs WHERE id=?',(rid,)).fetchone():raise KeyError(rid)
-            if self._social_parent(con,rid):raise ValueError('请在市场任务中取消本轮，统一控制官网和社媒工作')
+            if not con.execute('SELECT 1 FROM social_runs WHERE id=?',(rid,)).fetchone():raise NotFound("社媒记录不存在")
+            if self._social_parent(con,rid):raise Invalid('请在市场任务中取消本轮，统一控制官网和社媒工作')
             con.execute("UPDATE social_runs SET status='cancelled',finished_at=? WHERE id=? AND status IN ('queued','running')",(timestamp(),rid))
             con.execute("UPDATE social_work SET state='cancelled',finished_at=? WHERE run_id=? AND state IN ('pending','running')",(timestamp(),rid))
         return {'ok':True}
 
     def retry_social_run(self,rid):
         run=self.social_run(rid)
-        if run['status'] in {'queued','running'}:raise ValueError('当前任务尚未结束')
+        if run['status'] in {'queued','running'}:raise Invalid('当前任务尚未结束')
         with self.connect() as con:
-            if self._social_parent(con,rid):raise ValueError('请在市场任务中继续本轮，或新建社媒补充轮次')
+            if self._social_parent(con,rid):raise Invalid('请在市场任务中继续本轮，或新建社媒补充轮次')
             settings=json.loads(con.execute('SELECT settings FROM social_runs WHERE id=?',(rid,)).fetchone()[0])
         return self.create_social_run(run['company_ids'],read_only=settings.get('read_only',False),platform_search=settings.get('platform_search',False),profile_only=settings.get('profile_only',False),_retry_from=rid)
 
     def _resume_social_website_hosts(self,con,rid,company_ids):
         from .website_policy import host_key, resume
         original=con.execute('SELECT status,company_ids FROM social_runs WHERE id=?',(rid,)).fetchone()
-        if not original:raise KeyError(rid)
-        if original['status'] in {'queued','running'}:raise ValueError('当前任务尚未结束')
-        if self._social_parent(con,rid):raise ValueError('请在市场任务中继续本轮，或新建社媒补充轮次')
-        if set(json.loads(original['company_ids']))!=set(company_ids):raise ValueError('重试企业范围已变化')
+        if not original:raise NotFound("社媒记录不存在")
+        if original['status'] in {'queued','running'}:raise Invalid('当前任务尚未结束')
+        if self._social_parent(con,rid):raise Invalid('请在市场任务中继续本轮，或新建社媒补充轮次')
+        if set(json.loads(original['company_ids']))!=set(company_ids):raise Invalid('重试企业范围已变化')
         gates={}
         for item in con.execute("""SELECT target,result FROM social_work WHERE run_id=?
             AND stage='website' AND state IN ('blocked','failed')""",(rid,)):

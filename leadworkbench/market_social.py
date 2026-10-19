@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from .social import classify_link
 from .social_policy import PLATFORMS, DDL as POLICY_DDL, public_gate
+from .errors import Invalid, NotFound
 
 
 def stamp():
@@ -20,9 +21,9 @@ def options(payload):
     platforms = list(dict.fromkeys(payload.get("social_platforms", list(PLATFORMS))))
     posts = payload.get("social_read_posts", False)
     if type(enabled) is not bool or type(posts) is not bool:
-        raise ValueError("社媒开关必须为布尔值")
+        raise Invalid("社媒开关必须为布尔值")
     if any(p not in PLATFORMS for p in platforms) or (enabled and not platforms):
-        raise ValueError("启用社媒检索时请至少选择一个受支持的平台")
+        raise Invalid("启用社媒检索时请至少选择一个受支持的平台")
     return dict(auto_social=enabled, social_platforms=platforms, social_read_posts=posts)
 
 
@@ -44,7 +45,7 @@ class MarketSocialMixin:
         value = options(payload)
         with self.connect() as con:
             if not con.execute("SELECT 1 FROM tasks WHERE id=?", (task_id,)).fetchone():
-                raise KeyError(task_id)
+                raise NotFound("市场不存在")
             con.execute("INSERT INTO task_social_settings VALUES(?,?) ON CONFLICT(task_id) DO UPDATE SET payload=excluded.payload",
                         (task_id, json.dumps(value)))
         return self.task(task_id)
@@ -181,14 +182,14 @@ class MarketSocialMixin:
             companies = [r[0] for r in con.execute("""SELECT c.id FROM market_memberships m JOIN companies c ON c.id=m.company_id
                 WHERE m.market_id=? AND c.merged_into IS NULL AND c.status!='do_not_contact'""", (task_id,))]
             if not companies:
-                raise ValueError("当前市场尚无可检索企业，请先进行地图检索")
+                raise Invalid("当前市场尚无可检索企业，请先进行地图检索")
             row = con.execute("SELECT * FROM runs WHERE task_id=? AND status IN ('queued','running','paused') ORDER BY created_at DESC LIMIT 1", (task_id,)).fetchone()
             if row:
                 parent = dict(row)
                 linked = con.execute("""SELECT s.settings FROM market_social_runs m JOIN social_runs s ON s.id=m.social_run_id
                     WHERE m.market_run_id=?""", (parent["id"],)).fetchone()
                 if linked and json.loads(linked[0])["market_options"] != cfg:
-                    raise ValueError("当前轮次已有不同社媒配置，请完成或取消该轮次后再创建")
+                    raise Invalid("当前轮次已有不同社媒配置，请完成或取消该轮次后再创建")
                 snapshot = {**json.loads(parent["snapshot"]), **cfg}
                 con.execute("UPDATE runs SET snapshot=? WHERE id=?", (json.dumps(snapshot), parent["id"]))
             else:

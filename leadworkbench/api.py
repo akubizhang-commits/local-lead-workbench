@@ -13,8 +13,15 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
+from starlette.exceptions import HTTPException as StarletteHTTPException
+import logging
+import re
+import sys
+import time
 
 from .db import Conflict, Store
+from .errors import (INTERNAL, REQUEST_ID, Busy, DomainError, NotFound, classify_storage_error,
+                     test_fault as fault_enabled)
 from .export import export_data
 from .sources.website import normalize_url
 from .validation_messages import translate_errors
@@ -22,8 +29,33 @@ from .worker import worker_lock
 
 ROOT = Path(__file__).resolve().parent.parent
 RESTORE_LOCK_WAIT_SECONDS = 5.0
+log = logging.getLogger(__name__)
+CJK = re.compile(r"[\u3000-\u9fff\uff00-\uffef]")
+UNKNOWN_ENDPOINT = "接口不存在（界面与服务版本可能不一致，请刷新页面）"
+UNAVAILABLE_DETAIL = {
+    "readonly_storage": "数据目录不可写，本地服务无法读写数据：{path}。请检查权限或磁盘后重新启动。",
+    "disk_full": "磁盘空间不足，本地服务无法初始化数据库：{path}。请清理磁盘空间后重新启动。",
+    "storage_unavailable": "本地数据库初始化失败，请在终端查看错误或导出诊断包后重新启动。",
+}
 
 
+def error_response(status, code, detail, headers=None):
+    """Every non-2xx /api/* body: {detail, code, request_id} (design §5.4)."""
+    return JSONResponse({"detail": detail, "code": code, "request_id": REQUEST_ID.get()},
+                        status_code=status, headers=headers)
+
+
+def domain_response(exc: DomainError):
+    headers = {"Retry-After": str(exc.retry_after)} if isinstance(exc, Busy) else None
+    body = {"detail": str(exc), "code": exc.code, "request_id": REQUEST_ID.get(), **exc.extra}
+    return JSONResponse(body, status_code=exc.status, headers=headers)
+
+
+def unavailable_state(exc, data_dir):
+    """(code, detail) for a store that could not be opened at start-up (design §5.6)."""
+    classified = classify_storage_error(exc, data_dir)
+    code = classified.code if classified and classified.code in ("readonly_storage", "disk_full") else "storage_unavailable"
+    return code, UNAVAILABLE_DETAIL[code].format(path=data_dir)
 class Input(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -319,37 +351,85 @@ def create_app(data_dir=None, *, allowed_hosts=None):
         yield
         from .sources.social_browser import close_session
         for platform in ("instagram", "facebook", "x"):
-            await asyncio.to_thread(close_session, application.state.store.directory, platform)
+            await asyncio.to_thread(close_session, application.state.data_dir, platform)
     app = FastAPI(title="本地销售线索工作台", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
-    store = Store(data_dir or os.environ.get("LEAD_DATA_DIR", str(ROOT / "data")))
+    app.state.data_dir = Path(data_dir or os.environ.get("LEAD_DATA_DIR", str(ROOT / "data"))).expanduser().resolve()
+    app.state.unavailable = None
+    try:
+        if fault_enabled("migration_slow"):
+            time.sleep(20)
+        if fault_enabled("storage_unavailable"):
+            from .migrations import MigrationError
+            raise MigrationError("LEAD_TEST_FAULT=storage_unavailable")
+        store = Store(app.state.data_dir)
+    except Exception as exc:
+        # Degraded mode: keep serving /api/session and explain the cause (§5.6).
+        store = None
+        app.state.unavailable = unavailable_state(exc, app.state.data_dir)
+        log.error("store unavailable at start-up", exc_info=True,
+                  extra={"event": "store_unavailable", "code": app.state.unavailable[0]})
+        print(app.state.unavailable[1], file=sys.stderr)
     app.state.store = store
     token = secrets.token_urlsafe(40)
     hosts = allowed_hosts or {"127.0.0.1", "localhost", "::1"}
     api_lock = asyncio.Lock()
 
+    def unhandled(exc):
+        """Storage errors get their code; anything else is a 500 with a request id (§5.5)."""
+        classified = classify_storage_error(exc, app.state.data_dir)
+        if classified is not None:
+            log.warning("storage error: %s", exc, exc_info=True,
+                        extra={"event": "storage_error", "code": classified.code,
+                               "sqlite_code": getattr(exc, "sqlite_errorcode", None),
+                               "errno": getattr(exc, "errno", None)})
+            return domain_response(classified)
+        log.exception("unhandled", extra={"event": "unhandled", "request_id": REQUEST_ID.get()})
+        return error_response(500, "internal", INTERNAL.format(request_id=REQUEST_ID.get()))
+
     @app.middleware("http")
     async def local_boundary(request: Request, call_next):
+        request_id = "req_" + secrets.token_hex(6)
+        context = REQUEST_ID.set(request_id)
+        request.state.request_id = request_id
+        try:
+            response = await boundary(request, call_next)
+        finally:
+            REQUEST_ID.reset(context)
+        if request.url.path.startswith("/api/"):
+            response.headers["X-Request-ID"] = request_id
+        return response
+
+    async def boundary(request, call_next):
         host = request.url.hostname
         if host not in hosts:
-            return JSONResponse({"detail": "仅允许本机访问"}, status_code=403)
+            return error_response(403, "forbidden", "仅允许本机访问")
         origin = request.headers.get("origin")
         if origin and urlsplit(origin).netloc != request.headers.get("host"):
-            return JSONResponse({"detail": "拒绝跨来源请求"}, status_code=403)
+            return error_response(403, "forbidden", "拒绝跨来源请求")
         if request.headers.get("sec-fetch-site") == "cross-site":
-            return JSONResponse({"detail": "拒绝跨站请求"}, status_code=403)
-        if request.url.path.startswith("/api/") and request.url.path != "/api/session":
+            return error_response(403, "forbidden", "拒绝跨站请求")
+        api = request.url.path.startswith("/api/")
+        if api and request.url.path != "/api/session":
             if not secrets.compare_digest(request.headers.get("x-local-token", ""), token):
-                return JSONResponse({"detail": "缺少本地访问令牌"}, status_code=401)
+                return error_response(401, "unauthorized", "缺少本地访问令牌")
         length = request.headers.get("content-length", "0")
         if not length.isdigit() or int(length) > 1_000_000:
-            return JSONResponse({"detail": "请求过大"}, status_code=413)
+            return error_response(413, "payload_too_large", "请求过大")
+        unavailable = app.state.unavailable
+        if api and unavailable and request.url.path != "/api/session":
+            return error_response(503, unavailable[0], unavailable[1])
         # One local user: serialize API calls so restore cannot race another
         # API edit. Worker additionally shares the operation file lock.
-        if request.url.path.startswith("/api/"):
-            async with api_lock:
+        try:
+            if api:
+                async with api_lock:
+                    response = await call_next(request)
+            else:
                 response = await call_next(request)
-        else:
-            response = await call_next(request)
+        except Exception as exc:
+            response = unhandled(exc)
+        if api and unavailable:
+            response.headers["X-Lead-Unavailable"] = unavailable[0]
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'"
@@ -359,19 +439,30 @@ def create_app(data_dir=None, *, allowed_hosts=None):
     @app.exception_handler(RequestValidationError)
     async def validation_failed(request, exc):
         # User-correctable input: Chinese messages, no input/ctx echo, no log.
-        return JSONResponse({"detail": translate_errors(exc.errors())}, status_code=422)
+        return error_response(422, "validation", translate_errors(exc.errors()))
 
-    @app.exception_handler(KeyError)
-    async def missing(request, exc):
-        return JSONResponse({"detail": "记录不存在"}, status_code=404)
+    @app.exception_handler(DomainError)
+    async def domain_failed(request, exc):
+        return domain_response(exc)
 
-    @app.exception_handler(Conflict)
-    async def conflict(request, exc):
-        return JSONResponse({"detail": str(exc)}, status_code=409)
+    @app.exception_handler(StarletteHTTPException)
+    async def http_failed(request, exc):
+        codes = {404: "unknown_endpoint", 405: "method_not_allowed", 413: "payload_too_large"}
+        detail = UNKNOWN_ENDPOINT if exc.status_code == 404 else exc.detail
+        code = codes.get(exc.status_code, "invalid" if exc.status_code < 500 else "internal")
+        return error_response(exc.status_code, code, detail, getattr(exc, "headers", None))
 
     @app.exception_handler(ValueError)
     async def invalid(request, exc):
-        return JSONResponse({"detail": str(exc)}, status_code=400)
+        # Transitional: untyped Chinese ValueErrors are user errors, English ones are bugs.
+        if CJK.search(str(exc)):
+            frame = exc.__traceback__
+            while frame and frame.tb_next:
+                frame = frame.tb_next
+            where = f"{frame.tb_frame.f_code.co_filename}:{frame.tb_lineno}" if frame else ""
+            log.info("untyped ValueError", extra={"event": "untyped_value_error", "where": where})
+            return error_response(400, "invalid", str(exc))
+        return unhandled(exc)
 
     @app.get("/api/session")
     def session():
@@ -653,11 +744,13 @@ def create_app(data_dir=None, *, allowed_hosts=None):
     def toggle(id: str, body: Toggle):
         with store.connect() as con:
             if not con.execute("UPDATE schedules SET enabled=? WHERE id=?", (int(body.enabled), id)).rowcount:
-                raise KeyError(id)
+                raise NotFound("计划不存在")
         return next(s for s in store.schedules() if s["id"] == id)
 
     @app.get("/api/settings")
     def settings():
+        if fault_enabled("internal"):
+            raise RuntimeError("LEAD_TEST_FAULT=internal")
         return {"data_dir": str(store.directory), "version": "0.1.0", "network_mode": "direct-public",
                 "paid_services": False, "ai_enabled": False}
 
@@ -710,7 +803,7 @@ def create_app(data_dir=None, *, allowed_hosts=None):
     @app.get("/{path:path}")
     def frontend(path: str):
         if path.startswith("api/"):
-            raise HTTPException(404, "接口不存在")
+            raise HTTPException(404, UNKNOWN_ENDPOINT)
         if (dist / "index.html").is_file():
             return FileResponse(dist / "index.html")
         return Response("Frontend not built. Run: cd frontend && npm ci && npm run build", status_code=503)

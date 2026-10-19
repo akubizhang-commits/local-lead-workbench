@@ -8,6 +8,7 @@ import unicodedata
 from urllib.parse import parse_qsl, urlsplit, unquote
 import uuid
 from .company_comparison import distinct_branches
+from .errors import Invalid, NotFound
 
 
 def stamp():
@@ -332,13 +333,13 @@ class MarketStoreMixin:
 
     def ingest_market(self, record, run_id, query, task_id):
         if not all(record.get(k) for k in ("source_key", "source_url", "name")):
-            raise ValueError("自动发现结果缺少来源标识、链接或名称")
+            raise Invalid("自动发现结果缺少来源标识、链接或名称")
         timestamp = record.get("observed_at") or stamp()
         with self.connect() as con:
             con.execute("BEGIN IMMEDIATE")
             market = self._market_run(con, run_id)
             if not market or market["market_id"] != task_id:
-                raise ValueError("市场与轮次不匹配")
+                raise Invalid("市场与轮次不匹配")
             task = con.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
             if not con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='listing_aliases'").fetchone():
                 self._migrate_source_aliases(con)
@@ -349,7 +350,7 @@ class MarketStoreMixin:
                 """SELECT source_key FROM listing_aliases WHERE alias=?
                    UNION SELECT source_key FROM listings WHERE source_key=?""", (alias, alias))}
             if len(keys) > 1:
-                raise ValueError("来源标识关联多个历史地点，需人工核对，未自动合并")
+                raise Invalid("来源标识关联多个历史地点，需人工核对，未自动合并")
             listing_key = next(iter(keys), record["source_key"])
             listing = con.execute("SELECT company_id,last_seen FROM listings WHERE source_key=?", (listing_key,)).fetchone()
             if listing:
@@ -358,7 +359,7 @@ class MarketStoreMixin:
                     (listing_key,))}
                 incoming_cids = {a for a in aliases if a.startswith("google_maps:cid:")}
                 if known_cids and incoming_cids and known_cids != incoming_cids:
-                    raise ValueError("地点 CID 与已有别名冲突，需人工核对，未自动合并")
+                    raise Invalid("地点 CID 与已有别名冲突，需人工核对，未自动合并")
                 for alias in aliases:
                     con.execute("INSERT OR IGNORE INTO listing_aliases VALUES(?,?)", (alias, listing_key))
             if listing:
@@ -460,11 +461,11 @@ class MarketStoreMixin:
 
     def _append_market_jobs(self, con, run_id, jobs):
         if not self._market_run(con, run_id):
-            raise ValueError("不是市场轮次")
+            raise Invalid("不是市场轮次")
         added = 0
         for job in jobs:
             if not isinstance(job, dict):
-                raise ValueError("市场检索任务必须是对象")
+                raise Invalid("市场检索任务必须是对象")
             target = canonical(job)
             if job.get("key") and con.execute("""SELECT 1 FROM work_items
                 WHERE run_id=? AND stage='discovery' AND
@@ -486,7 +487,7 @@ class MarketStoreMixin:
         with self.connect() as con:
             con.execute("BEGIN IMMEDIATE")
             if not self._market_run(con, run_id):
-                raise ValueError("不是市场轮次")
+                raise Invalid("不是市场轮次")
             con.execute("UPDATE market_runs SET plan=? WHERE run_id=?", (canonical(plan), run_id))
             snapshot = json.loads(con.execute("SELECT snapshot FROM runs WHERE id=?", (run_id,)).fetchone()[0])
             snapshot["market_plan"] = plan
@@ -509,7 +510,7 @@ class MarketStoreMixin:
     def _market_unresolved(self, con, run_id, reason):
         row = self._market_run(con, run_id)
         if not row:
-            raise ValueError("不是市场轮次")
+            raise Invalid("不是市场轮次")
         reasons = json.loads(row["unresolved"])
         reason = str(reason) if isinstance(reason, str) else canonical(reason)
         if reason and reason not in reasons:
@@ -628,7 +629,7 @@ class MarketStoreMixin:
             run = self.row(con.execute("SELECT * FROM runs WHERE id=?", (id,)).fetchone())
             market = self._market_run(con, id)
             if not market:
-                raise ValueError("仅市场检索轮次支持补查")
+                raise Invalid("仅市场检索轮次支持补查")
             block = self._relocate_block(con, run, json.loads(market["plan"]))
             if block:
                 raise Conflict(block)
@@ -672,26 +673,26 @@ class MarketStoreMixin:
 
         Exclusion rules are materialized once into temp.excluded_ids for this connection."""
         if excluded not in {"hide", "only", "include"}:
-            raise ValueError("无效排除口径")
+            raise Invalid("无效排除口径")
         category = [category] if isinstance(category, str) else list(category or ())
         if len(category) > 20 or any(not isinstance(c, str) or not 1 <= len(c) <= 120 for c in category):
-            raise ValueError("来源类别筛选最多 20 个，每个 1–120 个字符")
+            raise Invalid("来源类别筛选最多 20 个，每个 1–120 个字符")
         if segment not in {"", "new", "existing", "changed", "not_seen"}:
-            raise ValueError("无效市场分组")
+            raise Invalid("无效市场分组")
         if contact not in {"", "email", "procurement"}:
-            raise ValueError("无效联系方式筛选")
+            raise Invalid("无效联系方式筛选")
         from .contact_tiers import TIER_RANK
         if best_tier and best_tier not in TIER_RANK:
-            raise ValueError("无效入口等级")
+            raise Invalid("无效入口等级")
         if market_id and not con.execute("SELECT 1 FROM tasks WHERE id=?", (market_id,)).fetchone():
-            raise KeyError("市场不存在")
+            raise NotFound("市场不存在")
         selected = con.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone() if run_id else None
         if run_id and not selected:
-            raise KeyError("轮次不存在")
+            raise NotFound("轮次不存在")
         if selected and not market_id:
             market_id = selected["task_id"] or ""
         if market_id and selected and selected["task_id"] != market_id:
-            raise ValueError("市场与轮次不匹配")
+            raise Invalid("市场与轮次不匹配")
         if market_id and not selected:
             selected = con.execute("SELECT * FROM runs WHERE task_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1",
                                    (market_id,)).fetchone()
@@ -718,7 +719,7 @@ class MarketStoreMixin:
             clauses.append("EXISTS(SELECT 1 FROM observations o WHERE o.company_id=c.id AND o.run_id=?)")
             params.append(run_id)
         elif segment:
-            raise ValueError("市场分组需要指定市场")
+            raise Invalid("市场分组需要指定市场")
         if q:
             clauses.append("""(c.name LIKE ? OR c.city LIKE ? OR c.website LIKE ?
                 OR c.address LIKE ? OR c.country LIKE ? OR EXISTS(
@@ -842,7 +843,7 @@ class MarketStoreMixin:
                      "c.created_at DESC,c.id", True),
         }
         if sort not in orders:
-            raise ValueError("无效企业排序")
+            raise Invalid("无效企业排序")
         order, stats = orders[sort]
         return " ORDER BY " + order, stats
 
@@ -980,9 +981,9 @@ class MarketStoreMixin:
     def company_page(self, q="", status="", type="", market_id="", run_id="", segment="", page=1, page_size=50,
                      contact="", sort="newest", category=(), excluded="hide", best_tier=""):
         if isinstance(page, bool) or not isinstance(page, int) or page < 1:
-            raise ValueError("无效页码")
+            raise Invalid("无效页码")
         if isinstance(page_size, bool) or not isinstance(page_size, int) or not 1 <= page_size <= 1000:
-            raise ValueError("每页条数须为1至1000")
+            raise Invalid("每页条数须为1至1000")
         self._company_order(sort)
         self._refresh_facets()
         with self.connect() as con:
@@ -1035,7 +1036,7 @@ class MarketStoreMixin:
     def exclusion_rules(self, market_id=""):
         with self.connect() as con:
             if market_id and not con.execute("SELECT 1 FROM tasks WHERE id=?", (market_id,)).fetchone():
-                raise KeyError("市场不存在")
+                raise NotFound("市场不存在")
             sql = "SELECT * FROM exclusion_rules"
             values = ()
             if market_id:
@@ -1050,13 +1051,13 @@ class MarketStoreMixin:
         value = " ".join(str(value).split())
         key = normalized(value)
         if kind == "keyword" and len(key) < 2:
-            raise ValueError("排除关键词至少 2 个字符")
+            raise Invalid("排除关键词至少 2 个字符")
         if not key:
-            raise ValueError("排除值不能为空")
+            raise Invalid("排除值不能为空")
         with self.connect() as con:
             con.execute("BEGIN IMMEDIATE")
             if scope == "market" and not con.execute("SELECT 1 FROM tasks WHERE id=?", (market_id,)).fetchone():
-                raise KeyError("市场不存在")
+                raise NotFound("市场不存在")
             prior = con.execute("""SELECT * FROM exclusion_rules WHERE scope=? AND COALESCE(market_id,'')=?
                 AND kind=? AND value_key=?""", (scope, market_id or "", kind, key)).fetchone()
             if prior:
@@ -1076,7 +1077,7 @@ class MarketStoreMixin:
         with self.connect() as con:
             con.execute("BEGIN IMMEDIATE")
             if not con.execute("DELETE FROM exclusion_rules WHERE id=?", (id,)).rowcount:
-                raise KeyError("记录不存在")
+                raise NotFound("记录不存在")
 
     def _write_category(self, con, company_id, category, source_url, timestamp):
         key = normalized(category)

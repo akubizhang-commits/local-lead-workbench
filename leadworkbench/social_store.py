@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from .social import classify_link, search_queries
 from .social_discovery_store import SocialDiscoveryStoreMixin
+from .errors import Invalid, NotFound
 
 
 def stamp():
@@ -60,7 +61,7 @@ class SocialStoreMixin(SocialDiscoveryStoreMixin):
 
     def _sync_social(self,con,cid):
         company=con.execute('SELECT * FROM companies WHERE id=?',(cid,)).fetchone()
-        if not company: raise KeyError(cid)
+        if not company: raise NotFound("企业不存在或已合并")
         observed=set()
         for o in con.execute("SELECT * FROM observations WHERE company_id=? AND field='social_links'",(cid,)).fetchall():
             try:
@@ -81,19 +82,19 @@ class SocialStoreMixin(SocialDiscoveryStoreMixin):
         return self.social_detail(cid)
 
     def add_social(self,cid,url,evidence):
-        if classify_link(url)['kind']=='excluded': raise ValueError('请输入支持的平台账号或帖子链接；登录、帮助和分享页面不能作为账号')
+        if classify_link(url)['kind']=='excluded': raise Invalid('请输入支持的平台账号或帖子链接；登录、帮助和分享页面不能作为账号')
         with self.connect() as con:
-            if not con.execute('SELECT 1 FROM companies WHERE id=? AND merged_into IS NULL',(cid,)).fetchone(): raise KeyError(cid)
+            if not con.execute('SELECT 1 FROM companies WHERE id=? AND merged_into IS NULL',(cid,)).fetchone(): raise NotFound("企业不存在或已合并")
             return self._save_social(con,cid,url,'',evidence,'manual',stamp())
 
     def decide_social(self,cid,eid,status,scope,revision=None):
         if status not in {'confirmed','candidate','excluded'} or scope not in {'brand','location','employee','third_party','unknown'}:
-            raise ValueError('无效的归属决定')
-        if status=='confirmed' and scope=='unknown': raise ValueError('确认时请选择品牌、门店、员工或第三方范围')
+            raise Invalid('无效的归属决定')
+        if status=='confirmed' and scope=='unknown': raise Invalid('确认时请选择品牌、门店、员工或第三方范围')
         with self.connect() as con:
             con.execute('BEGIN IMMEDIATE')
             row=con.execute('SELECT * FROM company_social WHERE company_id=? AND entity_id=?',(cid,eid)).fetchone()
-            if not row: raise KeyError(eid)
+            if not row: raise NotFound("社媒记录不存在")
             if revision is not None and revision!=row['revision']:
                 from .db import Conflict
                 raise Conflict('账号决定已变化，请刷新后重试')
@@ -104,15 +105,15 @@ class SocialStoreMixin(SocialDiscoveryStoreMixin):
         return {'ok':True}
 
     def record_social_outreach(self,cid,eid,state,note):
-        if state not in {'draft','contacted','replied','closed'}: raise ValueError('无效跟进状态')
-        if not note.strip() or len(note)>5000: raise ValueError('请填写草稿或跟进内容（最多5000字）')
+        if state not in {'draft','contacted','replied','closed'}: raise Invalid('无效跟进状态')
+        if not note.strip() or len(note)>5000: raise Invalid('请填写草稿或跟进内容（最多5000字）')
         with self.connect() as con:
             con.execute('BEGIN IMMEDIATE')
             row=con.execute('''SELECT cs.status,c.status company_status FROM company_social cs JOIN companies c ON c.id=cs.company_id
                 WHERE cs.company_id=? AND cs.entity_id=?''',(cid,eid)).fetchone()
-            if not row: raise KeyError(eid)
-            if row['company_status']=='do_not_contact': raise ValueError('此企业已标记拒绝联系，不能新增联系记录')
-            if row['status']!='confirmed': raise ValueError('请先确认该账号或帖子的归属')
+            if not row: raise NotFound("社媒记录不存在")
+            if row['company_status']=='do_not_contact': raise Invalid('此企业已标记拒绝联系，不能新增联系记录')
+            if row['status']!='confirmed': raise Invalid('请先确认该账号或帖子的归属')
             con.execute('INSERT INTO social_outreach VALUES(?,?,?,?,?,?)',
                         (uuid.uuid4().hex,cid,eid,state,note.strip(),stamp()))
         return {'ok':True}

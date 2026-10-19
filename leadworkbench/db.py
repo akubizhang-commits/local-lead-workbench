@@ -42,8 +42,7 @@ def encode(value):
     return json.dumps(value, ensure_ascii=False)
 
 
-class Conflict(ValueError):
-    pass
+from .errors import Conflict, Invalid, NotFound  # noqa: F401  (Conflict re-exported)
 
 
 # Contact change proposals (P0-2, design §3.3).
@@ -150,7 +149,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             with self.connect() as con:
                 version = con.execute("PRAGMA user_version").fetchone()[0]
                 if version > 2:
-                    raise ValueError("数据库版本高于应用版本")
+                    raise Invalid("数据库版本高于应用版本")
                 con.execute("PRAGMA journal_mode=WAL")
                 if version == 0:
                     con.executescript(SCHEMA)
@@ -284,7 +283,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
     @staticmethod
     def row(row):
         if row is None:
-            raise KeyError("记录不存在")
+            raise NotFound("记录不存在")
         result = dict(row)
         for key in ("business_types", "overrides", "social_links", "keywords", "company_types", "progress", "snapshot"):
             if key in result and result[key] is not None:
@@ -507,7 +506,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
 
     def ingest(self, record, run_id, query, *, city="", country="US"):
         if not record.get("source_key") or not record.get("source_url") or not record.get("name"):
-            raise ValueError("自动发现结果缺少来源标识、链接或名称")
+            raise Invalid("自动发现结果缺少来源标识、链接或名称")
         timestamp = record.get("observed_at") or now()
         with self.connect() as con:
             con.execute("BEGIN IMMEDIATE")
@@ -541,13 +540,13 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         fields = dict(fields)
         if business_types is not None:
             if not isinstance(business_types, list) or len(business_types) > 20 or any(not isinstance(t,str) or not t.strip() or len(t) > 80 for t in business_types):
-                raise ValueError("无效业务类型")
+                raise Invalid("无效业务类型")
             fields["business_types"] = list(dict.fromkeys(t.strip() for t in business_types))
         allowed = {"name", "address", "phone", "website", "business_types"}
         if set(fields) - allowed:
-            raise ValueError("不支持修改此字段")
+            raise Invalid("不支持修改此字段")
         if status is not None and status not in {"candidate", "verified", "not_fit", "do_not_contact"}:
-            raise ValueError("无效状态")
+            raise Invalid("无效状态")
         with self.connect() as con:
             con.execute("BEGIN IMMEDIATE")
             company = self.row(con.execute("SELECT * FROM companies WHERE id=?", (id,)).fetchone())
@@ -580,9 +579,9 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
 
     def batch_status(self, companies, status):
         if status not in {"candidate", "verified", "not_fit", "do_not_contact"}:
-            raise ValueError("无效状态")
+            raise Invalid("无效状态")
         if not companies or len(companies) > 200 or len({c["id"] for c in companies}) != len(companies):
-            raise ValueError("请选择1至200家不重复企业")
+            raise Invalid("请选择1至200家不重复企业")
         with self.connect() as con:
             con.execute("BEGIN IMMEDIATE")
             rows = []
@@ -822,7 +821,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         from .contact_quality import is_procurement_role
         name, role, email, phone, url, note = (str(v or "").strip() for v in (name, role, email, phone, url, note))
         if not (email or phone or url):
-            raise ValueError("请至少填写邮箱、电话或联系页面中的一项")
+            raise Invalid("请至少填写邮箱、电话或联系页面中的一项")
         if procurement:
             kind = "procurement"
             role_status = "explicit" if role or name else "department"
@@ -998,7 +997,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
 
     def review_decision(self, id, decision):
         if decision not in {"accept", "reject"}:
-            raise ValueError("无效审核决定")
+            raise Invalid("无效审核决定")
         stale = False
         with self.connect() as con:
             con.execute("BEGIN IMMEDIATE")
@@ -1006,7 +1005,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
             if r["status"] != "pending":
                 raise Conflict("此记录已审核")
             if r["kind"] == "duplicate_candidate" and decision == "accept":
-                raise ValueError("此项需保留为独立记录；不支持将一条企业资料覆盖另一条")
+                raise Invalid("此项需保留为独立记录；不支持将一条企业资料覆盖另一条")
             if r["kind"] == "contact" and (
                     (r["old_value"] or "") not in ("", "{}")
                     or con.execute("SELECT 1 FROM contact_change_proposals WHERE review_id=?", (id,)).fetchone()):
@@ -1023,7 +1022,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                 elif decision == "accept":
                     field = r["field"]
                     if field not in {"name", "phone", "website", "address", "business_types"}:
-                        raise ValueError("不支持的字段")
+                        raise Invalid("不支持的字段")
                     current = con.execute(f"SELECT {field} FROM companies WHERE id=?", (r["company_id"],)).fetchone()[0]
                     if current != r["old_value"]:
                         raise Conflict("当前值已变化，请重新核对")
@@ -1122,7 +1121,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
         if company["status"] == "do_not_contact":
             raise Conflict("此企业已标记拒绝联系")
         if not company["website"]:
-            raise ValueError("企业没有可核验官网")
+            raise Invalid("企业没有可核验官网")
         with self.connect() as con:
             con.execute("BEGIN IMMEDIATE")
             return self._start(con, company_id=id)
@@ -1376,9 +1375,9 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
 
     def create_schedule(self, *, task_id=None, company_id=None, kind, interval_months=3, timezone="Asia/Shanghai", enabled=True):
         if bool(task_id) == bool(company_id) or kind not in {"discovery", "refresh"}:
-            raise ValueError("计划必须指定唯一目标")
+            raise Invalid("计划必须指定唯一目标")
         if not 1 <= interval_months <= 24 or (kind == "discovery") != bool(task_id):
-            raise ValueError("计划类型或周期错误")
+            raise Invalid("计划类型或周期错误")
         if task_id:
             self.task(task_id)
         else:
@@ -1448,10 +1447,10 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
 
     def restore(self, name):
         if Path(name).name != name or not name.endswith(".sqlite3"):
-            raise ValueError("无效备份名称")
+            raise Invalid("无效备份名称")
         file = self.directory / "backups" / name
         if not file.is_file() or file.is_symlink():
-            raise ValueError("备份不存在")
+            raise Invalid("备份不存在")
         # Validate a private copy: the original backup is only ever read, never opened for writing.
         tmp = file.parent / f".restore-{uid()}.tmp"
         try:
@@ -1460,13 +1459,13 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                 tmp.chmod(0o600)
             except OSError as exc:
                 log.warning("could not copy backup %s for restore", name, exc_info=True)
-                raise ValueError("无法读取备份文件，请检查磁盘空间或文件权限") from exc
+                raise Invalid("无法读取备份文件，请检查磁盘空间或文件权限") from exc
             with closing(sqlite3.connect(tmp)) as source:
                 try:
                     source.execute("PRAGMA journal_mode=DELETE")
                     version = source.execute("PRAGMA user_version").fetchone()[0]
                     if source.execute("PRAGMA integrity_check").fetchone()[0] != "ok" or version not in {1, 2}:
-                        raise ValueError("备份损坏或版本不兼容")
+                        raise Invalid("备份损坏或版本不兼容")
                     source.execute("SELECT id FROM companies LIMIT 1")
                     source.execute("SELECT id FROM tasks LIMIT 1")
                     if version == 2:
@@ -1474,7 +1473,7 @@ class Store(MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMi
                         source.execute("SELECT company_id FROM market_memberships LIMIT 1")
                         source.execute("SELECT company_id FROM run_companies LIMIT 1")
                 except sqlite3.DatabaseError as exc:
-                    raise ValueError("备份损坏或版本不兼容，请选择其他备份") from exc
+                    raise Invalid("备份损坏或版本不兼容，请选择其他备份") from exc
                 self.backup()
                 with self.connect() as dest:
                     source.backup(dest)

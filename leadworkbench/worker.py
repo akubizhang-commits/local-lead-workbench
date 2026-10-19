@@ -152,15 +152,23 @@ def _enter_lock(directory, filename, wait_seconds):
     return stack
 
 
-def storage_problem(exc):
+PROBLEM_MESSAGES = {
+    "disk_full": "后台采集暂停：磁盘空间不足",
+    "readonly_storage": "后台采集暂停：数据目录不可写",
+    "db_busy": "后台采集暂停：本地数据库正忙，正在重试",
+    "db_corrupt": "后台采集暂停：本地数据库文件损坏，请从备份恢复",
+    "storage_unavailable": "后台采集暂停：数据库暂时不可用，正在重试",
+}
+
+
+def storage_problem(exc, directory=None):
     """(code, Chinese message) for storage failures, None for other errors."""
-    text = str(exc).lower()
-    if "disk is full" in text or "no space" in text:
-        return "disk_full", "后台采集暂停：磁盘空间不足"
-    if "readonly" in text or "read-only" in text or "permission denied" in text:
-        return "readonly_storage", "后台采集暂停：数据目录不可写"
+    from .errors import classify_storage_error
+    classified = classify_storage_error(exc, directory)
+    if classified is not None:
+        return classified.code, PROBLEM_MESSAGES.get(classified.code, PROBLEM_MESSAGES["storage_unavailable"])
     if isinstance(exc, (sqlite3.OperationalError, sqlite3.DatabaseError, OSError)):
-        return "storage_unavailable", "后台采集暂停：数据库暂时不可用，正在重试"
+        return "storage_unavailable", PROBLEM_MESSAGES["storage_unavailable"]
     return None
 
 
@@ -174,7 +182,7 @@ async def open_store_with_retry(directory):
         try:
             store = await asyncio.to_thread(Store, directory)
         except retryable as exc:
-            problem = storage_problem(exc)
+            problem = storage_problem(exc, directory)
             code = problem[0] if problem else "starting"
             if time.monotonic() >= deadline:
                 log.error("worker could not open the database", exc_info=True,
@@ -229,7 +237,7 @@ async def serve(directory):
                         op.release()
                 except Exception as exc:
                     failures += 1
-                    problem = storage_problem(exc)
+                    problem = storage_problem(exc, directory)
                     if problem:
                         log.warning("worker loop storage error (%s): %s", problem[0], exc,
                                     extra={"event": "worker_loop_error", "code": problem[0]})

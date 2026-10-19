@@ -18,6 +18,7 @@ from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from .address_city import city_from_address
+from .errors import Invalid
 from .contact_fields import _source
 from .contact_projection import categorize_outreach, group_contact_records, merge_versions
 from .contact_tiers import TIER_LABEL, contact_tier
@@ -134,7 +135,7 @@ def export_data(store, format="csv", layout="companies", **filters):
         if market_id:
             filters["market_id"] = market_id
     if layout not in {"companies", "entries"}:
-        raise ValueError("无效导出布局")
+        raise Invalid("无效导出布局")
     store._refresh_facets()
     with store.connect() as con:
         data = _collect(store, con, filters, observations=format == "xlsx")

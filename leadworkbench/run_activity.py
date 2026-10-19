@@ -1,5 +1,6 @@
 """Read projections for task > company refresh > refresh detail navigation."""
 import json
+from .errors import NotFound
 
 
 class RunActivityMixin:
@@ -56,7 +57,7 @@ class RunActivityMixin:
                 JOIN runs r ON r.id=w.run_id LEFT JOIN companies c ON c.id=w.target
                 WHERE w.id=? AND w.run_id=? AND w.stage='refresh' ''', (item_id, run_id)).fetchone()
             if row is None:
-                raise KeyError(item_id)
+                raise NotFound("记录不存在")
             result = self._refresh_brief(row)
             payload = json.loads(row['result'] or '{}')
             checkpoint = payload.get('checkpoint') or {}
