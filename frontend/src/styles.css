@@ -287,3 +287,33 @@
 .restore-blocked li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid #efddcb}
 .restore-blocked li>div{min-width:0}.restore-blocked li strong{display:block;font-size:var(--fs-sm)}.restore-blocked li small{display:block;color:var(--text-2)}
 .restore-blocked li button{flex-shrink:0}
+
+/* P1-14 长文本与窄屏（design §1.2、§4.5）。 */
+h1,h2,h3,h4,p,dd,td,li,label,summary,.text-button,.company-link strong{overflow-wrap:anywhere}
+.text-button{white-space:normal;text-align:left;justify-content:flex-start}
+.row>*,.section-title>*,.company-hero>div,.schedule-row>div,.panel-heading>*,.page-heading>div{min-width:0}
+.badge,.tier{max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+.clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.company-link strong{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+td .text-button,td .company-link{white-space:normal}
+td time,td .badge,td .tier{white-space:nowrap}
+select{max-width:100%;text-overflow:ellipsis}
+.timeline .row.between{flex-wrap:wrap}
+.backup-row strong,.source-row strong,code{overflow-wrap:anywhere}
+.markets-table td:first-child{white-space:normal;min-width:180px}
+.markets-table td .actions{flex-wrap:wrap}
+.skip-link{position:absolute;left:12px;top:-60px;z-index:50;padding:10px 14px;border-radius:7px;background:var(--ink);color:#fff}
+.skip-link:focus{top:12px}
+main:focus{outline:none}
+.breadcrumbs [aria-current=page]{display:inline-block;max-width:40vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
+@media(max-width:779px){
+ .breadcrumbs .crumb-extra{display:none}
+ .topbar .connection.service .connection-text{display:none}
+ .topbar .connection.service .dot{width:10px;height:10px}
+ .backup-row{flex-wrap:wrap}.backup-row button{margin-left:0}
+ .page-heading h1{font-size:24px}
+}
+@media(max-width:600px){
+ .comparison{grid-template-columns:1fr}
+ .comparison>svg{transform:rotate(90deg);justify-self:center}
+}

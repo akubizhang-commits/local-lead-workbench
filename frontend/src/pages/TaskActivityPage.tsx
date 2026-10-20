@@ -80,7 +80,7 @@ export function TaskActivityPage({route,navigate,tasks,version,worker,busy,act,r
    {safeUrl(detail.data.website)&&<a href={safeUrl(detail.data.website)} target="_blank" rel="noreferrer">企业官网 ↗</a>}
    {!!detail.data.warnings.length&&<RunWarnings error={detail.data.warnings.join('；')}/>}
    <h3>网页处理明细</h3><p className="muted">以下保留历次尝试，包括重试前的失败；当前结果以顶部复核状态为准。</p>
-   {!detail.data.logs.length?<p className="muted">这次复核没有保存逐页日志，可以查看下方所属轮次的说明。</p>:<div className="table-wrap refresh-log-table"><table><thead><tr><th>网页</th><th>结果</th><th>说明</th></tr></thead><tbody>{detail.data.logs.map((log,i)=><tr key={i}><td>{safeUrl(log.url)?<a href={safeUrl(log.url)} target="_blank" rel="noreferrer">{log.url}</a>:log.url}</td><td>{{parsed:'已读取',file_unparsed:'文件未解析',duplicate:'重复链接',excluded:'按规则跳过',blocked:'访问受限',failed:'读取失败',deferred:'下批继续'}[log.status]||log.status}</td><td>{log.reason||'—'}</td></tr>)}</tbody></table></div>}
+   {!detail.data.logs.length?<p className="muted">这次复核没有保存逐页日志，可以查看下方所属轮次的说明。</p>:<div className="table-wrap refresh-log-table" role="region" aria-label="网页处理明细" tabIndex={0}><table><thead><tr><th>网页</th><th>结果</th><th>说明</th></tr></thead><tbody>{detail.data.logs.map((log,i)=><tr key={i}><td>{safeUrl(log.url)?<a href={safeUrl(log.url)} target="_blank" rel="noreferrer">{log.url}</a>:log.url}</td><td>{{parsed:'已读取',file_unparsed:'文件未解析',duplicate:'重复链接',excluded:'按规则跳过',blocked:'访问受限',failed:'读取失败',deferred:'下批继续'}[log.status]||log.status}</td><td>{log.reason||'—'}</td></tr>)}</tbody></table></div>}
    </section><h3>所属轮次</h3><p className="muted">以下进度和控制针对整个轮次；一次市场更新可能包含多家企业。</p>
    <RunCard run={detail.data.run} worker={worker} busy={busy} act={act} openCompany={openCompany}/>
  </>}</Resource>;

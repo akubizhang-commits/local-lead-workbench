@@ -15,7 +15,7 @@ export function SocialAccountList({
   contacts?: Contact[];
 }) {
   return (
-    <div className="table-wrap">
+    <div className="table-wrap" role="region" aria-label="联系人与账号" tabIndex={0}>
       <table className="social-account-list">
         <thead>
           <tr>

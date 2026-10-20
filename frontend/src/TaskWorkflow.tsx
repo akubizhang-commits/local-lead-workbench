@@ -204,7 +204,7 @@ export function TaskWorkflow({flow,worker,onResume,onViewCompanies,busy,onOpenSe
   <div className="workflow-footer">
   {!flow.social_only&&!!flow.maps_queries?.length&&<details className="workflow-query-history"><summary>地图异常与重试记录（{flow.maps_query_issue_count??flow.maps_queries.length} 项）</summary>
    <p className="muted">显示最近尝试的最多20项；未执行的查询不计为失败。历史记录未保存尝试次数时显示“未记录”。</p>
-   <div className="table-wrap"><table><thead><tr><th>查询</th><th>状态</th><th>已尝试 / 已重试</th><th>说明</th></tr></thead><tbody>{flow.maps_queries.map(q=><tr key={q.id}>
+   <div className="table-wrap" role="region" aria-label="地图异常与重试记录" tabIndex={0}><table><thead><tr><th>查询</th><th>状态</th><th>已尝试 / 已重试</th><th>说明</th></tr></thead><tbody>{flow.maps_queries.map(q=><tr key={q.id}>
     <td>{q.query}</td><td>{q.state==='pending'?'等待重试':q.state==='running'?'处理中':q.state==='succeeded'?'已恢复完成':'需要处理'}</td>
     <td>{q.attempts??'未记录'} 次 · 重试 {q.retries??'未记录'} 次</td>
     <td>{queryFailureBadge(q)&&<span className={`badge badge-${q.failure_kind}`}>{queryFailureBadge(q)}</span>}{mapsReasonText(q.reason,q.stop_reason)}{q.next_attempt_at&&<small>{q.failure_kind==='scraper_error'?'计划重试':'计划复核'}：{date(q.next_attempt_at)}</small>}

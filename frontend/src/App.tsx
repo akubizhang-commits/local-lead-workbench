@@ -191,6 +191,7 @@ export default function App() {
   }
   return (
     <div className="app">
+      <a className="skip-link" href="#main" onClick={(e) => { e.preventDefault(); document.getElementById("main")?.focus(); }}>跳到主要内容</a>
       <aside className="sidebar">
         <a
           className="brand"
@@ -257,19 +258,19 @@ export default function App() {
       <div className="main-shell">
         <header className="topbar">
           <nav className="breadcrumbs" aria-label="页面位置">
-            <span>工作空间</span>
-            <span className="slash" aria-hidden="true">/</span>
+            <span className="crumb-extra">工作空间</span>
+            <span className="slash crumb-extra" aria-hidden="true">/</span>
             {view === "tasks" && route.task ? (
-              <><button className="text-button" onClick={()=>setView("tasks")}>目标市场</button><span className="slash" aria-hidden="true">/</span>{route.item?<button className="text-button" title={marketTitle} onClick={()=>navigate(backFromRefreshDetail(route))}>{marketTitle}</button>:<span aria-current="page" title={marketTitle}>{marketTitle}</span>}{route.item&&<><span className="slash" aria-hidden="true">/</span><span aria-current="page">官网复核详情</span></>}</>
+              <><button className={`text-button${route.item?" crumb-extra":""}`} onClick={()=>setView("tasks")}>目标市场</button><span className={`slash${route.item?" crumb-extra":""}`} aria-hidden="true">/</span>{route.item?<button className="text-button" title={marketTitle} onClick={()=>navigate(backFromRefreshDetail(route))}>{marketTitle}</button>:<span aria-current="page" title={marketTitle}>{marketTitle}</span>}{route.item&&<><span className="slash" aria-hidden="true">/</span><span aria-current="page">官网复核详情</span></>}</>
             ) : view === "detail" ? (
               <>
                 <button
-                  className="text-button"
+                  className={`text-button${route.account ? " crumb-extra" : ""}`}
                   onClick={() => setView("companies")}
                 >
                   企业库
                 </button>
-                <span className="slash" aria-hidden="true">/</span>
+                <span className={`slash${route.account ? " crumb-extra" : ""}`} aria-hidden="true">/</span>
                 <>
                   {route.account ? (
                     <>
@@ -284,7 +285,7 @@ export default function App() {
                       </span>
                     </>
                   ) : (
-                    <span aria-current="page">企业详情</span>
+                    <span aria-current="page" title={detail.data?.company.name}>企业详情</span>
                   )}
                 </>
               </>
@@ -295,13 +296,16 @@ export default function App() {
             )}
           </nav>
           <div className="row">
-            <span className={`connection ${overview.error ? "offline" : ""}`}>
-              <span className="dot" />
+            <span className={`connection service ${overview.error ? "offline" : ""}`}
+              title={overview.error ? "本地服务未连接" : overview.loading ? "正在连接本地服务" : "本地服务已连接"}>
+              <span className="dot" role="img" aria-label={overview.error ? "本地服务未连接" : overview.loading ? "正在连接本地服务" : "本地服务已连接"} />
+              <span className="connection-text" aria-hidden="true">
               {overview.error
                 ? "本地服务未连接"
                 : overview.loading
                   ? "正在连接本地服务"
                   : "本地服务已连接"}
+              </span>
             </span>
             <span
               className={`connection ${overview.data?.worker?.alive ? "" : "offline"}`}
@@ -320,7 +324,7 @@ export default function App() {
             </button>
           </div>
         </header>
-        <main>
+        <main id="main" tabIndex={-1}>
           <div className={`page-heading view-${view}`}>
             <div>
               {view === "tasks" && route.task && <button className="text-button page-back" onClick={()=>route.item?navigate(backFromRefreshDetail(route)):setView("tasks")}>{route.item?(route.task==="standalone"?"← 返回单家官网复核":"← 返回市场详情"):"← 返回目标市场"}</button>}

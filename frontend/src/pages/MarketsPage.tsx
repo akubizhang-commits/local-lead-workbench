@@ -116,7 +116,7 @@ export function MarketsPage({
       </div>
       <Resource {...tasks} retry={refresh}>
         {active.length ? (
-          <div className="table-wrap"><table><thead><tr><th>目标市场</th><th>目标地区</th><th>最近一轮</th><th>最近一轮开始</th><th>操作</th></tr></thead><tbody>
+          <div className="table-wrap" role="region" aria-label="目标市场列表" tabIndex={0}><table className="markets-table"><thead><tr><th>目标市场</th><th>目标地区</th><th>最近一轮</th><th>最近一轮开始</th><th>操作</th></tr></thead><tbody>
             {active.map(task=><tr key={task.id}><td><button className="text-button" onClick={()=>setTaskDetail(task)}>{task.name}</button><p className="muted">{task.keywords.join(' · ')}</p></td>
             <td>{[task.country,task.state,task.county,task.city].filter(Boolean).join(' / ')}{(task.geography?.county_ids.length||0)>1&&<small className="muted">跨 {task.geography?.county_ids.length} 个县或同级地区 · 完整城市范围</small>}</td><td>{task.latest_run?<Badge value={task.latest_run.status}/>:"尚未运行"}</td><td>{date(task.latest_run?.created_at)}</td>
             <td><div className="actions"><button onClick={()=>setTaskDetail(task)}>查看进度</button><button onClick={()=>openMarket(task.id)}>企业库</button>
@@ -140,7 +140,7 @@ export function MarketsPage({
       </Resource>
       {!!archived.length && <details className="panel archived-markets"><summary>已归档市场（{archived.length}）</summary>
         <p className="muted">已归档的市场不会开始新一轮，也不会按计划自动更新；企业和历史记录都已保留。</p>
-        <div className="table-wrap"><table><thead><tr><th>市场</th><th>归档时间</th><th>操作</th></tr></thead><tbody>
+        <div className="table-wrap" role="region" aria-label="已归档市场" tabIndex={0}><table><thead><tr><th>市场</th><th>归档时间</th><th>操作</th></tr></thead><tbody>
           {archived.map(task=><tr key={task.id}><td>{task.name}</td><td>{date(task.archived_at)}</td>
             <td><button disabled={busy} onClick={()=>act(()=>api(`/tasks/${encodeURIComponent(task.id)}/restore`,"POST"),RESTORED)}>恢复</button></td></tr>)}
         </tbody></table></div></details>}

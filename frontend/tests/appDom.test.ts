@@ -253,3 +253,30 @@ test('export buttons: entries first, a running job blocks repeat clicks, footnot
   assert.ok([...document.querySelectorAll('.export-jobs button')].some(b=>b.textContent==='下载文件'));
  } finally {await h.cleanup();}
 });
+test("skip link is the first focusable element, main is focusable and list tables are labelled regions", async () => {
+  const h = await harness();
+  try {
+    const first = document.querySelector("a[href],button,input,select,textarea,summary,[tabindex]:not([tabindex='-1'])")!;
+    assert.equal(first.className, "skip-link");
+    assert.equal(first.textContent, "跳到主要内容");
+    const main = document.querySelector("main")!;
+    assert.equal(main.id, "main");
+    assert.equal(main.getAttribute("tabindex"), "-1");
+    await h.act(async () => (first as HTMLAnchorElement).click());
+    assert.equal(document.activeElement, main);
+  } finally {
+    await h.cleanup();
+  }
+  const m = await setupDOM("http://localhost/?view=tasks");
+  try {
+    const task = { id: "m1", name: "Market", country: "US", state: "CA", city: "San Jose", keywords: ["k"], company_types: [],
+      auto_enrich: true, created_at: "2026-10-15T00:00:00Z", latest_run: null };
+    const { MarketsPage } = await import("../src/pages/MarketsPage.tsx");
+    await m.act(async () => m.root.render(createElement(MarketsPage, { overview: { loading: false, error: "" }, tasks: { data: [task], loading: false, error: "" },
+      busy: false, act: async () => {}, refresh: () => {}, setTaskDetail: () => {}, openMarket: () => {}, openStandalone: () => {}, setModal: () => {} } as never)));
+    const region = document.querySelector("table")!.parentElement!;
+    assert.deepEqual([region.getAttribute("role"), region.getAttribute("aria-label"), region.getAttribute("tabindex")], ["region", "目标市场列表", "0"]);
+  } finally {
+    await m.cleanup();
+  }
+});

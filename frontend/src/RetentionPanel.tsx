@@ -208,7 +208,7 @@ export function RetentionPanel({
             将删除 {preview.total_files} 个文件，共 {formatBytes(preview.total_bytes)}
           </p>
           {preview.truncated && <p className="hint">仅显示前 500 项，确认时按完整清单执行</p>}
-          <div className="table-wrap">
+          <div className="table-wrap" role="region" aria-label="待清理文件" tabIndex={0}>
             <table>
               <thead>
                 <tr><th scope="col">类别</th><th scope="col">文件</th><th scope="col">大小</th><th scope="col">原因</th></tr>
