@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { actionMessage } from "./errors";
+import { runTitle } from "./MarketRecheck";
 import { api, resetSession } from "./api";
 import { CompanyForm, TaskForm } from "./forms";
 import { date, filtersQuery, type Filters } from "./helpers";
@@ -18,6 +19,7 @@ import type {
   Company,
   CompanyDetail,
   Overview,
+  Run,
   Task,
 } from "./types";
 import { Alert, Icon, Modal } from "./ui";
@@ -333,7 +335,12 @@ export default function App() {
                             `/companies/${encodeURIComponent(selected!)}/refresh`,
                             "POST",
                           ),
-                        "资料复核已加入队列，可在目标市场查看进度",
+                        (result) => {
+                          const run = result as Run;
+                          return run?.already_queued
+                            ? `已在「${runTitle(run, detail.data?.company.name)}」的复核队列中，无需重复发起`
+                            : "资料复核已加入队列，可在目标市场查看进度";
+                        },
                       )
                     }
                   >

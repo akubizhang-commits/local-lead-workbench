@@ -1,6 +1,7 @@
 import { api } from "../api";
 import { date, label, runActions } from "../helpers";
 import { RunWarnings } from "../RunWarnings";
+import { runTitle } from "../MarketRecheck";
 import { RelocateNotice } from "../MarketSummary";
 import type { Overview, Run } from "../types";
 import { Badge } from "../ui";
@@ -34,7 +35,9 @@ export function RunCard({
       <div className="row">
         <strong>
           {label(run.kind)}
-          {run.kind === "refresh" && <> · {run.company_id && run.company_name ? (
+          {run.kind === "refresh" && <> · {run.snapshot?.batch === "website_recheck" ? (
+            <span>{runTitle(run)}</span>
+          ) : run.company_id && run.company_name ? (
             <a href={`/?view=detail&page=1&company=${encodeURIComponent(run.company_id)}`}
               onClick={(event) => {
                 if (openCompany && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {

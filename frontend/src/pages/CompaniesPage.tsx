@@ -10,6 +10,7 @@ import { useResource } from "../hooks";
 import { defaultFilters } from "../navigation";
 import type { Company, CompanyPage, Task, CityCount } from "../types";
 import { ActualCityCell } from "../ActualCity";
+import { RECHECK_LIMIT, recheckConfirm, recheckQueued, type RecheckCreated } from "../MarketRecheck";
 import { Alert, Badge, Empty, Icon } from "../ui";
 
 import { Resource } from "../Resource";
@@ -351,6 +352,24 @@ export function CompaniesPage({
         >
           清除选择
         </button>
+        {filters.market_id && <>
+          <button
+            disabled={busy || Object.keys(selection).length > RECHECK_LIMIT}
+            onClick={() => {
+              const ids = Object.keys(selection);
+              if (!window.confirm(recheckConfirm(ids.length))) return;
+              act(async () => {
+                const result = await api<RecheckCreated>(
+                  `/tasks/${encodeURIComponent(filters.market_id!)}/website-recheck`, "POST", { company_ids: ids });
+                setSelection({});
+                return result;
+              }, (result) => recheckQueued(result as RecheckCreated));
+            }}
+          >
+            复核所选企业官网
+          </button>
+          {Object.keys(selection).length > RECHECK_LIMIT && <span className="muted">一次最多 20 家，请减少选择</span>}
+        </>}
       </div>}
       <Resource {...companies} retry={refresh}>
         <section className="panel table-wrap">
