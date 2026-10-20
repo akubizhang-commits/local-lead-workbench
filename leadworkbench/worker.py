@@ -82,6 +82,10 @@ async def heartbeat(directory):
 LOCKED_MESSAGE = "worker 正在运行，需先停止后台进程才能恢复备份"
 
 
+class LockTimeout(RuntimeError):
+    """worker_lock 等待超时。是 RuntimeError 的子类，现有 pytest.raises(RuntimeError, match=...) 照样通过。"""
+
+
 @contextmanager
 def worker_lock(directory, filename="worker.lock", *, wait_seconds=0.0, message=None):
     """Exclusive file lock, retried every 0.1 s for up to `wait_seconds`.
@@ -98,7 +102,7 @@ def worker_lock(directory, filename="worker.lock", *, wait_seconds=0.0, message=
                 break
             except BlockingIOError as exc:
                 if time.monotonic() >= deadline:
-                    raise RuntimeError(message or LOCKED_MESSAGE) from exc
+                    raise LockTimeout(message or LOCKED_MESSAGE) from exc
                 time.sleep(0.1)
         try:
             yield

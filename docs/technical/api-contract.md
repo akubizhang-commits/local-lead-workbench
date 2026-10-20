@@ -125,7 +125,7 @@ X-Local-Token: <当前实例token>
 | GET | `/api/settings` | 无 | `{data_dir,version:"0.1.0",network_mode:"direct-public",paid_services:false,ai_enabled:false}` |
 | GET | `/api/backups` | 无 | `[{name,created_at}]`；按文件名逆序，日期来自文件mtime |
 | POST | `/api/backups` | 无 | `{name,created_at}`；创建SQLite备份 |
-| POST | `/api/backups/restore` | `{name}` | `{ok:true}`；实际恢复，有锁和活动任务检查，见§9 |
+| POST | `/api/backups/restore` | `{name}` | `{ok:true}`；实际恢复，有锁和轮次检查，见§9。有 queued/running 的轮次或社媒运行时 409 `restore_blocked_runs`，body 另带 `runs`、`runs_total`、`social_runs`、`social_runs_total`（各最多 10 条）；只是等 worker 锁超时时 409 `restore_busy` |
 | GET | `/{path:path}` | path | 前端index文件；`api/`前缀未匹配时404 `接口不存在`；未构建时503文本 |
 | 挂载 | `/assets` | 静态路径 | 仅构建assets目录存在时挂载；不是业务API，不计入44项 |
 
@@ -352,7 +352,7 @@ XLSX有Companies、Contacts、Locations、Sources四表。Contacts列为company_
 | 401 | 缺失/错误本地token：`{"detail":"缺少本地访问令牌"}` |
 | 403 | Host/Origin/Sec-Fetch-Site边界拒绝；detail分别为仅允许本机访问/拒绝跨来源请求/拒绝跨站请求 |
 | 404 | `not_found`：只有 `NotFound`（中文原因，如“记录不存在”“市场不存在”）；裸 KeyError 不再是 404，而是 500 `internal`。未知 `/api/...` 为 `unknown_endpoint`“接口不存在（界面与服务版本可能不一致，请刷新页面）” |
-| 409 | Conflict：revision冲突、状态不允许、策略耗尽无法继续、已审核、浏览器/恢复锁冲突、活动任务阻止恢复。恢复：Worker 仅在执行作业时持有 `worker.lock`、空闲时释放，恢复接口最多等待 5 秒拿锁，仍在处理作业时返回“后台正在处理作业，请等待当前作业完成或暂停相关任务后再恢复备份”；queued/running 普通或社媒轮次仍阻止恢复，paused 不阻止 |
+| 409 | Conflict：revision冲突、状态不允许、策略耗尽无法继续、已审核、浏览器/恢复锁冲突、排队或运行中的轮次阻止恢复。恢复：先不占锁检查轮次，有 queued/running 普通或社媒轮次时返回 `restore_blocked_runs` 和轮次列表（paused 不阻止）；Worker 仅在执行作业时持有 `worker.lock`、空闲时释放，恢复接口最多等待 5 秒拿锁，仍在处理作业时返回 `restore_busy`“后台正在处理一项作业，请稍等片刻再恢复；也可以先暂停相关轮次。” |
 | 413 | Content-Length检查失败：`{"detail":"请求过大"}` |
 | 422 | FastAPI/Pydantic输入验证；`detail`为错误数组，每项只含 `loc/msg/type`，`msg` 为中文（网址校验、必填、长度、多余字段、非法 JSON 等均已翻译），不再含 input/ctx；不要按400字符串结构解析 |
 | 405 | 路由框架的方法不允许响应；没有业务层统一封装 |
@@ -361,7 +361,7 @@ XLSX有Companies、Contacts、Locations、Sources四表。Contacts列为company_
 
 例如非法分页的稳定形状是`{"detail":[{"loc":["query","page_size"],"type":"less_than_equal","msg":"…"}]}`；省略号仅表示本文未固定框架英文文案，实际JSON可能还有input/ctx。客户端应按HTTP码和结构处理，保留可读detail，不将HTTP200的blocked/no_results当网络失败。
 
-恢复流程：POST restore取得worker操作文件锁，拒绝普通queued/running和社媒queued/running；校验备份文件名、非符号链接、SQLite integrity_check、user_version∈{1,2}及部分必需表。先备份当前库，再用SQLite backup复制；v1执行market迁移，随后audit/social及 `_migrate_market_social` 迁移，再恢复中断项。后者为旧备份补建三个市场社媒表；缺设置仍默认关闭，不自动回放。并未校验每个JSON值或所有业务逻辑关联。应用API锁只保护本实例，worker还使用文件锁；不要绕过接口直接替换真实库。
+恢复流程：POST restore先做一次只读检查（不占锁），再取得worker操作文件锁并在锁内再检查一次，拒绝普通queued/running和社媒queued/running（paused不拒绝，规则不变）。被拒时返回409 `restore_blocked_runs`：`runs[]` 每项 `{id,kind,status,created_at,task_id,task_name,company_id,company_name,batch_market_id,batch_market_name,company_count}`（`company_count` 只对批量复核官网给出，snapshot 解析失败为 null）；`social_runs[]` 每项 `{id,status,created_at,parent_run_id,task_id,task_name,company_count,company_id,company_name}`，父轮次本身已列出的社媒运行不列出、不计入 `social_runs_total`。锁前检查让后台在线时也能拿到列表；等锁 5 秒超时（`LockTimeout`）返回409 `restore_busy`，其他 RuntimeError 仍为409 `conflict`。校验备份文件名、非符号链接、SQLite integrity_check、user_version∈{1,2}及部分必需表。先备份当前库，再用SQLite backup复制；v1执行market迁移，随后audit/social及 `_migrate_market_social` 迁移，再恢复中断项。后者为旧备份补建三个市场社媒表；缺设置仍默认关闭，不自动回放。并未校验每个JSON值或所有业务逻辑关联。应用API锁只保护本实例，worker还使用文件锁；不要绕过接口直接替换真实库。
 
 ## 10. 本次校验与再生成
 

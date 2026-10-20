@@ -31,10 +31,12 @@ from . import logging_setup
 from .industry_presets import merge_keywords
 from .sources.website import normalize_url
 from .validation_messages import translate_errors
-from .worker import worker_lock
+from .worker import LockTimeout, worker_lock
 
 ROOT = Path(__file__).resolve().parent.parent
 RESTORE_LOCK_WAIT_SECONDS = 5.0
+RESTORE_BLOCKED = "有排队中或运行中的轮次，暂停或等待结束后即可恢复"
+RESTORE_BUSY = "后台正在处理一项作业，请稍等片刻再恢复；也可以先暂停相关轮次。"
 log = logging.getLogger(__name__)
 CJK = re.compile(r"[\u3000-\u9fff\uff00-\uffef]")
 UNKNOWN_ENDPOINT = "接口不存在（界面与服务版本可能不一致，请刷新页面）"
@@ -1063,6 +1065,11 @@ def create_app(data_dir=None, *, allowed_hosts=None):
     def backup():
         return store.backup()
 
+    def _raise_if_blocked():
+        blockers = store.restore_blockers()
+        if blockers["runs_total"] or blockers["social_runs_total"]:
+            raise DomainError(RESTORE_BLOCKED, code="restore_blocked_runs", status=409, **blockers)
+
     @app.post("/api/backups/restore")
     def restore(body: Restore):
         # An idle worker releases worker.lock between ticks; wait briefly for it.
@@ -1071,14 +1078,14 @@ def create_app(data_dir=None, *, allowed_hosts=None):
             # Inside the exclusive gate: an export child must not read while the file is replaced.
             if jobs.any_live():
                 raise DomainError("正在生成导出文件，请等待完成或取消后再恢复备份", code="export_running", status=409)
-            with worker_lock(store.directory, wait_seconds=RESTORE_LOCK_WAIT_SECONDS,
-                             message="后台正在处理作业，请等待当前作业完成或暂停相关任务后再恢复备份"):
-                if store.active_runs():
-                    raise Conflict("请先取消活动任务再恢复")
-                with store.connect() as con:
-                    if con.execute("SELECT 1 FROM social_runs WHERE status IN ('queued','running') LIMIT 1").fetchone():
-                        raise Conflict("请先取消活动社媒任务再恢复")
+            # Read-only check before waiting for the lock, so a busy worker still yields the round list;
+            # checked again under the lock because a round may be created in between (rules unchanged).
+            _raise_if_blocked()
+            with worker_lock(store.directory, wait_seconds=RESTORE_LOCK_WAIT_SECONDS, message=RESTORE_BUSY):
+                _raise_if_blocked()
                 store.restore(body.name)
+        except LockTimeout as exc:
+            raise DomainError(RESTORE_BUSY, code="restore_busy", status=409) from exc
         except RuntimeError as exc:
             raise Conflict(str(exc)) from exc
         return {"ok": True}

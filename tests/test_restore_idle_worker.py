@@ -251,3 +251,142 @@ def test_restore_rules_unchanged(tmp_path, state, expected):
             assert client.post(f"/api/runs/{run['id']}/pause").status_code == 200
         response = client.post("/api/backups/restore", json={"name": name})
         assert response.status_code == expected, response.text
+
+
+# P1-16 (design §6.1): restore refusals list the blocking rounds, before waiting for worker.lock.
+def _hold_lock(tmp_path):
+    hold, got = threading.Event(), threading.Event()
+    holder = threading.Thread(target=_try_lock, args=(tmp_path, hold, got, 0))
+    holder.start()
+    assert got.wait(2)
+    return hold, holder
+
+
+def _market_with_companies(store, n=2, city="San Jose"):
+    from leadworkbench.api import TaskInput
+    market = store.create_market(TaskInput(**{**MARKET, "city": city}).model_dump())
+    run = store.start_task(market["id"])
+    companies = [store.ingest_market(dict(source_key=f"{city}-{i}", source_url=f"https://maps.example.invalid/{city}-{i}",
+                                          name=f"{city} Supply {i}", address=f"{i} Main St, {city}, CA", phone="",
+                                          website=f"https://{city.replace(' ', '').lower()}{i}.example.com",
+                                          latitude=37.3, longitude=-121.9), run["id"], "q", market["id"])
+                 for i in range(n)]
+    return market, run, companies
+
+
+def _set_status(store, run_id, status, table="runs"):
+    with store.connect() as con:
+        con.execute(f"UPDATE {table} SET status=? WHERE id=?", (status, run_id))
+
+
+def test_restore_lists_running_market_round_without_waiting_for_busy_lock(tmp_path):
+    with _client(tmp_path) as client:
+        name = client.post("/api/backups").json()["name"]
+        store = Store(tmp_path)
+        market, run, _ = _market_with_companies(store, 0)
+        _set_status(store, run["id"], "running")
+        hold, holder = _hold_lock(tmp_path)  # a busy worker lane keeps worker.lock
+        try:
+            started = time.monotonic()
+            response = client.post("/api/backups/restore", json={"name": name})
+            elapsed = time.monotonic() - started
+        finally:
+            hold.set()
+            holder.join(5)
+        body = response.json()
+        assert response.status_code == 409 and body["code"] == "restore_blocked_runs", body
+        assert elapsed < 1
+        assert body["runs_total"] == 1 and body["social_runs_total"] == 0 and body["social_runs"] == []
+        item = body["runs"][0]
+        assert (item["id"], item["task_id"], item["task_name"], item["kind"], item["status"]) == (
+            run["id"], market["id"], market["name"], "discovery", "running")
+        assert "snapshot" not in item and item["batch_market_id"] is None and item["company_count"] is None
+
+
+def test_restore_lists_single_company_website_recheck(tmp_path):
+    with _client(tmp_path) as client:
+        name = client.post("/api/backups").json()["name"]
+        company = client.post("/api/companies", json={"name": "Solo Co", "website": "https://solo.example"}).json()
+        run = client.post(f"/api/companies/{company['id']}/refresh").json()
+        _set_status(Store(tmp_path), run["id"], "running")
+        body = client.post("/api/backups/restore", json={"name": name}).json()
+        assert body["code"] == "restore_blocked_runs"
+        item = body["runs"][0]
+        assert item["task_id"] is None and item["batch_market_id"] is None
+        assert (item["kind"], item["company_id"], item["company_name"]) == ("refresh", company["id"], "Solo Co")
+
+
+def test_restore_lists_batch_website_recheck_with_market_and_count(tmp_path):
+    with _client(tmp_path) as client:
+        name = client.post("/api/backups").json()["name"]
+        store = Store(tmp_path)
+        market, run, companies = _market_with_companies(store, 3)
+        store.control(run["id"], "cancel")
+        batch = store.create_website_recheck(market["id"], company_ids=[c["id"] for c in companies])
+        body = client.post("/api/backups/restore", json={"name": name}).json()
+        assert body["code"] == "restore_blocked_runs" and body["runs_total"] == 1
+        item = body["runs"][0]
+        assert item["id"] == batch["run_id"] and item["task_id"] is None and item["status"] == "queued"
+        assert (item["batch_market_id"], item["batch_market_name"], item["company_count"]) == (market["id"], market["name"], 3)
+
+
+def test_restore_lists_standalone_social_run_but_not_child_of_listed_round(tmp_path):
+    with _client(tmp_path) as client:
+        name = client.post("/api/backups").json()["name"]
+        store = Store(tmp_path)
+        company = client.post("/api/companies", json={"name": "Social Co", "website": "https://social.example"}).json()
+        social = store.create_social_run(company_ids=[company["id"]])
+        body = client.post("/api/backups/restore", json={"name": name}).json()
+        assert body["code"] == "restore_blocked_runs" and body["runs_total"] == 0 and body["social_runs_total"] == 1
+        item = body["social_runs"][0]
+        assert (item["id"], item["task_id"], item["parent_run_id"]) == (social["id"], None, None)
+        assert (item["company_id"], item["company_name"], item["company_count"]) == (company["id"], "Social Co", 1)
+        # A market round with a child social run, both running: only the round is listed.
+        _set_status(store, social["id"], "cancelled", "social_runs")
+        market, run, _ = _market_with_companies(store, 0, "Fresno")
+        _set_status(store, run["id"], "running")
+        with store.connect() as con:
+            con.execute("INSERT INTO social_runs(id,status,created_at,finished_at,company_ids,settings,sample) "
+                        "VALUES('child','running','2026-10-20T00:00:00+00:00',NULL,'not json','{}','[]')")
+            con.execute("INSERT INTO market_social_runs(market_run_id,social_run_id) VALUES(?, 'child')", (run["id"],))
+        body = client.post("/api/backups/restore", json={"name": name}).json()
+        assert body["runs_total"] == 1 and body["runs"][0]["task_name"] == market["name"]
+        assert body["social_runs"] == [] and body["social_runs_total"] == 0
+
+
+def test_restore_busy_when_only_the_lock_is_held(tmp_path, monkeypatch):
+    from leadworkbench import api
+    monkeypatch.setattr(api, "RESTORE_LOCK_WAIT_SECONDS", 0.5)  # the holder thread keeps the lock for 5 s
+    with _client(tmp_path) as client:
+        name = client.post("/api/backups").json()["name"]
+        hold, holder = _hold_lock(tmp_path)
+        try:
+            response = client.post("/api/backups/restore", json={"name": name})
+        finally:
+            hold.set()
+            holder.join(5)
+        assert response.status_code == 409
+        assert response.json()["code"] == "restore_busy"
+        assert "暂停相关轮次" in response.json()["detail"]
+
+
+def test_restore_other_runtime_error_stays_conflict(tmp_path, monkeypatch):
+    with _client(tmp_path) as client:
+        name = client.post("/api/backups").json()["name"]
+        def broken(self, backup_name):
+            raise RuntimeError("复制失败")
+        monkeypatch.setattr(Store, "restore", broken)
+        response = client.post("/api/backups/restore", json={"name": name})
+        assert response.status_code == 409
+        assert response.json()["code"] == "conflict" and "复制失败" in response.json()["detail"]
+
+
+def test_restore_blockers_list_at_most_ten_with_totals(tmp_path):
+    with _client(tmp_path) as client:
+        name = client.post("/api/backups").json()["name"]
+        for i in range(12):
+            company = client.post("/api/companies", json={"name": f"Co {i}", "website": f"https://co{i}.example"}).json()
+            assert client.post(f"/api/companies/{company['id']}/refresh").status_code == 200
+        body = client.post("/api/backups/restore", json={"name": name}).json()
+        assert body["code"] == "restore_blocked_runs"
+        assert len(body["runs"]) == 10 and body["runs_total"] == 12

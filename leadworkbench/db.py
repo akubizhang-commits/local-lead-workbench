@@ -1284,6 +1284,51 @@ class Store(MarketAdminMixin, ReviewCleanupMixin, MarketSocialMixin, RunActivity
                     row["coverage"] = self._market_coverage(con, row["id"])
             return rows
 
+    def restore_blockers(self, limit=10):
+        """Queued/running runs and social runs that block a restore, read in one snapshot (design §6.1).
+
+        Same conditions as active_runs() plus the social check in restore(); read-only. A social run whose
+        parent market run is itself listed is omitted (pausing the parent pauses it). Bad JSON in
+        runs.snapshot / social_runs.company_ids is treated as missing instead of failing the request."""
+        def load(text):
+            try:
+                return json.loads(text or "null")
+            except (TypeError, ValueError):
+                return None
+        with self.connect() as con:
+            con.execute("BEGIN")  # deferred: both SELECTs read the same WAL snapshot
+            runs = []
+            for r in con.execute("""SELECT r.id, r.kind, r.status, r.created_at, r.task_id, t.name AS task_name,
+                    r.company_id, c.name AS company_name, b.market_id AS batch_market_id, bt.name AS batch_market_name, r.snapshot
+                FROM runs r LEFT JOIN tasks t ON t.id = r.task_id LEFT JOIN companies c ON c.id = r.company_id
+                LEFT JOIN market_recheck_runs b ON b.run_id = r.id LEFT JOIN tasks bt ON bt.id = b.market_id
+                WHERE r.status IN ('queued','running') ORDER BY r.created_at, r.id"""):
+                item = {k: r[k] for k in ("id", "kind", "status", "created_at", "task_id", "task_name", "company_id",
+                                          "company_name", "batch_market_id", "batch_market_name")}
+                ids = None
+                if r["batch_market_id"]:
+                    snap = load(r["snapshot"])
+                    ids = snap.get("company_ids") if isinstance(snap, dict) else None
+                item["company_count"] = len(ids) if isinstance(ids, list) else None
+                runs.append(item)
+            listed = {r["id"] for r in runs}
+            social = []
+            for s in con.execute("""SELECT s.id, s.status, s.created_at, s.company_ids, m.market_run_id AS parent_run_id,
+                    pr.task_id, t.name AS task_name
+                FROM social_runs s LEFT JOIN market_social_runs m ON m.social_run_id = s.id
+                LEFT JOIN runs pr ON pr.id = m.market_run_id LEFT JOIN tasks t ON t.id = pr.task_id
+                WHERE s.status IN ('queued','running') ORDER BY s.created_at, s.id"""):
+                if s["parent_run_id"] and s["parent_run_id"] in listed:
+                    continue
+                ids = load(s["company_ids"])
+                ids = [i for i in ids if isinstance(i, str)] if isinstance(ids, list) else []
+                first = ids[0] if ids else None
+                name = con.execute("SELECT name FROM companies WHERE id=?", (first,)).fetchone() if first else None
+                social.append({"id": s["id"], "status": s["status"], "created_at": s["created_at"],
+                               "parent_run_id": s["parent_run_id"], "task_id": s["task_id"], "task_name": s["task_name"],
+                               "company_count": len(ids), "company_id": first, "company_name": name[0] if name else None})
+        return {"runs": runs[:limit], "runs_total": len(runs), "social_runs": social[:limit], "social_runs_total": len(social)}
+
     def active_runs(self):
         with self.connect() as con:
             return [self.row(r) for r in con.execute(
