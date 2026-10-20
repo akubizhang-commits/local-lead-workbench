@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { actionMessage } from "./errors";
 import { runTitle } from "./MarketRecheck";
-import { api, resetSession } from "./api";
+import { ApiError, api, resetSession } from "./api";
 import { CompanyForm, TaskForm } from "./forms";
 import { date, filtersQuery, type Filters } from "./helpers";
 import { nextFrame, useResource } from "./hooks";
@@ -13,7 +13,7 @@ import { RetentionMarker } from "./RetentionPanel";
 import { CompanyDetailPage } from "./pages/CompanyDetailPage";
 import { MarketsPage } from "./pages/MarketsPage";
 import { ReviewsPage } from "./pages/ReviewsPage";
-import { SettingsPage } from "./pages/SettingsPage";
+import { SettingsPage, backupLabel } from "./pages/SettingsPage";
 import type {
   Backup,
   Company,
@@ -23,6 +23,7 @@ import type {
   Task,
 } from "./types";
 import { Alert, Icon, Modal } from "./ui";
+import { RestoreBlocked } from "./RestoreBlocked";
 import { useNavigation } from "./useNavigation";
 import { workerStatus } from "./workerStatus";
 
@@ -78,8 +79,33 @@ export default function App() {
     setModal(null);
     setActionError("");
   }, [view, selected, filtersQuery(filters), page]);
-  const [restore, setRestore] = useState<Backup | null>(null);
+  const [restore, setRestoreState] = useState<Backup | null>(null);
   const [confirmRestore, setConfirmRestore] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [focusRound, setFocusRound] = useState(false);
+  const [restoreBlocked, setRestoreBlocked] = useState<Record<string, unknown> | null>(null);
+  function setRestore(backup: Backup | null) {
+    setRestoreState(backup);
+    setRestoreBlocked(null);
+  }
+  async function submitRestore(backup: Backup) {
+    if (restoring) return;
+    setRestoring(true);
+    setActionError("");
+    setRestoreBlocked(null);
+    try {
+      await api("/backups/restore", "POST", { name: backup.name });
+      resetSession();
+      setRestore(null);
+      setNotice("备份已恢复，正在重新读取资料");
+      setVersion((v) => v + 1);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "restore_blocked_runs") setRestoreBlocked(e.body || {});
+      else setActionError(actionMessage(e));
+    } finally {
+      setRestoring(false);
+    }
+  }
   const overview = useResource<Overview>("/overview", version, true);
   const tasks = useResource<Task[]>(
     view === "tasks" ? "/tasks?archived=include" : null,
@@ -366,7 +392,7 @@ export default function App() {
             </div>
           )}
           {actionError && <Alert>{actionError}</Alert>}
-          {view === "tasks" && (route.task || route.item) && <TaskActivityPage route={route} navigate={navigate} tasks={tasks.data||[]} version={version} worker={overview.data?.worker} busy={busy} act={act} refresh={refresh} openCompany={openCompany} openMarket={openMarket}/>}
+          {view === "tasks" && (route.task || route.item) && <TaskActivityPage focusRound={focusRound} onRoundFocused={() => setFocusRound(false)} route={route} navigate={navigate} tasks={tasks.data||[]} version={version} worker={overview.data?.worker} busy={busy} act={act} refresh={refresh} openCompany={openCompany} openMarket={openMarket}/>}
           {view === "tasks" && !route.task && !route.item && (
             <MarketsPage
               overview={overview}
@@ -476,7 +502,7 @@ export default function App() {
         <Modal
           title="确认恢复备份"
           onClose={() => {
-            if (!busy) setRestore(null);
+            if (!restoring) setRestore(null);
           }}
         >
           <div className="form-body">
@@ -486,7 +512,7 @@ export default function App() {
             <p>
               <strong>{restore.name}</strong>
             </p>
-            <p className="muted">备份时间：{date(restore.created_at)}</p>
+            <p className="muted">{backupLabel(restore)} · 备份时间：{date(restore.created_at)}</p>
             <label className="check-line">
               <input
                 type="checkbox"
@@ -495,24 +521,29 @@ export default function App() {
               />
               我确认恢复该备份，理解当前数据会被替换
             </label>
-            {actionError && <Alert>{actionError}</Alert>}
+            {restoreBlocked ? (
+              <RestoreBlocked
+                body={restoreBlocked}
+                onGo={(next) => {
+                  setRestore(null);
+                  setFocusRound(next.view !== "detail");
+                  navigate({ selected: null, page: 1, ...next, filters: route.filters, view: next.view || "tasks" });
+                }}
+              />
+            ) : (
+              actionError && <Alert>{actionError}</Alert>
+            )}
           </div>
           <footer>
-            <button disabled={busy} onClick={() => setRestore(null)}>
+            <button disabled={restoring} onClick={() => setRestore(null)}>
               取消
             </button>
             <button
               className="danger"
-              disabled={!confirmRestore || busy}
-              onClick={() =>
-                act(async () => {
-                  await api("/backups/restore", "POST", { name: restore.name });
-                  resetSession();
-                  setRestore(null);
-                }, "备份已恢复，正在重新读取资料")
-              }
+              disabled={!confirmRestore || restoring}
+              onClick={() => void submitRestore(restore)}
             >
-              {busy ? "恢复中…" : "确认恢复"}
+              {restoring ? "恢复中…" : "确认恢复"}
             </button>
           </footer>
         </Modal>

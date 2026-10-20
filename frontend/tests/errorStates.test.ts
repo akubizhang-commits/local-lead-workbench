@@ -108,3 +108,8 @@ test('Resource: not_found body starts with "请求未完成："',async()=>{
  assert.match(html,/<h3>记录已更新或移除<\/h3><p>请求未完成：计划不存在<\/p>/);
  assert.doesNotMatch(html,/重新连接/);
 });
+test('restore refusals and export_running are shown without the conflict hint',()=>{
+ for(const code of ['restore_blocked_runs','restore_busy','export_running'])
+  assert.equal(actionMessage(new ApiError('原文',409,[],code)),'原文',code);
+ assert.match(actionMessage(new ApiError('原文',409,[],'conflict')),/资料已变化/);
+});

@@ -30,7 +30,7 @@ test('422 detail arrays become per-field text without JSON or English prefixes',
 });
 
 test('string detail is shown as is; unknown shapes fall back to the status',async()=>{
- assert.equal((await failure({detail:'请先取消活动任务再恢复'},409)).message,'请先取消活动任务再恢复');
+ assert.equal((await failure({detail:'有排队中或运行中的轮次，暂停或等待结束后即可恢复',code:'restore_blocked_runs'},409)).message,'有排队中或运行中的轮次，暂停或等待结束后即可恢复');
  assert.equal(parseErrorDetail(500,{}).message,'请求失败（500）');
  assert.equal(parseErrorDetail(422,{detail:[{loc:['query','page'],msg:'Input should be valid'}]}).message,
   '「page」：输入不符合要求（Input should be valid）');

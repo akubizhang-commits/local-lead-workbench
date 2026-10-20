@@ -1,3 +1,4 @@
+import {useEffect,useRef} from 'react';
 import {api} from './api';
 import {useResource} from './hooks';
 import {date, label, runActions, runMessage} from './helpers';
@@ -20,11 +21,16 @@ export function roundTitle(run:Pick<Run,'id'|'kind'|'task_id'>,{rounds,standalon
  return index<0?'本轮':`本轮（第 ${rounds.length-index} 轮）`;
 }
 /** 本轮控制条：状态、历时、说明和暂停 / 继续 / 取消本轮（P1-16 “前往暂停”的落点）。 */
-export function RoundControls({runId,rounds,standalone=false,version,busy,act,retryPending=0,onViewNew}:{
+export function RoundControls({runId,rounds,standalone=false,version,busy,act,retryPending=0,onViewNew,focusOnLoad=false,onFocused}:{
+ focusOnLoad?:boolean;onFocused?:()=>void;
  runId:string;rounds:Pick<Run,'id'>[];standalone?:boolean;version:number;busy:boolean;act:Action;retryPending?:number;
  onViewNew?:(run:Run)=>void;
 }) {
  const res=useResource<Run>(`/runs/${encodeURIComponent(runId)}`,version,true,{keepStale:true});
+ const heading=useRef<HTMLHeadingElement>(null);
+ const loaded=!!res.data;
+ // Arriving from the restore panel (“前往暂停”): focus the control bar title once it has loaded.
+ useEffect(()=>{if(focusOnLoad&&loaded&&heading.current){heading.current.focus();onFocused?.();}},[focusOnLoad,loaded,onFocused]);
  if(res.errorInfo?.kind==='not_found'||res.errorInfo?.status===404)return <p className="muted round-missing">这一轮已不存在，可能已被备份恢复替换。</p>;
  const run=res.data;
  if(!run)return null;
@@ -35,7 +41,7 @@ export function RoundControls({runId,rounds,standalone=false,version,busy,act,re
  return <section className="panel round-controls" aria-labelledby={`round-${run.id}`}>
   <div className="round-controls-main">
    <div>
-    <h2 id={`round-${run.id}`} tabIndex={-1} data-focus-fallback="">{title}{title.endsWith('）')?'':' '}· <span className={`round-status tone-${TONE[run.status]||'muted'}`}>{label(run.status)}</span></h2>
+    <h2 ref={heading} id={`round-${run.id}`} tabIndex={-1} data-focus-fallback="">{title}{title.endsWith('）')?'':' '}· <span className={`round-status tone-${TONE[run.status]||'muted'}`}>{label(run.status)}</span></h2>
     <p className="muted">{date(run.created_at)} 开始 · 已历时 {duration(run.created_at,run.finished_at)}（含等待和暂停）{retryPending>0&&` · 待重试 ${retryPending} 项`}</p>
     {message&&<p className="round-message">{message}</p>}
    </div>

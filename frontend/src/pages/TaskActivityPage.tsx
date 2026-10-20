@@ -57,7 +57,8 @@ export function MarketHeadingActions({task,version,busy,act,openMarket,onOpenMar
    onSaved={()=>{setEditing(false);act(async()=>undefined,'市场关键词已更新，下一轮起生效');}} onOpenMarket={id=>{setEditing(false);onOpenMarket(id);}}/></Modal>}
  </>;
 }
-export function TaskActivityPage({route,navigate,tasks,version,worker,busy,act,refresh,openCompany,openMarket}: {
+export function TaskActivityPage({route,navigate,tasks,version,worker,busy,act,refresh,openCompany,openMarket,focusRound=false,onRoundFocused}: {
+ focusRound?:boolean;onRoundFocused?:()=>void;
  route:Route;navigate:(route:Route)=>void;tasks:Task[];version:number;worker:Overview['worker'];busy:boolean;act:Action;refresh:()=>void;
  openCompany:(id:string)=>void;openMarket:(id:string,filters?:Partial<Filters>)=>void;
 }) {
@@ -88,7 +89,7 @@ export function TaskActivityPage({route,navigate,tasks,version,worker,busy,act,r
  const retryPending=workflow&&workflow.run_id===controlRun?workflow.stages.find(s=>s.key==='discovery')?.retry_pending??0:0;
  return <>
   {controlRun&&<RoundControls key={controlRun} runId={controlRun} rounds={rounds} standalone={standalone} version={version} busy={busy} act={act}
-   retryPending={retryPending} onViewNew={task?run=>openMarket(task.id,{run_id:run.id,segment:'new'}):undefined}/>}
+   retryPending={retryPending} focusOnLoad={focusRound} onFocused={onRoundFocused} onViewNew={task?run=>openMarket(task.id,{run_id:run.id,segment:'new'}):undefined}/>}
   {task?.archived_at&&<p className="alert" role="status">此市场已归档：不会开始新一轮，也不会按计划自动更新。企业和历史记录都已保留。</p>}
   {task&&!task.archived_at&&task.needs_keywords&&<p className="hint">这个市场创建时没有填写关键词，目前按旧规则使用服装行业默认检索词（{(task.legacy_terms||[]).join('、')}）。建议点“编辑市场”补充关键词或选择预设行业。</p>}
   {task&&<section className="panel activity-overview" aria-label="市场概况">
