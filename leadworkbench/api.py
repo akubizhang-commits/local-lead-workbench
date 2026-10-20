@@ -257,6 +257,29 @@ class TaskInput(TaskSocialSettingsInput):
         return self
 
 
+class RecheckInput(Input):
+    """Exactly one mode: up to 20 chosen companies, or the server's never-attempted selection (D2, D10)."""
+    company_ids: list[Annotated[str, Field(min_length=1, max_length=64)]] | None = Field(default=None, max_length=200)
+    select: Literal["never_attempted"] | None = None
+
+    @field_validator("company_ids")
+    @classmethod
+    def at_most_twenty(cls, value):
+        if value is not None:
+            value = list(dict.fromkeys(value))
+            if not value:
+                raise ValueError("请至少选择一家企业")
+            if len(value) > 20:
+                raise ValueError("一次最多复核 20 家企业")
+        return value
+
+    @model_validator(mode="after")
+    def one_mode(self):
+        if (self.company_ids is None) == (self.select is None):
+            raise ValueError("请选择要复核的企业，或选择复核尚未读取过官网的企业（二选一）")
+        return self
+
+
 class MarketPatch(Input):
     """Keyword edit; regions cannot change (extra=forbid -> 422 on body.<field>, design §6.1).
     No preset expansion here: the Store expands with the market's stored company types (R3-1)."""
@@ -729,6 +752,14 @@ def create_app(data_dir=None, *, allowed_hosts=None):
     @app.get("/api/tasks")
     def tasks(archived: Literal["exclude", "only", "include"] = "exclude"):
         return store.tasks(archived)
+
+    @app.post("/api/tasks/{id}/website-recheck", status_code=202)
+    def website_recheck_create(id: str, body: RecheckInput):
+        return store.create_website_recheck(id, body.company_ids, body.select)
+
+    @app.get("/api/tasks/{id}/website-recheck")
+    def website_recheck(id: str):
+        return store.website_recheck(id)
 
     @app.post("/api/tasks/{id}/archive")
     def archive_task(id: str):

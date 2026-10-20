@@ -50,6 +50,8 @@ MISSING = [
     ("PATCH", "/api/tasks/missing", {"keywords": ["x"]}),
     ("POST", "/api/tasks/missing/archive", None),
     ("POST", "/api/tasks/missing/restore", None),
+    ("POST", "/api/tasks/missing/website-recheck", {"select": "never_attempted"}),
+    ("GET", "/api/tasks/missing/website-recheck", None),
     ("GET", "/api/export-jobs/missing", None),
     ("POST", "/api/export-jobs/missing/cancel", None),
     ("GET", "/api/export-jobs/missing/file", None),

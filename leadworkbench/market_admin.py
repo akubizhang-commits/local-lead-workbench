@@ -21,6 +21,7 @@ MARKET_EXISTS = "已有相同地区和关键词的目标市场「{name}」，请
 MARKET_BUSY = "该市场还有未结束的轮次（排队、运行或暂停中），请先取消后再归档。已取得的企业会保留。"
 RECHECK_RUNNING = "该市场已有批量官网复核在进行中（已完成 {done} / {total} 家），请等待完成或取消后再发起。"
 ACTIVE = ("queued", "running", "paused")
+RECHECK_LIMIT = 20  # D2
 KEYWORDS_REASON = "用户修改关键词；下一轮起按新关键词检索，已有企业保留"
 
 
@@ -406,3 +407,86 @@ class MarketAdminMixin:
                 log.info("market restored", extra={"event": "market_restored", "market_id": id})
         return self.task(id)
 
+    # ---- batch website re-check (design §6.3; D2, D10) ---------------------------
+
+    def _queued_refresh_run(self, con, company_id):
+        """The unfinished run whose refresh queue already holds this company, or None."""
+        return con.execute(f"""SELECT r.* FROM work_items w JOIN runs r ON r.id=w.run_id
+            WHERE w.stage='refresh' AND w.target=? AND w.state IN ('pending','running')
+            AND r.status IN ({','.join('?' * len(ACTIVE))}) ORDER BY r.created_at,r.rowid LIMIT 1""",
+                           (company_id, *ACTIVE)).fetchone()
+
+    def _never_attempted(self, con, market_id):
+        hidden = ""
+        if self._materialize_exclusions(con, [market_id]):
+            hidden = "AND NOT EXISTS(SELECT 1 FROM temp.excluded_ids x WHERE x.market_id=m.market_id AND x.company_id=c.id)"
+        return [r[0] for r in con.execute(f"""SELECT c.id FROM market_memberships m JOIN companies c ON c.id=m.company_id
+            WHERE m.market_id=? AND c.merged_into IS NULL AND c.status!='do_not_contact' AND COALESCE(c.website,'')<>''
+            AND c.last_checked_at IS NULL AND NOT EXISTS (
+                SELECT 1 FROM work_items w WHERE w.stage='refresh' AND w.target=c.id
+                AND w.state NOT IN ('pending','running','cancelled','skipped'))
+            {hidden} ORDER BY m.first_seen,c.id LIMIT {RECHECK_LIMIT}""", (market_id,))]
+
+    def create_website_recheck(self, id, company_ids=None, select=None):
+        with self.connect() as con:
+            self._begin(con)
+            if not con.execute("SELECT 1 FROM tasks WHERE id=?", (id,)).fetchone():
+                raise NotFound("市场不存在")
+            self._ensure_not_archived(con, id)
+            active = self._active_recheck(con, id)
+            if active:
+                raise self._recheck_conflict(active)
+            ids = self._never_attempted(con, id) if select == "never_attempted" else list(dict.fromkeys(company_ids or []))
+            if not ids:
+                raise Conflict("所选企业都不需要复核：没有尚未读取过官网的企业。", code="nothing_to_recheck")
+            queued, skipped = [], []
+            for company_id in ids:
+                company = con.execute("SELECT id,name,website,status FROM companies WHERE id=?", (company_id,)).fetchone()
+                member = company and con.execute("SELECT 1 FROM market_memberships WHERE market_id=? AND company_id=?",
+                                                 (id, company_id)).fetchone()
+                reason = ("不属于此市场" if not member else "无官网" if not company["website"]
+                          else "已标记拒绝联系" if company["status"] == "do_not_contact"
+                          else "已在复核队列中" if self._queued_refresh_run(con, company_id) else None)
+                if reason:
+                    skipped.append({"company_id": company_id, "name": company["name"] if company else "", "reason": reason})
+                else:
+                    queued.append(company_id)
+            if not queued:
+                counts = {}
+                for item in skipped:
+                    counts[item["reason"]] = counts.get(item["reason"], 0) + 1
+                summary = "、".join(f"{reason} {n} 家" for reason, n in counts.items())
+                raise Conflict(f"所选企业都不需要复核：{summary}。", code="nothing_to_recheck")
+            run_id, now = ident(), stamp()
+            snapshot = {"batch": "website_recheck", "market_id": id, "company_ids": queued}
+            progress = {"done": 0, "total": len(queued), "discovered": 0, "enrichment_done": 0,
+                        "enrichment_total": len(queued)}
+            con.execute("""INSERT INTO runs(id,task_id,kind,company_id,status,progress,message,error,created_at,finished_at,snapshot)
+                VALUES(?,NULL,'refresh',NULL,'queued',?,?,NULL,?,NULL,?)""",
+                        (run_id, canonical(progress), "等待本地 worker", now, canonical(snapshot)))
+            con.executemany("INSERT INTO work_items(id,run_id,stage,target,state,result) VALUES(?,?,'refresh',?,'pending',NULL)",
+                            [(ident(), run_id, company_id) for company_id in queued])
+            con.execute("INSERT INTO market_recheck_runs(run_id,market_id,requested,skipped,created_at) VALUES(?,?,?,?,?)",
+                        (run_id, id, len(ids), canonical(skipped), now))
+        log.info("website recheck created", extra={"event": "website_recheck_created", "market_id": id,
+                                                   "queued": len(queued), "skipped": len(skipped)})
+        return {"run_id": run_id, "queued": len(queued), "skipped": skipped}
+
+    def website_recheck(self, id):
+        """Latest batch re-check of a market with its progress, or None (read-only)."""
+        with self.connect() as con:
+            if not con.execute("SELECT 1 FROM tasks WHERE id=?", (id,)).fetchone():
+                raise NotFound("市场不存在")
+            batch = con.execute("""SELECT b.skipped,b.created_at,r.id,r.status,r.finished_at FROM market_recheck_runs b
+                JOIN runs r ON r.id=b.run_id WHERE b.market_id=? ORDER BY b.created_at DESC,b.rowid DESC LIMIT 1""",
+                                (id,)).fetchone()
+            if not batch:
+                return None
+            items = con.execute("SELECT state,result FROM work_items WHERE run_id=? AND stage='refresh'",
+                                (batch["id"],)).fetchall()
+        summaries = [(json.loads(r["result"] or "{}").get("summary") or {}) for r in items]
+        return {"run_id": batch["id"], "status": batch["status"], "total": len(items),
+                "done": sum(r["state"] in {"succeeded", "partial", "failed", "blocked"} for r in items),
+                "skipped": json.loads(batch["skipped"] or "[]"), "created_at": batch["created_at"],
+                "finished_at": batch["finished_at"], "pages_checked": sum(s.get("pages_checked", 0) for s in summaries),
+                "entries_added": sum(s.get("entries_added", 0) for s in summaries)}

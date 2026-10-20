@@ -1237,6 +1237,10 @@ class Store(MarketAdminMixin, MarketSocialMixin, RunActivityMixin, MarketStoreMi
             raise Invalid("企业没有可核验官网")
         with self.connect() as con:
             self._begin(con)
+            # Already in an unfinished refresh queue (single, batch or market round): no second run.
+            queued = self._queued_refresh_run(con, id)
+            if queued:
+                return {**self.row(queued), "already_queued": True}
             return self._start(con, company_id=id)
 
     def runs(self):

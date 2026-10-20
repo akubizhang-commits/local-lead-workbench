@@ -8,8 +8,10 @@ def setup(store):
     company = store.manual_company('Supplier', 'https://example.org')
     other = store.manual_company('Other', 'https://other.example')
     run = store.start_task(task['id'])
-    store.add_enrichment(run['id'],company['id'])
+    # Single re-check first: once the company sits in the market round's queue, refresh() reuses that
+    # round (already_queued, design §6.3) instead of creating a standalone run.
     manual = store.refresh(company['id'])
+    store.add_enrichment(run['id'],company['id'])
     store.refresh(other['id'])
     with store.connect() as con:
         con.execute('INSERT INTO market_memberships VALUES(?,?,?,?,?,?)',(task['id'],company['id'],'2026-01-01','2026-01-01',run['id'],run['id']))
