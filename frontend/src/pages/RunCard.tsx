@@ -1,5 +1,5 @@
 import { api } from "../api";
-import { date, label, runActions } from "../helpers";
+import { date, label, runActions, runMessage } from "../helpers";
 import { RunWarnings } from "../RunWarnings";
 import { runTitle } from "../MarketRecheck";
 import { RelocateNotice } from "../MarketSummary";
@@ -50,7 +50,7 @@ export function RunCard({
         <Badge value={run.status} />
         <small className="muted">{date(run.created_at)}</small>
       </div>
-      <p>{run.message || "等待运行状态更新"}</p>
+      <p>{runMessage(run.message) || "等待运行状态更新"}</p>
       {run.kind === "discovery" && (
         <RelocateNotice coverage={run.coverage} runId={run.id} busy={busy} act={act} />
       )}

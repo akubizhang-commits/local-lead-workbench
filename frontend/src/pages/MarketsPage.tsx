@@ -1,7 +1,7 @@
 import { api } from "../api";
 import { startConfirmText } from "../QueryPreview";
 import { RESTORED } from "./TaskActivityPage";
-import { date } from "../helpers";
+import { date, runMessage } from "../helpers";
 import type { Overview, Task } from "../types";
 import { Badge, Empty, Icon } from "../ui";
 import { WorkerHealth } from "../WorkerHealth";
@@ -40,7 +40,7 @@ export function MarketsPage({
       />
       {overview.data?.maps_policy && <section className="panel" aria-label="地图访问节奏">
         <strong>地图采集 · 低速模式</strong>
-        <p>{overview.data.maps_policy.message}</p>
+        <p>{runMessage(overview.data.maps_policy.message)}</p>
         {overview.data.maps_policy.manual_required && <>
           <p>冷却结束后，请确认访问已恢复再继续。活动任务的保留队列会自动继续；已暂停或结束的轮次需在任务列表点击继续。</p>
           <button disabled={busy || overview.data.maps_policy.retry_after_seconds > 0}

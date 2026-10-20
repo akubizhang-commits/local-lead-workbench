@@ -2,7 +2,7 @@ import { useState } from "react";
 import {api} from '../api';
 import {TaskWorkflow,type Workflow} from "../TaskWorkflow";
 import { useResource } from '../hooks';
-import { date, label, safeUrl } from '../helpers';
+import { date, label, runMessage, safeUrl } from '../helpers';
 import type { Overview, Run, Task } from '../types';
 import {backFromRefreshDetail,openRefreshDetail,type Route} from '../navigation';
 import type {Filters} from '../helpers';
@@ -52,7 +52,7 @@ export function TaskActivityPage({route,navigate,tasks,version,worker,busy,act,r
  if(route.item) return <Resource {...detail} retry={refresh}>{detail.data&&<>
    <section className="panel"><div className="panel-heading"><h2>{detail.data.company_name||'关联企业信息缺失'}</h2><button onClick={()=>openCompany(detail.data!.company_id)}>查看企业资料</button></div><p>复核状态：{itemStatus(detail.data)}</p>
    <p>读取 {detail.data.summary.pages_checked??'—'} 页{detail.data.summary.entries_added!=null&&` · 新增联系入口 ${detail.data.summary.entries_added} 个（去重后）`} · 原始提取 {detail.data.summary.contacts_found??'—'} 条（未去重） · 待扫描 {detail.data.summary.remaining??'—'} 个链接</p>
-   <p>{detail.data.message||(detail.data.state==='succeeded'?'本次复核已完成，已取得的资料已保存。':'暂无复核说明')}</p>
+   <p>{runMessage(detail.data.message)||(detail.data.state==='succeeded'?'本次复核已完成，已取得的资料已保存。':'暂无复核说明')}</p>
    {safeUrl(detail.data.website)&&<a href={safeUrl(detail.data.website)} target="_blank" rel="noreferrer">企业官网 ↗</a>}
    {!!detail.data.warnings.length&&<RunWarnings error={detail.data.warnings.join('；')}/>}
    <h3>网页处理明细</h3><p className="muted">以下保留历次尝试，包括重试前的失败；当前结果以顶部复核状态为准。</p>
@@ -73,7 +73,7 @@ export function TaskActivityPage({route,navigate,tasks,version,worker,busy,act,r
    {list.data?.workflow&&<TaskWorkflow flow={list.data.workflow} worker={worker} busy={busy} onViewCompanies={task?()=>openMarket(task.id):undefined}
      onOpenSettings={()=>navigate({view:'settings',selected:null,filters:route.filters,page:1})} onSocialChange={refresh}
      onResume={()=>act(()=>api('/maps/resume','POST',{}),'已解除地图暂停，保留队列将逐个继续')}/>}
-   {!!list.data?.rounds?.length&&<section className="panel activity-rounds"><details><summary>市场运行轮次（{list.data.rounds.length}）</summary><div className="table-wrap"><table className="rounds-table"><thead><tr><th>开始时间</th><th>类型</th><th>状态</th><th>运行结果</th><th>操作</th></tr></thead><tbody>{list.data.rounds.map(run=><tr key={run.id}><td>{date(run.created_at)}</td><td>{label(run.kind)}</td><td><Badge value={run.status}/></td><td>{run.message}</td><td><button className="text-button" onClick={()=>setRoundId(run.id)}>查看轮次</button></td></tr>)}</tbody></table></div></details></section>}
+   {!!list.data?.rounds?.length&&<section className="panel activity-rounds"><details><summary>市场运行轮次（{list.data.rounds.length}）</summary><div className="table-wrap"><table className="rounds-table"><thead><tr><th>开始时间</th><th>类型</th><th>状态</th><th>运行结果</th><th>操作</th></tr></thead><tbody>{list.data.rounds.map(run=><tr key={run.id}><td>{date(run.created_at)}</td><td>{label(run.kind)}</td><td><Badge value={run.status}/></td><td>{runMessage(run.message)}</td><td><button className="text-button" onClick={()=>setRoundId(run.id)}>查看轮次</button></td></tr>)}</tbody></table></div></details></section>}
    {roundId&&list.data?.rounds?.find(r=>r.id===roundId)&&<Modal title="运行轮次详情" onClose={()=>setRoundId(null)}><div className="form-body"><RunCard run={list.data.rounds.find(r=>r.id===roundId)!} worker={worker} busy={busy} act={act}/></div><footer><button onClick={()=>setRoundId(null)}>关闭</button><button className="primary" onClick={()=>{change({run:roundId,page:1});setRoundId(null);}}>查看该轮进度</button></footer></Modal>}
    <section className="panel activity-results"><div className="panel-heading"><h2>资料复核任务列表</h2><span className="muted">共 {list.data?.total??'—'} 条</span></div><p className="muted">每行是一次企业复核，点击名称查看详情。</p>
    <div className="list-toolbar" aria-label="资料复核筛选"><label className="field"><span>复核状态</span><select value={route.activityStatus||''} onChange={e=>change({activityStatus:e.target.value||undefined,page:1})}><option value="">全部状态</option>{['pending','running','succeeded','partial','failed','blocked'].map(s=><option key={s} value={s}>{s==='pending'?'排队中':s==='succeeded'?'已完成':label(s)}</option>)}</select></label>

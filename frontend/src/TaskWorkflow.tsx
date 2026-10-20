@@ -1,5 +1,5 @@
 import {useId, useState} from 'react';
-import {date, label, mapsReasonText} from './helpers';
+import {date, label, mapsReasonText, runMessage} from './helpers';
 import {WorkflowHint} from './WorkflowHint';
 import {SocialPlatformGates,SocialWorkflowDetails,socialHasWork,socialWaiting,type WorkflowSocial} from './WorkflowSocial';
 import {WorkflowWebsiteDetails,websiteDetailsTip,type WebsiteSummary} from './WorkflowWebsite';
@@ -66,7 +66,7 @@ function StageRow({stage:s,index,flow,offline,busy,onOpenSettings,onSocialChange
  const unattempted=s.unattempted??Math.max(0,s.pending-retry);
  const text=offline&&remaining?'后台离线':fallback&&complete?'已完成':stageText(s,flow);
  const detailLabel=website?'官网检索明细':social?(issues?`平台明细 · 需关注 ${issues} 家`:'平台明细'):issues?`需关注 ${issues} 项`:retry?`待重试 ${retry} 项`:fallback?'文字检索说明':waiting?'等待原因':'查看明细';
- const tip=website?websiteDetailsTip(s.website_summary,s.processed):[recovery?.reason,...(social?flow.social?.platforms.filter(p=>p.reason).map(p=>p.reason)||[]:[]),...(s.details||[])].filter(Boolean).join('；')||
+ const tip=website?websiteDetailsTip(s.website_summary,s.processed):[recovery?.reason,...(social?flow.social?.platforms.filter(p=>p.reason).map(p=>p.reason)||[]:[]),...(s.details||[])].filter(Boolean).map(runMessage).join('；')||
   (issues?`部分完成 ${s.partial} · 失败 ${s.failed} · 受阻 ${s.blocked}。已取得的结果已保存。`:
    `成功 ${s.succeeded} · 待处理 ${s.pending} · 处理中 ${s.running}。`);
  return <li className={`workflow-stage${s.running&&!offline&&!interrupted?' is-active':''}${issues?' has-issues':''}`}>
@@ -108,10 +108,10 @@ function StageRow({stage:s,index,flow,offline,busy,onOpenSettings,onSocialChange
     {s.failed>0&&<span className="workflow-warning">失败 <strong>{s.failed}</strong></span>}
     {s.blocked>0&&<span className="workflow-warning">受阻 <strong>{s.blocked}</strong></span>}
    </div>
-   {s.details?.map(detail=><p className="workflow-warning" key={detail}>{detail}</p>)}
+   {s.details?.map(detail=><p className="workflow-warning" key={detail}>{runMessage(detail)}</p>)}
    {recovery&&<>
-    <p>{recovery.message}</p>
-    {recovery.reason&&<p>原因：{recovery.reason}</p>}
+    <p>{runMessage(recovery.message)}</p>
+    {recovery.reason&&<p>原因：{runMessage(recovery.reason)}</p>}
     {recovery.next_attempt_at&&<p>下次自动尝试：{date(recovery.next_attempt_at)}<small>后台在线时，到期后按队列逐个处理。</small></p>}
     {waiting&&<p>连续恢复已尝试 {recovery.retries_completed} 次 · 最多自动恢复 {recovery.max_auto_retries} 次</p>}
    </>}
@@ -145,9 +145,9 @@ export function TaskWorkflow({flow,worker,onResume,onViewCompanies,busy,onOpenSe
   {!flow.social_only&&flow.social&&<p className="workflow-social-results">社媒账号 <strong>{flow.social.accounts_found.toLocaleString()}</strong> 个 · 已读取帖子 <strong>{flow.social.posts_found.toLocaleString()}</strong> 条</p>}
   <div className={`workflow-current${offline?' is-offline':''}`} role="status">
    <span className="workflow-current-label">{offline?'等待后台':active?'当前进展':'本轮结果'}</span>
-   <div><strong>{offline?'后台离线，任务暂时无法推进':flow.current}</strong>
+   <div><strong>{offline?'后台离线，任务暂时无法推进':runMessage(flow.current)}</strong>
    {offline&&<p>已保留进度，重新启动后台后可恢复处理。</p>}
-   {!flow.social_only&&!recovery&&flow.maps_wait&&flow.maps_wait!==flow.current&&<p>{flow.maps_wait}</p>}
+   {!flow.social_only&&!recovery&&flow.maps_wait&&flow.maps_wait!==flow.current&&<p>{runMessage(flow.maps_wait)}</p>}
    </div>
   </div>
   <div className="workflow-guide"><span>阶段进展{parallel?' · 3A 官网与 3B 社媒并行补全':flow.social_only?' · 仅社媒补充轮次':''}</span><span className="workflow-legend"><span><i className="workflow-track-success"/>成功</span><span><i className="workflow-track-issues"/>需关注</span><span><i/>待执行</span></span></div>
@@ -159,7 +159,7 @@ export function TaskWorkflow({flow,worker,onResume,onViewCompanies,busy,onOpenSe
    </li>
   </ol>
   {recovery?.manual_required&&<div className="workflow-manual">
-   <div><strong>地图检索需要手动恢复</strong><p>{recovery.reason||recovery.message}{recovery.retry_after_seconds>0&&` · 冷却剩余${Math.ceil(recovery.retry_after_seconds/60)}分钟`}</p></div>
+   <div><strong>地图检索需要手动恢复</strong><p>{runMessage(recovery.reason||recovery.message)}{recovery.retry_after_seconds>0&&` · 冷却剩余${Math.ceil(recovery.retry_after_seconds/60)}分钟`}</p></div>
    {onResume&&<button disabled={busy||offline||recovery.retry_after_seconds>0} onClick={onResume}>确认访问恢复，继续地图检索</button>}
   </div>}
   <div className="workflow-footer">

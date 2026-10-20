@@ -14,7 +14,39 @@ Object.assign(labels,{auto_closed:'已自动关闭',business_types_evidence:'业
 export function mapsReasonText(text:string|null|undefined,stopReason?:string|null):string {
  const value=text||'';
  if(!/[\u4e00-\u9fff]/.test(value)&&stopReason&&labels[stopReason])return labels[stopReason];
- return value;
+ return runMessage(value);
+}
+/**
+ * Known backend wording written into runs.message, work item messages, worker.problem, waiting_reason,
+ * maps_policy.message and workflow.current → user-facing wording (design §2.2 + review round 3 R1).
+ * Substring replacement (the backend appends “；社媒已处理 …” etc.); longest source first so a shorter
+ * source never consumes part of a longer one. Unknown text is returned unchanged.
+ */
+export const RUN_MESSAGE_MAP:ReadonlyArray<readonly [string,string]>=([
+ ['等待本地 worker','等待后台处理'], // db.py、market_admin.py
+ ['恢复中断任务','后台重启后继续处理'], // db.py
+ ['部分任务未完成，请查看原因','本轮部分未完成，请查看各阶段原因'], // db.py
+ ['worker 停止，等待恢复','后台已停止，重新启动后继续'], // work_item_executor.py
+ ['后台采集等待数据库初始化…','后台正在等待数据库初始化…'], // worker.py（worker.problem.message）
+ ['后台采集暂停：','后台已暂停：'], // worker.py（worker.problem.message）
+ ['旧任务已暂停，本期更新将延后；继续或取消旧任务后再调度','上一轮已暂停，本期自动更新会延后；到市场详情继续上一轮，等它结束后会按计划更新'], // market_admin.py（schedule.waiting_reason）
+ ['本轮检索任务预算已用尽','本轮检索预算已用尽'], // market_plan.py（exhaustion reason）
+ ['任务已暂停，等待手动继续','本轮已暂停，等待手动继续'], // task_workflow.py（workflow.current）
+ ['等待后台调度，本任务与其他任务轮流执行','等待后台处理，本轮和其他轮次轮流进行'], // task_workflow.py
+ ['社媒任务等待登录或连接处理','社媒补充等待登录或连接处理'], // task_workflow.py
+ ['社媒任务等待调度或平台访问间隔','社媒补充等待后台处理或平台访问间隔'], // task_workflow.py
+ ['本轮仍有待处理任务','本轮仍有待处理项'], // task_workflow.py
+ ['地图采集保护暂停：','地图检索保护暂停：'], // maps_policy.py
+ ['地图采集低速等待：','地图检索低速等待：'], // maps_policy.py
+ ['地图采集低速模式：','地图检索低速模式：'], // maps_policy.py
+ ['地图连接或采集进程异常','地图连接或检索程序异常'], // maps_policy.py
+ ['地图采集程序不可用','地图检索程序不可用'], // maps_policy.py
+ ['上次的地图采集进程','上次的地图检索程序'], // maps_guard.py（worker.problem.message）
+] as [string,string][]).sort((a,b)=>b[0].length-a[0].length);
+export function runMessage(msg:string|null|undefined):string {
+ let text=msg??'';
+ for(const [from,to] of RUN_MESSAGE_MAP)text=text.split(from).join(to);
+ return text;
 }
 export const label = (value?:string|null) => value ? labels[value] || value : '未记录';
 export const date = (value?:string|null) => value ? new Date(value).toLocaleString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}) : '尚未记录';
