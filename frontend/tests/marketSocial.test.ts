@@ -141,7 +141,7 @@ test('parallel stages use company counts and pending social prevents a terminal 
 test('social-only rounds omit maps, website, and planning stages even with legacy zero placeholders',async()=>{
  const h=await fixture({flow:workflow({social_only:true})});
  try{
-  assert.deepEqual([...document.querySelectorAll('.workflow-stage h3')].map(el=>el.textContent),['社媒检索与补全','结果汇总']);
+  assert.deepEqual([...document.querySelectorAll('.workflow-stage h3')].map(el=>el.textContent),['社媒补全','结果汇总']);
   assert.equal(document.querySelectorAll('.workflow-stages progress').length,1);
   assert.doesNotMatch(document.querySelector('.workflow-guide')!.textContent!,/并行/);
  }finally{await h.cleanup();}
