@@ -8,6 +8,8 @@ Nothing here runs at startup.
 from __future__ import annotations
 import hashlib
 import logging
+import re
+from urllib.parse import urlsplit
 from . import review_policy
 from .errors import DomainError
 from .market_store import stamp
@@ -20,6 +22,21 @@ RULES = (
 )
 LABELS = dict(RULES)
 SAMPLES = 5
+_GOOGLE_HOST = re.compile(r"(?:www\.)?google(?:\.[a-z]{2,3}){1,2}")
+_MAPS_GOOGLE_HOST = re.compile(r"maps\.google(?:\.[a-z]{2,3}){1,2}")
+
+
+def is_maps_url(url):
+    """Google Maps links: google.*/maps, maps.google.*, maps.app.goo.gl and goo.gl/maps short links."""
+    try:
+        parts = urlsplit((url or "").strip())
+        host = (parts.hostname or "").lower()
+    except ValueError:
+        return False
+    path = parts.path.lower()
+    maps_path = path == "/maps" or path.startswith("/maps/")
+    return bool(host == "maps.app.goo.gl" or _MAPS_GOOGLE_HOST.fullmatch(host)
+                or (host == "goo.gl" and maps_path) or (_GOOGLE_HOST.fullmatch(host) and maps_path))
 
 
 def _rule(review):
@@ -27,7 +44,7 @@ def _rule(review):
     field, old, new = review["field"], review["old_value"], review["new_value"]
     if field == "phone" and review_policy.phones_equivalent(old, new, review["country"]):
         return "phone_format"
-    if (field == "name" and "google.com/maps" not in (review["source_url"] or "")
+    if (field == "name" and not is_maps_url(review["source_url"])
             and review_policy.website_name_verdict(old, new) in {"equivalent", "unrelated"}):
         return "name_title"
     if field == "business_types" and review_policy.business_types_add_nothing(old, new):

@@ -75,7 +75,7 @@ test('market form without keywords or a preset asks for one of them in Chinese',
   const {TaskForm}=await import('../src/forms.tsx');
   await h.act(async()=>h.root.render(createElement(TaskForm,{onDone:()=>{},onCancel:()=>{}})));
   await h.act(async()=>{await new Promise(resolve=>setTimeout(resolve,15));});
-  assert.match(document.body.textContent!,/企业类型用于市场命名和筛选，不会自动生成检索词/);
+  assert.match(document.body.textContent!,/只选企业类型不会生成检索词；选择预设行业时，会按所选企业类型生成对应检索词/);
   assert.doesNotMatch(document.body.textContent!,/服装行业默认检索词/);
   await h.act(async()=>{document.querySelector('form')!.dispatchEvent(new h.dom.window.Event('submit',{bubbles:true,cancelable:true}));});
   assert.equal(document.querySelector('[role="alert"]')!.textContent,'请填写检索关键词，或从预设行业中选择一个');

@@ -32,7 +32,7 @@ Change `{id,company_id,company_name,field,old_value,new_value,created_at,reason}
 `GET /api/changes` -> Change[].
 
 `GET /api/schedules` -> `[{id,task_id,company_id,kind,interval_months,timezone,next_due_at,enabled}]`.
-`POST /api/schedules` body `{task_id?:string,company_id?:string,kind:"discovery"|"refresh",interval_months:3,timezone:"Asia/Shanghai",enabled:true}` -> schedule. Exactly one target.
+`POST /api/schedules` body `{task_id?:string,company_id?:string,kind:"discovery"|"refresh",interval_months?:number,timezone:"Asia/Shanghai",enabled:true}` -> schedule. Exactly one target. `interval_months` may be omitted: a market plan (`task_id`, `kind:"discovery"`) defaults to 1 month, a company re-check plan (`company_id`, `kind:"refresh"`) defaults to 3 months. Example market plan: `{task_id:"<market id>",kind:"discovery",timezone:"Asia/Shanghai",enabled:true}` (monthly); example company re-check: `{company_id:"<company id>",kind:"refresh",interval_months:3,timezone:"Asia/Shanghai",enabled:true}`.
 `PATCH /api/schedules/{id}` body `{enabled?,interval_months?,timezone?}` (at least one) -> schedule; one enabled plan per market (409 `schedule_exists`).
 
 `GET /api/settings` -> `{data_dir,version,network_mode:"direct-public",paid_services:false,ai_enabled:false}`.

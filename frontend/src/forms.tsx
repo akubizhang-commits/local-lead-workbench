@@ -121,7 +121,7 @@ export function TaskForm({onDone,onCancel}:{onDone:(task:Task)=>void;onCancel:()
         <fieldset className="wide" {...invalid(error,'company_types',errorId)}><legend>目标企业类型</legend><div className="checks">
           {[['wholesale','批发商'],['retail','零售商'],['import','进口贸易商']].map(([value,title])=>
             <label key={value}><input type="checkbox" name="company_types" value={value} defaultChecked={value==='wholesale'}/>{title}</label>)}
-        </div><p className="hint">企业类型用于市场命名和筛选，不会自动生成检索词。</p></fieldset>
+        </div><p className="hint">企业类型用于市场命名和筛选。只选企业类型不会生成检索词；选择预设行业时，会按所选企业类型生成对应检索词。</p></fieldset>
         <KeywordFields industry={industry} onIndustry={setIndustry} companyTypes={watched.types}
           invalidProps={invalid(error,'keywords',errorId)}/>
         <QueryPreview body={watched.body} onReady={setReadyKey}/>

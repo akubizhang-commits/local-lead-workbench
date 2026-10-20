@@ -140,7 +140,7 @@ X-Local-Token: <当前实例token>
 | 模型 | 当前字段与附加规则 |
 |---|---|
 | TaskInput | `mode="market"`；name兼容可选、最长120且dump排除，服务端生成名称；country默认US，去空格转大写、两个ASCII英文字母；state/city必填1–120；keywords默认[]、最多30，每项去空格后去重，空白或原长度>160拒绝；company_types默认[]、最多8，枚举wholesale/retail/import；二者至少一个非空；auto_enrich默认true。兼容`limit>=1`但dump排除，实际市场limit=0，不控制企业总量；社媒选项见下行 |
-| TaskInput / TaskSocialSettingsInput 的社媒选项 | `auto_social=false`、`social_platforms=["facebook","instagram","x"]`、`social_read_posts=false`；平台限三枚举、去重、最多3项；auto_social为true时至少一个平台。新表单显式传true，不改变后端/旧客户端false默认 |
+| TaskInput / TaskSocialSettingsInput 的社媒选项 | `auto_social=false`、`social_platforms=["facebook","instagram","x"]`、`social_read_posts=false`；平台限三枚举、去重、最多3项；auto_social为true时至少一个平台。新建市场表单默认也不勾选（2026-10 P1 第二批起），用户手动开启时才传true；已有市场的设置不变 |
 | MarketSocialRunInput | `social_platforms` 与 `social_read_posts` 同上；显式补充必须至少一个平台，不包含未来自动开关 |
 | CompanyInput | name必填1–200；website必填1–4096，经`normalize_url`验证和规范化，不做真实访问；city默认""最长120；country默认US最长80，**没有TaskInput的国家代码验证器** |
 | CompanyPatch | revision必填≥1；fields默认{}，仅name/address/phone/website，值最长4096；name不能纯空白、非空website规范化；notes可省略/null/文本≤10000；status可null或四种企业状态；business_types可null或≤20项，每项去空格非空≤80并去重。null表示不修改对应可选字段；清空用""或[] |
@@ -535,7 +535,7 @@ Run.progress 增加 `social_total/social_done/social_accounts`；仅社媒父轮
 启动降级：`Store()` 初始化失败（只读目录、迁移失败等）时进程照常监听，`/api/session` 返回 200 并带 `X-Lead-Unavailable: <code>`，诊断包接口可用，其余 `/api/*` 返回 503 和中文原因。
 
 ### 维护闸门（第 7 节）
-普通 `/api/*` 共享进入闸门（恢复进行或排队时最多等 30 s，超时 503 `maintenance`）；`POST /api/backups/restore` 独占，写者优先，等在途请求最多 10 s，超时 409 `maintenance_busy`。`/api/session` 与 `POST /api/social/probe` 不经闸门（probe 只在读取设置时短暂共享，网络请求在闸门外）。不分页的 `GET /api/companies`、`GET /api/reviews` 数组改为流式输出，字节与原 JSON 相同，并带 `X-Total-Count`。
+普通 `/api/*` 共享进入闸门（恢复进行或排队时最多等 30 s，超时 503 `maintenance`）；`POST /api/backups/restore` 独占，写者优先，等在途请求最多 10 s，超时 409 `maintenance_busy`。`/api/session` 与 `POST /api/social/probe` 不经闸门（probe 只在读取设置时短暂共享，网络请求在闸门外）。`GET /api/companies`、`GET /api/reviews` 的不分页数组模式（当时改为流式输出并带 `X-Total-Count`）已在 2026-10 P1 第二批删除，现在只返回分页信封，见下方“分页”一节。
 
 ### 后台导出作业（第 8 节）
 | 方法 | 路径 | 说明 |
@@ -549,7 +549,7 @@ Run.progress 增加 `social_total/social_done/social_accounts`；仅社媒父轮
 作业在独立子进程（`python -m leadworkbench.export_job`）里生成，状态是 `exports/jobs/<id>.json` 文件，不在数据库里；子进程意外退出或 API 重启后，作业在下一次相关请求时标记为 failed / `interrupted`。API 关闭时向子进程发 SIGTERM，最多等 5 s，作业记为 cancelled。导出进行中恢复备份返回 409 `export_running`。当时保留的同步 `GET /api/exports` 已删除（2026-10 P1 第二批），见下方 P1 第二批一节。
 
 ### 分页（第 4 节）
-- `GET /api/reviews`：新增 `page`、`page_size`（1–200，默认 20）、`kind`。传任一个返回 `{items,total,page,page_size}`；都不传时的数组模式已删除（2026-10 P1 第二批），现在按 page=1、page_size=20 返回信封。排序改为 `created_at DESC, rowid DESC`（数组形式同样），原来同一时间记录顺序不确定的部分现在确定；超出最后一页返回空 items。
+- `GET /api/reviews`：新增 `page`、`page_size`（1–200，默认 20）、`kind`。传任一个返回 `{items,total,page,page_size}`；都不传时的数组模式已删除（2026-10 P1 第二批），现在按 page=1、page_size=20 返回信封。排序改为 `created_at DESC, rowid DESC`，原来同一时间记录顺序不确定的部分现在确定；超出最后一页返回空 items。
 - `GET /api/companies`：新增 `page`、`page_size`（默认 50）、`sort`；返回与 `/api/company-page` 相同的信封；不传参数时的数组模式已删除（2026-10 P1 第二批），按 page=1、page_size=50 返回信封。
 
 ### 诊断包

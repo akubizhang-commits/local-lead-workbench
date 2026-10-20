@@ -4,8 +4,8 @@ Run once by hand (the generated JSON is committed; tests never read .agents):
 
     .venv/bin/python tests/fixtures/build_review_noise.py [evidence_dir]
 
-evidence_dir defaults to the main repository's
-.agents/tasks/product-review-2026-10-17. Three groups (product, qa07, qa09) keep
+evidence_dir defaults to .agents/tasks/product-review-2026-10-17 under the
+repository that contains this file; pass it explicitly when running from a worktree. Three groups (product, qa07, qa09) keep
 the company starting values, minimal rebuilt HTML pages and the original pending
 review rows (the noise baseline, design §1 / §4.9). Phones are public business
 numbers; no contact emails are copied.
@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-DEFAULT = Path("/Users/zhangnu/outputs/local-lead-workbench/.agents/tasks/product-review-2026-10-17")
+DEFAULT = HERE.parents[1] / ".agents" / "tasks" / "product-review-2026-10-17"
 OUT = HERE / "review_noise_20261017.json"
 
 OMNI_TITLE = "Omni Sheet Metal – Roofing, Panel Systems, Ornamental, Sun Control, Silicon Valley"

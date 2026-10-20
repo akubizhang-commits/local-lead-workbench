@@ -1,4 +1,5 @@
 """Review noise over the 2026-10-17 real-evidence fixture (design §4.9)."""
+import pytest
 import review_noise_measure as measure
 
 
@@ -208,3 +209,35 @@ def test_cleanup_name_rule_skips_maps_sources(tmp_path):
                 ?,'x','pending','2026-10-18',?)""", (f"r{n}", company["id"], url, f"f{n}"))
     preview = store.review_cleanup_preview()
     assert [s["review_id"] for r in preview["rules"] for s in r["samples"]] == ["r1"]
+
+
+@pytest.mark.parametrize("url", [
+    "https://www.google.com/maps/place/omni", "https://google.com/maps?cid=1", "https://www.google.co.uk/maps/place/x",
+    "https://maps.google.com/?cid=1", "https://maps.google.de/maps?q=x", "https://maps.app.goo.gl/AbC123",
+    "https://goo.gl/maps/AbC123", "HTTPS://Maps.App.Goo.Gl/AbC123"])
+def test_is_maps_url_recognises_maps_and_short_links(url):
+    from leadworkbench.review_cleanup import is_maps_url
+    assert is_maps_url(url)
+
+
+@pytest.mark.parametrize("url", [
+    "https://omni.example/", "https://omni.example/maps/", "https://goo.gl/AbC123", "https://www.google.com/search?q=maps",
+    "https://notgoogle.com/maps", "https://maps.example.com/", "", None, "http://[bad"])
+def test_is_maps_url_rejects_other_links(url):
+    from leadworkbench.review_cleanup import is_maps_url
+    assert not is_maps_url(url)
+
+
+def test_cleanup_name_rule_skips_maps_short_links(tmp_path):
+    from leadworkbench.db import Store
+    store = Store(tmp_path)
+    company = store.manual_company("Omni Sheet Metal, Inc.", "https://omni.example")
+    urls = ("https://maps.app.goo.gl/AbC123", "https://goo.gl/maps/AbC123", "https://maps.google.com/?cid=1",
+            "https://omni.example/")
+    with store.connect() as con:
+        for n, url in enumerate(urls):
+            con.execute("""INSERT INTO reviews(id,company_id,kind,field,old_value,new_value,source_url,evidence,status,
+                created_at,fingerprint) VALUES(?,?,'field_update','name','Omni Sheet Metal, Inc.','Omni Sheet Metal',
+                ?,'x','pending','2026-10-18',?)""", (f"r{n}", company["id"], url, f"f{n}"))
+    preview = store.review_cleanup_preview()
+    assert [s["review_id"] for r in preview["rules"] for s in r["samples"]] == ["r3"]
