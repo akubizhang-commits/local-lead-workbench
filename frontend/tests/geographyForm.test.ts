@@ -141,29 +141,31 @@ async function fixture(options:{failCounties?:boolean;failZACounties?:boolean;de
   async cleanup(){try{releaseState();await h.cleanup();}finally{globalThis.FormData=savedFormData;}}};
 }
 
-test('new markets default to all social platforms and basic profiles only',async()=>{
+test('new markets leave automatic social search off by default with all platforms and basic profiles only',async()=>{
  const h=await fixture();
  try{
   const checkbox=document.querySelector<HTMLInputElement>('input[name="auto_social"]');
-  assert.ok(checkbox);assert.equal(checkbox.checked,true);
+  assert.ok(checkbox);assert.equal(checkbox.checked,false);
   const body=await h.submit();
-  assert.equal(body.auto_social,true);
+  assert.equal(body.auto_social,false);
   assert.deepEqual(body.social_platforms,['facebook','instagram','x']);
   assert.equal(body.social_read_posts,false);
  }finally{await h.cleanup();}
 });
 
-test('market creation submits selected social platforms, optional posts, and explicit opt out',async()=>{
+test('market creation submits manual opt in, selected social platforms, optional posts, and opt out again',async()=>{
  const h=await fixture();
  try{
   const checkbox=(selector:string)=>{
    const input=document.querySelector<HTMLInputElement>(selector);assert.ok(input);return input;
   };
   await h.act(async()=>{
+   checkbox('input[name="auto_social"]').click();
    checkbox('input[name="social_platforms"][value="instagram"]').click();
    checkbox('input[name="social_read_posts"]').click();
   });
   let body=await h.submit();
+  assert.equal(body.auto_social,true);
   assert.deepEqual(body.social_platforms,['facebook','x']);assert.equal(body.social_read_posts,true);
   h.submitted.length=0;
   await h.act(async()=>checkbox('input[name="auto_social"]').click());
@@ -178,7 +180,10 @@ test('an enabled social stage requires a platform without discarding other marke
  try{
   const inputs=document.querySelectorAll<HTMLInputElement>('input[name="social_platforms"]');
   assert.equal(inputs.length,3);
-  await h.act(async()=>inputs.forEach(input=>input.click()));
+  await h.act(async()=>{
+   document.querySelector<HTMLInputElement>('input[name="auto_social"]')!.click();
+   inputs.forEach(input=>input.click());
+  });
   await h.submit(false);
   assert.match(document.body.textContent!,/至少选择一个社媒平台/);
   assert.equal(h.submitted.length,0);

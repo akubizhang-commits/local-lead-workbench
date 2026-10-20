@@ -59,6 +59,20 @@ def test_legacy_creation_returns_disabled_defaults_in_task_list(api):
     assert store.social_runs() == []
 
 
+def test_new_market_auto_social_defaults_off(api):
+    from leadworkbench.api import TaskInput
+    assert TaskInput(state="Fixture", city="Fixture", keywords=["clothing"]).auto_social is False
+    client, store = api
+    task = create_task(client)
+    assert task["auto_social"] is False
+    assert client.post(f"/api/tasks/{task['id']}/runs").json()["snapshot"]["auto_social"] is False
+    assert store.social_runs() == []
+    # Opting in stays possible.
+    opted = client.post("/api/tasks", json={**task_payload(), "keywords": ["shoes"], "auto_social": True})
+    assert opted.status_code == 200, opted.text
+    assert opted.json()["auto_social"] is True
+
+
 def test_creation_passes_social_options_to_store_and_run_snapshot(api):
     client, store = api
     task = create_task(client, auto_social=True,

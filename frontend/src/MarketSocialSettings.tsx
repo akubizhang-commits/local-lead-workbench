@@ -7,7 +7,7 @@ import {actionMessage} from './errors';
 export const socialPlatforms:SocialPlatform[]=['facebook','instagram','x'];
 export const platformTitle:Record<SocialPlatform,string>={facebook:'Facebook',instagram:'Instagram',x:'X'};
 export const newMarketSocialSettings=():TaskSocialSettings=>({
- auto_social:true,social_platforms:[...socialPlatforms],social_read_posts:false,
+ auto_social:false,social_platforms:[...socialPlatforms],social_read_posts:false,
 });
 function taskSettings(task:Task):TaskSocialSettings {
  return {auto_social:task.auto_social??false,social_platforms:task.social_platforms??[...socialPlatforms],

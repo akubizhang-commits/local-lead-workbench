@@ -35,7 +35,7 @@ flowchart LR
 
 | 字段 | HTTP/旧数据默认值 | 新建市场表单默认值 |
 |---|---|---|
-| `auto_social` | `false`；旧任务缺字段或无设置记录也视为关闭 | `true` |
+| `auto_social` | `false`；旧任务缺字段或无设置记录也视为关闭 | `false`（2026-10 P1 第二批起默认不勾选，可手动开启；已有市场的设置不变） |
 | `social_platforms` | `["facebook","instagram","x"]` | 三个平台全部勾选 |
 | `social_read_posts` | `false` | 不勾选，仅基础资料 |
 
