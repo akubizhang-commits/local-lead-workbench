@@ -70,7 +70,7 @@ async function harness() {
         },
       };
     else if (
-      path === "/api/tasks" ||
+      path === "/api/tasks?archived=include" ||
       path === "/api/schedules" ||
       path.startsWith("/api/social/runs?")
     )
@@ -125,6 +125,8 @@ async function harness() {
 test("real DOM: company/account navigation and browser back retain filters and page; pagination clears selection", async () => {
   const h = await harness();
   try {
+    // The company library lists archived markets too, labelled in the market filter (P1-19).
+    assert.ok(h.calls.some((c) => c.path === "/api/tasks?archived=include"));
     await h.act(async () =>
       document
         .querySelector<HTMLInputElement>('input[aria-label="选择 示例企业"]')!

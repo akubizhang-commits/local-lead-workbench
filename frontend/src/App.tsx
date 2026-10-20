@@ -70,7 +70,7 @@ export default function App() {
   const [confirmRestore, setConfirmRestore] = useState(false);
   const overview = useResource<Overview>("/overview", version, true);
   const tasks = useResource<Task[]>(
-    view === "tasks" ? "/tasks" : null,
+    view === "tasks" ? "/tasks?archived=include" : null,
     version,
     true,
   );

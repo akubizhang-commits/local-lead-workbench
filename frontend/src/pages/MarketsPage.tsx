@@ -1,5 +1,6 @@
 import { api } from "../api";
 import { startConfirmText } from "../QueryPreview";
+import { RESTORED } from "./TaskActivityPage";
 import { date } from "../helpers";
 import type { Overview, Task } from "../types";
 import { Badge, Empty, Icon } from "../ui";
@@ -29,6 +30,8 @@ export function MarketsPage({
   openStandalone: () => void;
   setModal: (modal: "task") => void;
 }) {
+  const active = (tasks.data || []).filter((task) => !task.archived_at);
+  const archived = (tasks.data || []).filter((task) => !!task.archived_at);
   return (
     <>
       <WorkerHealth
@@ -107,14 +110,14 @@ export function MarketsPage({
       </section>
       <div className="section-title">
         <h2>
-          市场检索任务列表 <span className="count">{tasks.data?.length ?? "—"}</span>
+          市场检索任务列表 <span className="count">{tasks.data ? active.length : "—"}</span>
         </h2>
         <span className="muted">持续积累 · 本轮变化可追溯</span>
       </div>
       <Resource {...tasks} retry={refresh}>
-        {tasks.data?.length ? (
+        {active.length ? (
           <div className="table-wrap"><table><thead><tr><th>市场检索任务</th><th>目标地区</th><th>最近状态</th><th>最近检索</th><th>操作</th></tr></thead><tbody>
-            {tasks.data.map(task=><tr key={task.id}><td><button className="text-button" onClick={()=>setTaskDetail(task)}>{task.name}</button><p className="muted">{task.keywords.join(' · ')}</p></td>
+            {active.map(task=><tr key={task.id}><td><button className="text-button" onClick={()=>setTaskDetail(task)}>{task.name}</button><p className="muted">{task.keywords.join(' · ')}</p></td>
             <td>{[task.country,task.state,task.county,task.city].filter(Boolean).join(' / ')}{(task.geography?.county_ids.length||0)>1&&<small className="muted">跨 {task.geography?.county_ids.length} 个县或同级地区 · 完整城市范围</small>}</td><td>{task.latest_run?<Badge value={task.latest_run.status}/>:"尚未运行"}</td><td>{date(task.latest_run?.created_at)}</td>
             <td><div className="actions"><button onClick={()=>setTaskDetail(task)}>资料复核列表</button><button onClick={()=>openMarket(task.id)}>企业库</button>
             <button disabled={busy||['running','queued','paused'].includes(task.latest_run?.status||'')} onClick={()=>{if(window.confirm(startConfirmText(task.query_estimate)))act(()=>api(`/tasks/${encodeURIComponent(task.id)}/runs`,"POST"),"市场更新已加入运行队列");}}>{task.latest_run?'更新市场':'开始检索'}</button></div></td></tr>)}
@@ -135,6 +138,12 @@ export function MarketsPage({
           </section>
         )}
       </Resource>
+      {!!archived.length && <details className="panel archived-markets"><summary>已归档市场（{archived.length}）</summary>
+        <p className="muted">已归档的市场不会开始新一轮，也不会按计划自动更新；企业和历史记录都已保留。</p>
+        <div className="table-wrap"><table><thead><tr><th>市场</th><th>归档时间</th><th>操作</th></tr></thead><tbody>
+          {archived.map(task=><tr key={task.id}><td>{task.name}</td><td>{date(task.archived_at)}</td>
+            <td><button disabled={busy} onClick={()=>act(()=>api(`/tasks/${encodeURIComponent(task.id)}/restore`,"POST"),RESTORED)}>恢复</button></td></tr>)}
+        </tbody></table></div></details>}
       <section className="panel"><div className="row between"><div><h2>企业单独复核</h2><p className="muted">查看从企业详情或定时计划发起的复核记录。</p></div><button onClick={openStandalone}>查看复核列表</button></div></section>
     </>
   );

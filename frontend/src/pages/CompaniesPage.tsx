@@ -96,7 +96,7 @@ export function CompaniesPage({
   quickStatus: (company: Company, status: string) => void;
   exportDays?: number;
 }) {
-  const tasks = useResource<Task[]>("/tasks", version, true);
+  const tasks = useResource<Task[]>("/tasks?archived=include", version, true);
   const cities = useResource<CityCount[]>(
     `/company-cities?${new URLSearchParams({ market_id: filters.market_id || "", excluded: "hide" })}`,
     version,
@@ -163,7 +163,7 @@ export function CompaniesPage({
           <option value="">全部市场</option>
           {tasks.data?.map((task) => (
             <option key={task.id} value={task.id}>
-              {task.name}
+              {task.name}{task.archived_at ? "（已归档）" : ""}
             </option>
           ))}
         </select>

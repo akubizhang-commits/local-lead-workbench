@@ -10,6 +10,9 @@ import { Resource } from '../Resource';
 import { Badge, Modal } from '../ui';
 import { MarketSchedule } from '../MarketSchedule';
 import { RoundSummary } from '../RoundSummary';
+import { MarketEditDialog } from '../MarketEditDialog';
+export const ARCHIVE_CONFIRM='归档后，这个市场不再出现在市场列表中，也不会按计划自动更新。企业、联系人和历史记录都会保留，可随时在“已归档市场”中恢复。继续吗？';
+export const RESTORED='市场已恢复。定时计划保持原设置，下次到期后才会运行。';
 import { MarketSummary } from '../MarketSummary';
 import { ExclusionRules } from '../ExclusionRules';
 import { MarketSocialSettings } from '../MarketSocialSettings';
@@ -38,6 +41,7 @@ export function TaskActivityPage({route,navigate,tasks,version,worker,busy,act,r
  openCompany:(id:string)=>void;openMarket:(id:string,filters?:Partial<Filters>)=>void;
 }) {
  const [roundId,setRoundId]=useState<string|null>(null);
+ const [editing,setEditing]=useState(false);
  const task=tasks.find(t=>t.id===route.task);
  const standalone=route.task==='standalone';
  const query=new URLSearchParams({page:String(route.page),status:route.activityStatus||'',run_id:route.run||''});
@@ -56,9 +60,13 @@ export function TaskActivityPage({route,navigate,tasks,version,worker,busy,act,r
    <RunCard run={detail.data.run} worker={worker} busy={busy} act={act} openCompany={openCompany}/>
  </>}</Resource>;
  return <>
-  <section className="panel activity-overview"><div className="panel-heading"><h2>{standalone?'企业单独复核':task?.name||'市场检索任务'}</h2>{task&&<button onClick={()=>openMarket(task.id)}>查看市场企业</button>}</div>{task&&<><p>{[task.country,task.state,task.county,task.city].filter(Boolean).join(' / ')}{task.keywords.length?` · ${task.keywords.join('、')}`:''}</p><p className="muted">官网自动补全：{task.auto_enrich?'已开启':'已关闭'}</p>{(task.geography?.county_ids.length||0)>1&&<p className="muted">跨县城市 / 居民点：关联 {task.geography?.county_ids.length} 个县或同级地区，市场检索范围仍为完整城市 / 居民点。</p>}<MarketSummary market={task} busy={busy} act={act} onTier={tier=>openMarket(task.id,{best_tier:tier})} onNearby={()=>openMarket(task.id,{nearby:'only'})}/><RoundSummary task={task} openMarket={openMarket}/><details className="market-exclusions"><summary>本市场排除规则</summary><ExclusionRules marketId={task.id} version={version} busy={busy} act={act}/></details>
+  <section className="panel activity-overview"><div className="panel-heading"><h2>{standalone?'企业单独复核':task?.name||'市场检索任务'}</h2>{task&&<div className="actions"><button onClick={()=>openMarket(task.id)}>查看市场企业</button>{task.archived_at?<button disabled={busy} onClick={()=>act(()=>api(`/tasks/${encodeURIComponent(task.id)}/restore`,'POST'),RESTORED)}>恢复市场</button>:<><button disabled={busy} onClick={()=>setEditing(true)}>编辑市场</button><button disabled={busy} onClick={()=>{if(window.confirm(ARCHIVE_CONFIRM))act(()=>api(`/tasks/${encodeURIComponent(task.id)}/archive`,'POST'),'市场已归档，可在“已归档市场”中恢复');}}>归档市场</button></>}</div>}</div>
+   {task?.archived_at&&<p className="alert" role="status">此市场已归档：不会开始新一轮，也不会按计划自动更新。企业和历史记录都已保留。</p>}
+   {task&&!task.archived_at&&task.needs_keywords&&<p className="hint">这个市场创建时没有填写关键词，目前按旧规则使用服装行业默认检索词（{(task.legacy_terms||[]).join('、')}）。建议点“编辑市场”补充关键词或选择预设行业。</p>}
+   {task&&editing&&<Modal title="编辑目标市场" onClose={()=>setEditing(false)}><MarketEditDialog task={task} version={version} busy={busy} act={act} onCancel={()=>setEditing(false)}
+     onSaved={()=>{setEditing(false);act(async()=>undefined,'市场关键词已更新，下一轮起生效');}} onOpenMarket={id=>{setEditing(false);navigate({...route,task:id,run:undefined,item:undefined,page:1});}}/></Modal>}{task&&<><p>{[task.country,task.state,task.county,task.city].filter(Boolean).join(' / ')}{task.keywords.length?` · ${task.keywords.join('、')}`:''}</p><p className="muted">官网自动补全：{task.auto_enrich?'已开启':'已关闭'}</p>{(task.geography?.county_ids.length||0)>1&&<p className="muted">跨县城市 / 居民点：关联 {task.geography?.county_ids.length} 个县或同级地区，市场检索范围仍为完整城市 / 居民点。</p>}<MarketSummary market={task} busy={busy} act={act} onTier={tier=>openMarket(task.id,{best_tier:tier})} onNearby={()=>openMarket(task.id,{nearby:'only'})}/><RoundSummary task={task} openMarket={openMarket}/><details className="market-exclusions"><summary>本市场排除规则</summary><ExclusionRules marketId={task.id} version={version} busy={busy} act={act}/></details>
    <MarketSocialSettings key={task.id} task={task} busy={busy} onChange={refresh} onRun={run=>change({run:run.id,item:undefined,listRun:undefined,activityStatus:undefined,page:1})}/>
-   <MarketSchedule task={task} version={version}/></>}</section>
+   <MarketSchedule task={task} version={version} archived={!!task.archived_at}/></>}</section>
   <Resource {...list} retry={refresh}>
    {list.data?.workflow&&<TaskWorkflow flow={list.data.workflow} worker={worker} busy={busy} onViewCompanies={task?()=>openMarket(task.id):undefined}
      onOpenSettings={()=>navigate({view:'settings',selected:null,filters:route.filters,page:1})} onSocialChange={refresh}

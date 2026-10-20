@@ -23,7 +23,7 @@ function FormError({id,error}:{id:string;error:FormFailure}) {
 const invalid=(error:FormFailure,field:string,id:string)=>error.fields.some(f=>f.field===field)?{'aria-invalid':true as const,'aria-describedby':id}:{};
 
 export const KEYWORDS_REQUIRED='请填写检索关键词，或从预设行业中选择一个';
-const splitKeywords=(value:string)=>value.split(/[,，\n]+/).map(item=>item.trim()).filter(Boolean);
+export const splitKeywords=(value:string)=>value.split(/[,，\n]+/).map(item=>item.trim()).filter(Boolean);
 
 /** Keyword textarea plus preset select; shared by the new-market form and the market edit dialog. */
 export function KeywordFields({industry,onIndustry,companyTypes,keywords,onKeywords,invalidProps={}}:{
