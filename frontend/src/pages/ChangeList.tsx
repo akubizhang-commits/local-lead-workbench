@@ -1,7 +1,6 @@
-import { date, display, label } from "../helpers";
+import { date, fieldValue, label } from "../helpers";
 import type { Change } from "../types";
-import { Empty, Icon } from "../ui";
-
+import { Badge, Empty, Icon } from "../ui";
 export function ChangeList({
   items,
   onOpen,
@@ -23,19 +22,26 @@ export function ChangeList({
             </button>
             <time>{date(c.created_at)}</time>
           </div>
-          <h3>{label(c.field)}</h3>
+          <h3>
+            {label(c.field)}
+            {c.auto_fill && <> <Badge value="auto_fill" /></>}
+          </h3>
           <div className="comparison">
             <div>
               <small>原记录</small>
-              <p>{display(c.old_value)}</p>
+              <p>{fieldValue(c.field, c.old_value)}</p>
             </div>
             <Icon name="arrow" />
             <div>
               <small>新观察</small>
-              <p>{display(c.new_value)}</p>
+              <p>{fieldValue(c.field, c.new_value)}</p>
             </div>
           </div>
-          <p className="muted">{c.reason || "未记录原因"}</p>
+          <p className="muted">
+            {c.auto_fill
+              ? "自动补全（原值为空，未进入审核）"
+              : c.reason || "未记录原因"}
+          </p>
         </article>
       ))}
     </div>

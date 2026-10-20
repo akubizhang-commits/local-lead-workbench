@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useResource } from "../hooks";
 import { ReviewList, isContactChange } from "../ReviewList";
+import { ReviewCleanup } from "../ReviewCleanup";
 import type { ReviewPage } from "../types";
 import { Empty } from "../ui";
 
@@ -37,6 +38,8 @@ export function ReviewsPage({
     if (data && !data.items.length && page > 1) setPage((p) => Math.max(1, p - 1));
   }, [data, page]);
   return (
+    <>
+    <ReviewCleanup version={version} onDone={refresh} />
     <Resource {...reviews} retry={refresh}>
       {data && data.total > 0 && (
         <nav className="review-pagination" aria-label="审核分页">
@@ -84,5 +87,6 @@ export function ReviewsPage({
         </section>
       )}
     </Resource>
+    </>
   );
 }
