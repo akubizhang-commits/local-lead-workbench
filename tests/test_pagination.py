@@ -83,9 +83,13 @@ def by_created(rows):
 
 def test_reviews_array_matches_legacy(api):
     client, store = api
-    response = client.get("/api/reviews")
-    rows = response.json()
-    assert isinstance(rows, list) and int(response.headers["X-Total-Count"]) == len(rows)
+    # Without parameters: the page envelope (the unpaged array was removed, design §10.1).
+    default = client.get("/api/reviews").json()
+    assert set(default) == {"items", "total", "page", "page_size"}
+    assert (default["page"], default["page_size"]) == (1, 20)
+    body = client.get("/api/reviews?page=1&page_size=200").json()
+    assert body["total"] <= 200 and body["items"][:20] == default["items"]
+    rows = body["items"]
     assert by_created(rows) == by_created(legacy_reviews(store))
     kinds = {r["kind"] for r in rows}
     assert {"contact", "field_update", "duplicate_candidate"} <= kinds
@@ -93,7 +97,7 @@ def test_reviews_array_matches_legacy(api):
 
 def test_reviews_pages_cover_everything_once(api):
     client, store = api
-    full = client.get("/api/reviews").json()
+    full = client.get("/api/reviews?page=1&page_size=200").json()["items"]
     first = client.get("/api/reviews?page=1").json()
     assert set(first) == {"items", "total", "page", "page_size"}
     assert first["page_size"] == 20 and first["total"] == len(full)
@@ -117,15 +121,15 @@ def test_reviews_kind_filter(api):
     body = client.get("/api/reviews?page=1&page_size=200&kind=duplicate_candidate").json()
     assert body["total"] == len(body["items"]) >= 1
     assert {r["kind"] for r in body["items"]} == {"duplicate_candidate"}
-    contacts = client.get("/api/reviews?kind=contact").json()
+    contacts = client.get("/api/reviews?kind=contact").json()["items"]
     assert contacts and {r["kind"] for r in contacts} == {"contact"}
 
 
 def test_companies_paging_matches_company_page(api):
     client, store = api
-    rows = client.get("/api/companies")
-    assert isinstance(rows.json(), list) and rows.headers["X-Total-Count"] == str(len(rows.json()))
+    default = client.get("/api/companies").json()  # Envelope with page=1, page_size=50 (design §10.1).
+    assert default == client.get("/api/company-page?page=1&page_size=50").json()
     paged = client.get("/api/companies?page=1&page_size=2").json()
     assert paged == client.get("/api/company-page?page=1&page_size=2").json()
-    assert paged["total"] == len(rows.json())
+    assert paged["total"] == default["total"]
     assert client.get("/api/companies?page_size=201").status_code == 422

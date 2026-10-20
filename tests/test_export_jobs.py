@@ -272,11 +272,10 @@ def test_7_disk_full_fails_cleanly(api, monkeypatch):
     assert not export_jobs.part_path(directory, done["id"]).exists()
 
 
-def test_8_sync_export_is_deprecated_but_works(api):
+def test_8_sync_export_is_removed(api):
     client, app, directory = api
     response = client.get("/api/exports?format=csv&layout=entries")
-    assert response.status_code == 200 and response.headers["Deprecation"] == "true"
-    assert "successor-version" in response.headers["Link"]
+    assert response.status_code == 404 and response.json()["code"] == "unknown_endpoint"
 
 
 def test_invalid_filters_fail_before_a_job_starts(api):

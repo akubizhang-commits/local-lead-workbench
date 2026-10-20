@@ -17,6 +17,8 @@ const contacts=[contact('buyer','可用采购人员','automatic','valid'),contac
 const related=Array.from({length:54},(_,i)=>({...c,id:`shop-${i}`,name:`关联门店 ${i}`,address:`其他路 ${i} 号`}));
 const overview={companies:55,contacts:3,tasks:1,pending_reviews:0,queued_runs:1,running_runs:0,worker:{alive:false,last_seen:null},source_status:{maps:{available:true,message:'Synthetic'},website:{available:true,message:'Synthetic'}}};
 const market={id:'m',name:'测试市场',country:'US',state:'CA',city:'测试市',keywords:['clothing'],company_types:['wholesale'],auto_enrich:false,created_at:'2026-01-01',latest_run:null};
+let exportJob=null;
+const exportJobBase={id:'job-1',status:'succeeded',phase:'done',format:'csv',layout:'entries',filters:{},label:'联系入口 CSV',processed:1,total:1,rows:1,file_name:'fixture.csv',size_bytes:30,created_at:'2026-09-22T08:00:00Z',started_at:'2026-09-22T08:00:00Z',finished_at:'2026-09-22T08:00:01Z',error:null};
 const server=createServer(async(req,res)=>{
  try{
   const url=new URL(req.url,'http://local');let body='';for await(const chunk of req)body+=chunk;
@@ -36,7 +38,11 @@ const server=createServer(async(req,res)=>{
    if(req.method==='PATCH'){Object.assign(c,json.fields||{});if(json.status)c.status=json.status;if(json.business_types)c.business_types=json.business_types;c.revision++;c.manual_checked_at='2026-09-22T08:00:00Z';return reply(c);}
    return reply({company:c,contacts,related_locations:related,observations:[],changes:[],social_links:[]});
   }
-  if(url.pathname==='/api/exports'){res.writeHead(200,{'Content-Type':'text/csv','Content-Disposition':'attachment; filename="fixture.csv"'});return res.end('id,name\nfixture-51,Synthetic\n');}
+  // Export jobs (the synchronous /api/exports was removed in P1 batch 2): create -> poll -> download file.
+  if(url.pathname==='/api/export-jobs'&&req.method==='POST'){exportJob={...exportJobBase,filters:json,format:json.format,layout:json.layout};return reply(exportJob,202);}
+  if(url.pathname==='/api/export-jobs')return reply(exportJob?[exportJob]:[]);
+  if(url.pathname==='/api/export-jobs/job-1')return reply(exportJob);
+  if(url.pathname==='/api/export-jobs/job-1/file'){res.writeHead(200,{'Content-Type':'text/csv','Content-Disposition':'attachment; filename="fixture.csv"'});return res.end('id,name\nfixture-51,Synthetic\n');}
   if(url.pathname.startsWith('/api/'))return reply([]);
   const file=url.pathname.startsWith('/assets/')?join(build,url.pathname):join(build,'index.html');
   res.writeHead(200,{'Content-Type':{'.js':'text/javascript','.css':'text/css','.html':'text/html'}[extname(file)]||'application/octet-stream'});res.end(await readFile(file));
@@ -88,8 +94,10 @@ try{
  assert.equal(requests.filter(r=>r.path==='/api/companies/batch-status').length,2);
  await page.getByRole('combobox',{name:'测试采购企业 客户匹配状态',exact:true}).selectOption('not_fit');
  await page.locator('.toast').filter({hasText:'客户匹配状态已保存'}).waitFor();
- const dl=page.waitForEvent('download');await page.getByRole('button',{name:'CSV',exact:true}).click();await dl;
- const exportRequest=requests.findLast(r=>r.path==='/api/exports');assert.equal(exportRequest.query.contact,'email');assert.equal(exportRequest.query.sort,'updated');assert.equal(exportRequest.query.page,undefined);
+ await page.getByRole('button',{name:'CSV',exact:true}).click();
+ const exportRequest=requests.findLast(r=>r.path==='/api/export-jobs'&&r.method==='POST');assert.equal(exportRequest.body.contact,'email');assert.equal(exportRequest.body.sort,'updated');assert.equal(exportRequest.body.page,undefined);
+ const dl=page.waitForEvent('download');await page.getByRole('button',{name:'下载文件',exact:true}).click();await dl;
+ assert.ok(requests.some(r=>r.path==='/api/export-jobs/job-1/file'));assert.ok(!requests.some(r=>r.path==='/api/exports'));
  await page.getByRole('button',{name:'目标市场',exact:true}).click();
  await page.getByText('后台采集离线',{exact:true}).first().waitFor();
  assert.match(await page.locator('.worker-health').innerText(),/API 连接正常不代表正在采集/);

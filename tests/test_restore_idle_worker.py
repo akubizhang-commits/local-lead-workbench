@@ -222,7 +222,7 @@ def test_api_restore_with_idle_worker_then_worker_continues(tmp_path, monkeypatc
             assert client.post("/api/companies", json={"name": "Dropped Co", "website": "https://dropped.example"}).status_code == 200
             response = client.post("/api/backups/restore", json={"name": name})
             assert response.status_code == 200, response.text
-            assert [c["name"] for c in client.get("/api/companies").json()] == ["Kept Co"]
+            assert [c["name"] for c in client.get("/api/company-page").json()["items"]] == ["Kept Co"]
             restored_at = json.loads(heartbeat.read_text())["last_seen"]
             task = client.post("/api/tasks", json=MARKET).json()
             assert client.post(f"/api/tasks/{task['id']}/runs").status_code == 200

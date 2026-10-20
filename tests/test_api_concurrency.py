@@ -8,10 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
-from fastapi.encoders import jsonable_encoder
-from fastapi.responses import JSONResponse
 
-from leadworkbench import api as api_module
 from leadworkbench import maintenance, worker
 from leadworkbench.api import create_app
 from leadworkbench.db import Store
@@ -283,50 +280,29 @@ async def test_7_facet_refresh_busy_does_not_fail_reads(client, monkeypatch):
     assert response.status_code == 200
 
 
-async def test_8_streamed_body_never_touches_the_store(client, monkeypatch):
+async def test_8_paged_lists_stay_consistent_during_writes(client):
+    """The unpaged json_array responses were removed (design §10.2); paged lists read one snapshot."""
     http, app = client
     store = app.state.store
     for i in range(30):
-        store.manual_company(f"Stream {i}", f"https://s{i}.example")
-    calls = []
-    real_connect = Store.connect
-    def connect(self):
-        calls.append(time.monotonic())
-        return real_connect(self)
-    returned = {}
-    real_array = api_module.json_array
-    def array(rows):
-        response = real_array(rows)
-        returned["at"] = time.monotonic()
-        return response
-    real_source = Store._backup_source
-    def backup_source(self):
-        calls.append(time.monotonic())
-        return real_source(self)
-    monkeypatch.setattr(Store, "connect", connect)
-    monkeypatch.setattr(Store, "_backup_source", backup_source)
-    monkeypatch.setattr(api_module, "json_array", array)
-    async with http.stream("GET", "/api/companies") as response:
-        body = b"".join([chunk async for chunk in response.aiter_bytes()])
-    finished = time.monotonic()
-    assert response.status_code == 200 and len(json.loads(body)) == 30
-    assert response.headers["X-Total-Count"] == "30"
-    assert not [t for t in calls if returned["at"] < t < finished]
-
-
-async def test_array_responses_are_byte_identical(client):
-    http, app = client
-    store = app.state.store
-    for i in range(3):
-        company = store.manual_company(f"Bytes {i} – ü", f"https://b{i}.example")
-        with store.connect() as con:
-            con.execute("""INSERT INTO reviews(id,company_id,kind,field,old_value,new_value,source_url,evidence,
-                status,created_at,fingerprint) VALUES(?,?,'field_update','phone','','+1 408 555 010'||?,'u','证据',
-                'pending','2026-10-18',?)""", (f"rv{i}", company["id"], i, f"fp{i}"))
-    for path, rows in (("/api/companies", store.companies()), ("/api/reviews", store.reviews())):
-        expected = JSONResponse(jsonable_encoder(rows)).body
-        response = await http.get(path)
-        assert response.content == expected, path
+        store.manual_company(f"Page {i}", f"https://p{i}.example")
+    async def write():
+        for i in range(20):
+            await asyncio.to_thread(store.manual_company, f"Written {i}", f"https://w{i}.example")
+    async def read():
+        totals = []
+        for _ in range(15):
+            for path in ("/api/companies", "/api/company-page?page=1&page_size=50"):
+                body = (await http.get(path)).json()
+                ids = [row["id"] for row in body["items"]]
+                assert len(ids) == len(set(ids)) == min(50, body["total"])
+                assert (body["page"], body["page_size"]) == (1, 50)
+                totals.append(body["total"])
+        return totals
+    _, totals = await asyncio.gather(write(), read())
+    assert totals == sorted(totals) and 30 <= totals[0] and totals[-1] <= 50
+    final = (await http.get("/api/companies")).json()
+    assert final["total"] == 50 and len(final["items"]) == 50
 
 
 def test_worker_health_is_consistent_across_threads(tmp_path):

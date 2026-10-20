@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import Body, FastAPI, HTTPException, Request, Query
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 import json
 from fastapi.staticfiles import StaticFiles
@@ -28,7 +28,6 @@ from .db import Conflict, Store
 from .errors import (INTERNAL, REQUEST_ID, Busy, DomainError, NotFound, classify_storage_error,
                      test_fault as fault_enabled)
 from . import logging_setup
-from .export import export_data
 from .industry_presets import merge_keywords
 from .sources.website import normalize_url
 from .validation_messages import translate_errors
@@ -72,29 +71,6 @@ def domain_response(exc: DomainError):
 
 MEDIA_TYPES = {"csv": "text/csv; charset=utf-8",
                "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
-ARRAY_BATCH = 500
-
-
-def json_array(rows):
-    """Large array responses: read everything first, serialise in batches that yield
-    the GIL, then stream ready-made strings. The body generator never touches the
-    store, so sending it after the gate is released cannot overlap a restore (§7.6)."""
-    chunks = []
-    for start in range(0, len(rows), ARRAY_BATCH):
-        chunks.append(",".join(json.dumps(row, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
-                               for row in rows[start:start + ARRAY_BATCH]))
-        time.sleep(0)
-    return StreamingResponse(_join_array(chunks), media_type="application/json",
-                             headers={"X-Total-Count": str(len(rows))})
-
-
-def _join_array(chunks):
-    yield "["
-    for index, chunk in enumerate(chunks):
-        yield ("," if index and chunk else "") + chunk
-    yield "]"
-
-
 def unavailable_state(exc, data_dir):
     """(code, detail) for a store that could not be opened at start-up (design §5.6)."""
     classified = classify_storage_error(exc, data_dir)
@@ -847,9 +823,7 @@ def create_app(data_dir=None, *, allowed_hosts=None):
                   excluded: Excluded = "hide", page: int | None = Query(default=None, ge=1),
                   page_size: int | None = Query(default=None, ge=1, le=200),
                   sort: Literal["newest", "procurement", "email", "updated", "tier"] = "newest"):
-        # Without page/page_size: the deprecated full array; otherwise the /api/company-page envelope.
-        if page is None and page_size is None:
-            return json_array(store.companies(q, status, type, category=category, excluded=excluded, sort=sort))
+        # Always the /api/company-page envelope (the unpaged array was removed in P1 batch 2).
         return store.company_page(q=q, status=status, type=type, sort=sort, page=page or 1, page_size=page_size or 50,
                                   category=category, excluded=excluded)
     @app.get("/api/company-page")
@@ -1005,10 +979,8 @@ def create_app(data_dir=None, *, allowed_hosts=None):
     @app.get("/api/reviews")
     def reviews(page: int | None = Query(default=None, ge=1), page_size: int | None = Query(default=None, ge=1, le=200),
                 kind: Literal["", "field_update", "contact", "duplicate_candidate"] = ""):
-        # Without page/page_size: the deprecated full array (with X-Total-Count).
-        if page is None and page_size is None:
-            return json_array(store.reviews(kind=kind))
-        return store.reviews(page=page, page_size=page_size, kind=kind)
+        # Always a page envelope (the unpaged array was removed in P1 batch 2).
+        return store.reviews(page=page or 1, page_size=page_size or 20, kind=kind)
     @app.post("/api/reviews/{id}/decision")
     def decision(id: str, body: Decision):
         result = store.review_decision(id, body.decision)
@@ -1110,23 +1082,6 @@ def create_app(data_dir=None, *, allowed_hosts=None):
         except RuntimeError as exc:
             raise Conflict(str(exc)) from exc
         return {"ok": True}
-
-    @app.get("/api/exports")
-    def export(format: Literal["csv", "xlsx"] = "csv", layout: Literal["companies", "entries"] = "companies",
-               q: str = "", status: str = "", type: str = "",
-               market_id: str = "", run_id: str = "",
-               contact: Literal["", "email", "procurement"] = "",
-               sort: Literal["newest", "procurement", "email", "updated", "tier"] = "newest",
-               segment: Literal["", "new", "existing", "changed", "not_seen"] = "",
-               category: CategoryFilter = [], excluded: Excluded = "hide", best_tier: BestTier = ""):
-        output = export_data(store, format, layout, q=q, status=status, type=type,
-                             market_id=market_id, run_id=run_id, segment=segment, contact=contact, sort=sort,
-                             category=category, excluded=excluded, best_tier=best_tier)
-        # Compatibility only: the UI uses /api/export-jobs.
-        return Response(output, media_type=MEDIA_TYPES[format],
-                        headers={"Content-Disposition": 'attachment; filename="'
-                                 + ("contact-entries" if layout == "entries" else "leads") + f'.{format}"',
-                                 "Deprecation": "true", "Link": '</api/export-jobs>; rel="successor-version"'})
 
     @app.post("/api/export-jobs", status_code=202)
     def export_job_create(body: ExportJobInput, request: Request):

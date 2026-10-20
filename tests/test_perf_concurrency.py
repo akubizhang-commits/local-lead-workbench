@@ -2,8 +2,8 @@
 
 20k companies / 100k contacts, a real uvicorn API on port 18820. p95 (nearest rank, 19th of 20)
 of /api/settings, /api/overview and one company page: baseline, while a background XLSX export
-runs, while the legacy unpaged GET /api/companies runs, and while the retention summary is
-recomputed. Hard limit 200 ms, target 100 ms. Results: LEAD_PERF_OUT/p1-perf-concurrency.json.
+runs, and while the retention summary is recomputed (the legacy unpaged GET /api/companies
+scenario was removed with that endpoint mode in P1 batch 2). Hard limit 200 ms, target 100 ms. Results: LEAD_PERF_OUT/p1-perf-concurrency.json.
 """
 import json
 import os
@@ -135,28 +135,6 @@ def test_2_during_xlsx_export(api):
     RESULTS["export"]["max_le_5s"] = bool(intervals) and intervals[-1] <= 5
     assert all(len(values) >= SAMPLES for values in collected.values()), {k: len(v) for k, v in collected.items()}
     assert RESULTS["during_export_verdict"]["hard_200ms"], RESULTS["during_export"]
-
-
-def test_3_during_legacy_unpaged_companies(api):
-    done = threading.Event()
-    lists = []
-    def big():
-        while not done.is_set():
-            status, headers, body, elapsed = api.call("GET", "/api/companies", timeout=120)
-            assert status == 200
-            lists.append({"ms": round(elapsed), "total": headers.get("X-Total-Count")})
-    thread = threading.Thread(target=big)
-    thread.start()
-    time.sleep(0.3)
-    try:
-        found = sample_all(api, window=lambda: thread.is_alive())
-    finally:
-        done.set()
-        thread.join(180)
-    RESULTS["during_unpaged_companies"] = summarize(found)
-    RESULTS["unpaged_companies_calls"] = lists
-    RESULTS["during_unpaged_companies_verdict"] = verdict(RESULTS["during_unpaged_companies"])
-    assert RESULTS["during_unpaged_companies_verdict"]["hard_200ms"], RESULTS["during_unpaged_companies"]
 
 
 def test_4_during_retention_recompute(api):

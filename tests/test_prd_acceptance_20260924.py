@@ -11,6 +11,7 @@ from openpyxl import load_workbook
 from leadworkbench.api import create_app
 from leadworkbench.db import Store
 from leadworkbench.export import export_data
+from export_helpers import export_job_file, export_via_jobs
 
 
 @pytest.fixture
@@ -202,8 +203,7 @@ def test_prd11_api_export_matches_combined_filter_and_excludes_refusal(client, f
     params = dict(run_id=run["id"], segment="new", contact="procurement", q="Fixture", sort="procurement")
     page = client.get("/api/company-page", params={**params, "page_size": 1}).json()
     assert page["total"] == 2 and len(page["items"]) == 1
-    response = client.get("/api/exports", params={**params, "format": format})
-    assert response.status_code == 200
+    response = export_job_file(client, **params, format=format)
     assert f'filename="leads.{format}"' in response.headers["content-disposition"]
     if format == "csv":
         rows = csv_rows(response.content)
@@ -219,7 +219,7 @@ def test_prd11_api_export_matches_combined_filter_and_excludes_refusal(client, f
     assert [row["id"] for row in rows] == [selected["id"]]
     assert rows[0]["market_segment"] == "new"
     assert rows[0]["source_url"] and rows[0]["observed_at"]
-    assert client.get("/api/exports", params={**params, "q": "not present"}).status_code == 200
+    assert export_via_jobs(client, **{**params, "q": "not present"})  # Empty result still exports.
 
 
 def test_prd11_backup_restore_preserves_provenance_and_human_decisions(client):

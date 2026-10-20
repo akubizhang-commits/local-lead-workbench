@@ -110,13 +110,13 @@ def test_api_decision_reports_auto_closed_and_never_409s(tmp_path):
                      "https://acme.example/x", "x", "pending", "2999-01-01", uid()))
     with TestClient(app) as client:
         client.headers["X-Local-Token"] = client.get("/api/session").json()["token"]
-        reviews = client.get("/api/reviews").json()
+        reviews = client.get("/api/reviews").json()["items"]
         assert len(reviews) == 3
         first = next(r for r in reviews if r["new_value"] == "Acme Fixture")
         response = client.post(f"/api/reviews/{first['id']}/decision", json={"decision": "accept"})
         assert response.status_code == 200 and response.json() == {"ok": True, "auto_closed": 1}
-        for review in client.get("/api/reviews").json():
+        for review in client.get("/api/reviews").json()["items"]:
             response = client.post(f"/api/reviews/{review['id']}/decision", json={"decision": "reject"})
             assert response.status_code == 200
-        assert client.get("/api/reviews").json() == []
+        assert client.get("/api/reviews").json()["items"] == []
     assert json.loads(json.dumps(store.reviews())) == []

@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from leadworkbench.api import create_app
 from leadworkbench.db import Store
 from leadworkbench.worker import process_run
+from export_helpers import export_via_jobs
 
 
 @pytest.fixture
@@ -24,13 +25,12 @@ def test_token_required_and_cross_origin_blocked(client):
 def test_manual_entry_is_explicit_and_export_excludes_refusal(client):
     a = client.post("/api/companies", json={"name": "=2+3", "website": "https://fixture.example"}).json()
     assert a["source_kind"] == "manual"
-    output = client.get("/api/exports?format=csv")
-    assert output.status_code == 200
-    assert "'=2+3" in output.text
-    assert "source_url" in output.text.splitlines()[0]
+    output = export_via_jobs(client).decode("utf-8-sig")
+    assert "'=2+3" in output
+    assert "source_url" in output.splitlines()[0]
     r = client.patch(f"/api/companies/{a['id']}", json={"revision": a["revision"], "status": "do_not_contact"})
     assert r.status_code == 200
-    assert len(list(csv.reader(io.StringIO(client.get("/api/exports?format=csv").text)))) == 1
+    assert len(list(csv.reader(io.StringIO(export_via_jobs(client).decode("utf-8-sig"))))) == 1
 
 
 def test_invalid_task_and_private_website_rejected(client):

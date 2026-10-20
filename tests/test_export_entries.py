@@ -12,6 +12,7 @@ from leadworkbench.db import Store
 from leadworkbench.export import ENTRY_HEADERS, export_data
 from leadworkbench.sources.maps import _record
 from legacy_db import FIXTURES, load_legacy
+from export_helpers import export_job_file
 
 
 def rows(output):
@@ -186,10 +187,9 @@ def test_api_layout_and_filename(tmp_path):
     app = create_app(tmp_path, allowed_hosts={"testserver"})
     with TestClient(app) as client:
         client.headers["X-Local-Token"] = client.get("/api/session").json()["token"]
-        response = client.get("/api/exports", params={"format": "csv", "layout": "entries", "best_tier": "none"})
-        assert response.status_code == 200
+        response = export_job_file(client, format="csv", layout="entries", best_tier="none")
         assert 'filename="contact-entries.csv"' in response.headers["content-disposition"]
         assert response.text.lstrip("\ufeff").startswith("企业名称,")
-        legacy = client.get("/api/exports", params={"format": "csv"})
+        legacy = export_job_file(client, format="csv")
         assert 'filename="leads.csv"' in legacy.headers["content-disposition"]
-        assert client.get("/api/exports", params={"layout": "other"}).status_code == 422
+        assert client.post("/api/export-jobs", json={"format": "csv", "layout": "other"}).status_code == 422
