@@ -60,13 +60,17 @@ test('entry summary shows best entry, gap and next step',async()=>{
   const company={id:'c',name:'Co',phone:'',contact_count:2,best_tier:'general_email',best_tier_label:'通用邮箱',best_tier_rank:5,
    gap:{code:'no_named_people',reason:'官网已扫描 12 页，未公开具名人员',next_step:'人工新增联系人，或补充社媒'}};
   const contacts=[{id:'k',name:'',role:'',email:'info@co.example',url:'',tier:'general_email',review_status:'auto_recorded',adoption_status:'automatic',fields:[]}];
-  await h.act(async()=>h.root.render(createElement(ContactEntrySummary,{company,contacts,onAdd:()=>{},adding:false} as never)));
+  await h.act(async()=>h.root.render(createElement(ContactEntrySummary,{company,contacts,onJump:()=>{}} as never)));
   const text=document.body.textContent!;
-  assert.match(text,/最佳入口：通用邮箱 · info@co.example/);
+  assert.match(text,/^联系入口通用邮箱 info@co.example/);
+  assert.doesNotMatch(text,/最佳入口/);
   assert.match(text,/联系入口 2 个（已去重）/);
   assert.match(text,/缺口：官网已扫描 12 页，未公开具名人员/);
   assert.match(text,/下一步：人工新增联系人，或补充社媒/);
-  assert.ok([...document.querySelectorAll('button')].some(b=>b.textContent==='新增联系人'));
+  assert.ok([...document.querySelectorAll('button')].some(b=>b.textContent==='查看全部联系入口 ↓'));
+  const none={...company,gap:null};
+  await h.act(async()=>h.root.render(createElement(ContactEntrySummary,{company:none,contacts} as never)));
+  assert.match(document.body.textContent!,/缺口：无/);
  } finally {await h.cleanup();}
 });
 test('company list entry cell shows tier, deduplicated count and gap, legacy counts in the tooltip',async()=>{

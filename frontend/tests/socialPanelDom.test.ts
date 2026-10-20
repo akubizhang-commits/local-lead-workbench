@@ -129,3 +129,21 @@ test("real DOM: account decision refreshes revision and manual follow-up stays a
     await h.cleanup();
   }
 });
+test("查找与更新社媒资料 renders before social data arrives and openDiscovery opens it (review R3)", async () => {
+  const h = await setupDOM();
+  let release = () => {};
+  globalThis.fetch = async (input) => {
+    const path = String(input);
+    if (path === "/api/session") return new Response(JSON.stringify({ token: "t" }));
+    if (path.endsWith("/social")) await new Promise<void>((r) => { release = r; });
+    return new Response(JSON.stringify(path.endsWith("/social") ? { accounts: [], posts: [], excluded: [], ignored_links: [], outreach: [], do_not_contact: false, search_queries: [], pages: [] } : []));
+  };
+  try {
+    const { SocialPanel } = await import("../src/SocialPanel.tsx");
+    await h.act(async () => h.root.render(createElement(SocialPanel, { companyId: "c", version: 0, openDiscovery: true })));
+    const discovery = [...document.querySelectorAll("details")].find((d) => d.querySelector("summary")!.textContent === "查找与更新社媒资料") as HTMLDetailsElement;
+    assert.ok(discovery, "rendered while loading");
+    assert.equal(discovery.open, true);
+    await h.act(async () => { release(); await new Promise((r) => setTimeout(r, 20)); });
+  } finally { await h.cleanup(); }
+});

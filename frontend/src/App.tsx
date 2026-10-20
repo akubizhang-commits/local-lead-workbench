@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { actionMessage } from "./errors";
 import { runTitle } from "./MarketRecheck";
 import { ApiError, api, resetSession } from "./api";
 import { CompanyForm, TaskForm } from "./forms";
-import { date, filtersQuery, type Filters } from "./helpers";
+import { date, filtersQuery, label, type Filters } from "./helpers";
+import { actualCityText } from "./ActualCity";
+import { CompanyStatus } from "./CompanyStatus";
+import { useMediaQuery } from "./useMediaQuery";
 import { nextFrame, useResource } from "./hooks";
 import { MarketHeadingActions, TaskActivityPage, marketSubline } from "./pages/TaskActivityPage";
 import { backFromRefreshDetail, defaultFilters, updateListFilters, type View } from "./navigation";
@@ -54,6 +57,8 @@ export function restoreFocus(prev: HTMLElement | null) {
 }
 export default function App() {
   const { route, navigate } = useNavigation();
+  const routeRef = useRef(route);
+  routeRef.current = route;
   const { view, selected, filters, page } = route;
   function setView(view: View) {
     navigate({
@@ -117,7 +122,14 @@ export default function App() {
       ? `/companies/${encodeURIComponent(selected)}`
       : null,
     version,
+    false,
+    { keepStale: true },
   );
+  const narrow = useMediaQuery("(max-width: 779px)");
+  const [fullName, setFullName] = useState(false);
+  useEffect(() => setFullName(false), [selected]);
+  const detailName = view === "detail" && !route.account ? detail.data?.company.name : undefined;
+  const foldName = narrow && !!detailName && detailName.length > 80;
   const marketTask = view === "tasks" ? tasks.data?.find((t) => t.id === route.task) : undefined;
   const marketTitle = route.task === "standalone" ? "单家官网复核" : marketTask?.name || "目标市场";
   function updateFilters(patch: Partial<Filters>) {
@@ -150,6 +162,7 @@ export default function App() {
     resetSession();
     setVersion((v) => v + 1);
   }
+  const clearSection = useCallback(() => navigate({ ...routeRef.current, section: undefined }, { replace: true }), []);
   function openCompany(id: string) {
     navigate({ ...route, selected: id, view: "detail", account: undefined });
   }
@@ -329,15 +342,23 @@ export default function App() {
             <div>
               {view === "tasks" && route.task && <button className="text-button page-back" onClick={()=>route.item?navigate(backFromRefreshDetail(route)):setView("tasks")}>{route.item?(route.task==="standalone"?"← 返回单家官网复核":"← 返回市场详情"):"← 返回目标市场"}</button>}
               {view === "detail" && <button className="text-button page-back" onClick={route.account?backToCompany:()=>setView("companies")}>{route.account?"← 返回企业详情":"← 返回企业库"}</button>}
-              <h1>
+              <h1 className={foldName && !fullName ? "clamp-4" : undefined} title={detailName}>
                 {view === "tasks" && route.task ? (route.item ? "官网复核详情" : marketTitle) : view === "detail"
                   ? route.account
                     ? route.account.startsWith("contact:")
                       ? "联系人详情"
                       : "账号详情"
-                    : "企业详情"
+                    : detail.data?.company.name ?? "企业详情"
                   : navigation.find((n) => n[0] === view)?.[1]}
               </h1>
+              {foldName && (
+                <button type="button" className="text-button name-toggle" aria-expanded={fullName} onClick={() => setFullName((v) => !v)}>
+                  {fullName ? "收起" : "显示全称"}
+                </button>
+              )}
+              {view === "detail" && !route.account && detail.data && (
+                <p className="detail-subline">{actualCityText(detail.data.company)} · 业务类型 {detail.data.company.business_types.map(label).join("、") || "待核实"}</p>
+              )}
               {view==='tasks'&&route.task?(route.item?<p>查看这次官网复核读取了哪些网页、结果和历次尝试。</p>:marketTask&&<p>{marketSubline(marketTask)}</p>):descriptions[view]&&<p>{descriptions[view]}</p>}
             </div>
             <div className="actions">
@@ -382,6 +403,7 @@ export default function App() {
                     <Icon name="refresh" size={17} />
                     复核官网
                   </button>
+                  <CompanyStatus company={detail.data.company} busy={busy} onChange={quickStatus} />
                 </>
               )}
             </div>
@@ -438,6 +460,8 @@ export default function App() {
               openCompany={openCompany}
               openAccount={openAccount}
               setView={setView}
+              section={route.section}
+              onSectionHandled={clearSection}
             />
           )}
           {view === "reviews" && (

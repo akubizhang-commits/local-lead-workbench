@@ -22,3 +22,9 @@ export function ActualCityLine({company}: {company: Company}) {
   return <p>实际城市：{company.actual_city}（按地址解析）{company.city && ` · 目标城市：${company.city}`}
     {company.nearby && <> <span className="badge badge-nearby">邻近城市</span></>}</p>;
 }
+/** Page-heading subline text for company detail: “实际城市 X（按地址解析）· 目标城市 Y”. */
+export function actualCityText(company: Company): string {
+  if (company.actual_city_basis === 'address' && company.actual_city)
+    return `实际城市 ${company.actual_city}（按地址解析）${company.city ? ` · 目标城市 ${company.city}` : ''}${company.nearby ? ' · 邻近城市' : ''}`;
+  return `实际城市未能从地址解析 · 目标城市 ${company.city || '（未记录）'}`;
+}

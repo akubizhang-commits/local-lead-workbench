@@ -1,5 +1,5 @@
 import { useFollowupDraft } from "./social/useFollowupDraft";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { api } from "./api";
 import { useResource } from "./hooks";
 import { SocialDetail } from "./social/SocialDetail";
@@ -21,7 +21,13 @@ export function SocialPanel({
   onOpenAccount,
   onBack,
   contacts = [],
+  openDiscovery,
+  headerAction,
+  addForm,
 }: {
+  openDiscovery?: boolean;
+  headerAction?: ReactNode;
+  addForm?: ReactNode;
   companyId: string;
   version: number;
   accountId?: string;
@@ -34,6 +40,8 @@ export function SocialPanel({
   const { data, error, loading } = useResource<SocialData>(
     base,
     version + revision,
+    false,
+    { keepStale: true },
   );
   const [busy, setBusy] = useState(false),
     [failure, setFailure] = useState(""),
@@ -119,6 +127,9 @@ export function SocialPanel({
       onOpenAccount={onOpenAccount}
       render={render}
       followup={followup}
+      openDiscovery={openDiscovery}
+      headerAction={headerAction}
+      addForm={addForm}
     />
   );
 }

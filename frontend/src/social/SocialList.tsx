@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "../api";
 import { listContacts } from "../contactList";
 import type { Action } from "../pages/pageTypes";
@@ -22,7 +22,13 @@ export function SocialList({
   onOpenAccount,
   render,
   followup,
+  openDiscovery = false,
+  headerAction,
+  addForm,
 }: {
+  openDiscovery?: boolean;
+  headerAction?: ReactNode;
+  addForm?: ReactNode;
   companyId: string;
   base: string;
   contacts: Contact[];
@@ -41,29 +47,36 @@ export function SocialList({
   const [url, setUrl] = useState(""),
     [evidence, setEvidence] = useState("");
   const contactGroups = listContacts(contacts);
+  const discovery = useRef<HTMLDetailsElement>(null);
+  // Arriving with section=contacts (restore panel “前往查看”): open the discovery details once.
+  // It is rendered outside the `data &&` blocks so the ref exists even before data arrives (review R3).
+  useEffect(() => {
+    if (openDiscovery && discovery.current) discovery.current.open = true;
+  }, [openDiscovery]);
+  const list = (rows: Contact[]) => (
+    <SocialAccountList entries={[]} contacts={rows} pages={[]} onOpen={(id) => onOpenAccount?.(id)} />
+  );
   return (
-    <section className="panel social-panel">
+    <section className="panel social-panel" id="company-contacts" aria-labelledby="company-contacts-title">
       <div className="section-title">
-        <h3>联系人与账号</h3>
-        <button
-          disabled={busy || loading}
-          onClick={() =>
-            void act(
-              () => api(`${base}/sync`, "POST"),
-              "已整理当前保存的官网社交链接",
-            )
-          }
-        >
-          整理已有链接
-        </button>
+        <h3 id="company-contacts-title" tabIndex={-1}>联系人与账号</h3>
+        <div className="actions">
+          {headerAction}
+          <button
+            disabled={busy || loading}
+            onClick={() =>
+              void act(
+                () => api(`${base}/sync`, "POST"),
+                "已整理当前保存的官网社交链接",
+              )
+            }
+          >
+            整理已有链接
+          </button>
+        </div>
       </div>
-      <p className="muted">
-        官网更新会同步补充链接。先核对归属，再记录跟进；打开账号或帖子不会记为已联系。
-      </p>
-      <details className="social-section">
-        <summary>查找与更新社媒资料</summary>
-        <SocialDiscovery companyId={companyId} onChange={onRefresh} />
-      </details>
+      {addForm}
+      <p className="muted">采购联系人排在前面；先核对归属再跟进，打开账号或帖子不会记为已联系。</p>
       {error && (
         <Alert>
           {error}
@@ -73,72 +86,46 @@ export function SocialList({
       {failure && <Alert>{failure}</Alert>}
       {notice && <p role="status">{notice}</p>}
       {loading && <p role="status">正在读取社交资料…</p>}
-      {!data && (
-        <SocialAccountList
-          entries={[]}
-          contacts={contactGroups.active}
-          pages={[]}
-          onOpen={(id) => onOpenAccount?.(id)}
-        />
+      {data?.do_not_contact && <Alert>此企业已标记拒绝联系，跟进录入已停用。</Alert>}
+      <SocialAccountList
+        entries={data?.accounts || []}
+        contacts={contactGroups.active}
+        pages={data?.pages || []}
+        onOpen={(id) => onOpenAccount?.(id)}
+      />
+      {!!contactGroups.supplementary.length && (
+        <details className="social-section">
+          <summary>补充联系页面（{contactGroups.supplementary.length}）</summary>
+          <p className="muted">
+            只发现了页面链接，尚未确认存在可提交的联系表单，不作为直接联系入口展示。
+          </p>
+          {list(contactGroups.supplementary)}
+        </details>
+      )}
+      {!!contactGroups.pending.length && (
+        <details className="social-section">
+          <summary>待确认联系人（{contactGroups.pending.length}）</summary>
+          {list(contactGroups.pending)}
+        </details>
+      )}
+      {!!contactGroups.hidden.length && (
+        <details className="social-section">
+          <summary>非客户开发用途 / 不采用（{contactGroups.hidden.length}）</summary>
+          {list(contactGroups.hidden)}
+        </details>
       )}
       {data && (
+        <details className="social-section">
+          <summary>已知帖子与合集（{data.posts.length}）</summary>
+          <div className="social-grid">{data.posts.map(render)}</div>
+        </details>
+      )}
+      <details className="social-section" ref={discovery}>
+        <summary>查找与更新社媒资料</summary>
+        <SocialDiscovery companyId={companyId} onChange={onRefresh} />
+      </details>
+      {data && (
         <>
-          {data.do_not_contact && (
-            <Alert>此企业已标记拒绝联系，跟进录入已停用。</Alert>
-          )}
-          <p className="muted">
-            采购联系人排在前面；其余为可尝试联系的入口，点击查看资料和来源。
-          </p>
-          <SocialAccountList
-            entries={data.accounts}
-            contacts={contactGroups.active}
-            pages={data.pages || []}
-            onOpen={(id) => onOpenAccount?.(id)}
-          />
-          {!!contactGroups.supplementary.length && (
-            <details className="social-section">
-              <summary>
-                补充联系页面（{contactGroups.supplementary.length}）
-              </summary>
-              <p className="muted">
-                只发现了页面链接，尚未确认存在可提交的联系表单，不作为直接联系入口展示。
-              </p>
-              <SocialAccountList
-                entries={[]}
-                contacts={contactGroups.supplementary}
-                pages={[]}
-                onOpen={(id) => onOpenAccount?.(id)}
-              />
-            </details>
-          )}
-          {!!contactGroups.pending.length && (
-            <details className="social-section">
-              <summary>待确认联系人（{contactGroups.pending.length}）</summary>
-              <SocialAccountList
-                entries={[]}
-                contacts={contactGroups.pending}
-                pages={[]}
-                onOpen={(id) => onOpenAccount?.(id)}
-              />
-            </details>
-          )}
-          {!!contactGroups.hidden.length && (
-            <details className="social-section">
-              <summary>
-                非客户开发用途 / 不采用（{contactGroups.hidden.length}）
-              </summary>
-              <SocialAccountList
-                entries={[]}
-                contacts={contactGroups.hidden}
-                pages={[]}
-                onOpen={(id) => onOpenAccount?.(id)}
-              />
-            </details>
-          )}
-          <section className="social-section">
-            <h4>已知帖子与合集（{data.posts.length}）</h4>
-            <div className="social-grid">{data.posts.map(render)}</div>
-          </section>
           <details className="social-section">
             <summary>查找更多账号 / 添加候选</summary>
             <p className="muted">
@@ -189,7 +176,7 @@ export function SocialList({
             <div className="social-grid">{data.excluded.map(render)}</div>
           </details>
           <details className="social-section">
-            <summary>已过滤的非账号链接（{data.ignored_links.length}）</summary>
+            <summary>已过滤的链接（{data.ignored_links.length}）</summary>
             {data.ignored_links.map((e) => (
               <p key={e.id}>
                 <span className="social-raw-url">{e.original_url}</span>
@@ -198,7 +185,10 @@ export function SocialList({
               </p>
             ))}
           </details>
-          {followup}
+          <details className="social-section social-followup">
+            <summary>联系草稿与跟进</summary>
+            {followup}
+          </details>
         </>
       )}
     </section>

@@ -1,16 +1,22 @@
+import { useState } from "react";
 import { date, fieldValue, label } from "../helpers";
 import type { Change } from "../types";
 import { Badge, Empty, Icon } from "../ui";
 export function ChangeList({
   items,
   onOpen,
+  limit,
 }: {
   items: Change[];
   onOpen: (id: string) => void;
+  /** Show only the newest `limit` items first, with “显示更早的 N 条”. */
+  limit?: number;
 }) {
+  const [all, setAll] = useState(false);
+  const shown = limit && !all ? items.slice(0, limit) : items;
   return items.length ? (
     <div className="timeline">
-      {items.map((c) => (
+      {shown.map((c) => (
         <article key={c.id}>
           <span className="timeline-mark" />
           <div className="row between">
@@ -44,6 +50,9 @@ export function ChangeList({
           </p>
         </article>
       ))}
+      {!!limit && !all && items.length > limit && (
+        <button type="button" className="text-button" onClick={() => setAll(true)}>显示更早的 {items.length - limit} 条</button>
+      )}
     </div>
   ) : (
     <Empty title="尚无更新记录">资料发生变化后，可在这里对比新旧值。</Empty>

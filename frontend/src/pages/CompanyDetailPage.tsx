@@ -1,30 +1,42 @@
-import { useState } from "react";
-import { CompanyStatus } from "../CompanyStatus";
+import { useEffect, useRef, useState } from "react";
+import { CompanyAnchors, jumpTo } from "../CompanyAnchors";
 import { ContactEntrySummary } from "../ContactEntrySummary";
+import { EvidenceGroups, evidenceSummary } from "../EvidenceGroups";
 import { ManualContactForm } from "../ManualContactForm";
-import { ActualCityLine } from "../ActualCity";
-import { date, display, label } from "../helpers";
+import { date, label, safeUrl } from "../helpers";
 import { type View } from "../navigation";
 import { RelatedLocations } from "../RelatedLocations";
 import { Schedules } from "../Schedules";
 import { SocialPanel } from "../SocialPanel";
 import type { Company, CompanyDetail } from "../types";
 import { Badge, Empty, External, Icon } from "../ui";
-
 import { Resource, type ResourceState } from "../Resource";
 import { ChangeList } from "./ChangeList";
+
+/** Host name without "www." for the summary card; the full URL stays in “资料”. */
+export function websiteHost(url?: string | null): string {
+  const href = safeUrl(url);
+  if (!href) return "";
+  return new URL(href).hostname.replace(/^www\./, "");
+}
+function businessTypes(company: Company) {
+  return company.business_types.map(label).join("、") ||
+    [...new Set((company.type_hints || []).map((h) => h.business_type))]
+      .map((t) => `${label(t)}（来自市场定义，待核实）`).join("、") ||
+    "待核实";
+}
 export function CompanyDetailPage({
   selected,
   detail,
   account,
   version,
-  busy,
   refresh,
   backToCompany,
-  quickStatus,
   openCompany,
   openAccount,
   setView,
+  section,
+  onSectionHandled,
 }: {
   selected: string | null;
   detail: ResourceState<CompanyDetail>;
@@ -37,15 +49,35 @@ export function CompanyDetailPage({
   openCompany: (id: string) => void;
   openAccount: (id: string) => void;
   setView: (view: View) => void;
+  /** “前往查看” from the restore panel: jump to 联系入口 once the data is available (design §6.2). */
+  section?: "contacts";
+  onSectionHandled?: () => void;
 }) {
   const [adding, setAdding] = useState(false);
+  const [openDiscovery, setOpenDiscovery] = useState(false);
+  const handled = useRef(false);
+  useEffect(() => {
+    handled.current = false;
+    setOpenDiscovery(false);
+    setAdding(false);
+  }, [selected]);
+  const ready = !!detail.data && !account;
+  useEffect(() => {
+    if (section !== "contacts" || !ready || handled.current) return;
+    handled.current = true;
+    setOpenDiscovery(true);
+    jumpTo("company-contacts");
+    onSectionHandled?.();
+  }, [section, ready, onSectionHandled]);
+  const data = detail.data;
   return selected ? (
     <Resource
       {...detail}
+      loading={detail.loading && !detail.data}
       retry={refresh}
       notFoundAction={{ label: "返回企业库", onClick: () => setView("companies") }}
     >
-      {detail.data &&
+      {data &&
         (account ? (
           <SocialPanel
             key={selected}
@@ -53,41 +85,39 @@ export function CompanyDetailPage({
             version={version}
             accountId={account}
             onBack={backToCompany}
-            contacts={detail.data.contacts}
+            contacts={data.contacts}
           />
         ) : (
           <>
-            <div className="panel company-hero">
-              <span className="avatar large" aria-hidden="true">
-                {detail.data.company.name.slice(0, 1)}
-              </span>
-              <div>
-                <h2>{detail.data.company.name}</h2>
-                <p>
-                  {[detail.data.company.city, detail.data.company.country]
-                    .filter(Boolean)
-                    .join(" / ") || "地区未记录"}{" "}
-                  · 建档于 {date(detail.data.company.created_at)}
-                </p>
-                <ActualCityLine company={detail.data.company} />
+            <CompanyAnchors contacts={data.company.contact_count} evidence={data.observations.length} history={data.changes.length} />
+            <section className="panel detail-summary" id="company-summary" aria-label="概要">
+              <ContactEntrySummary company={data.company} contacts={data.contacts} onJump={() => jumpTo("company-contacts")} />
+              <div className="key-facts">
+                <h3>关键资料</h3>
+                <dl className="facts">
+                  <dt>电话</dt>
+                  <dd>{data.company.phone || "未记录"}</dd>
+                  <dt>官网</dt>
+                  <dd>{websiteHost(data.company.website) ? <External url={data.company.website}>{websiteHost(data.company.website)}</External> : "未记录"}</dd>
+                  <dt>地址</dt>
+                  <dd className="clamp-2" title={data.company.address}>{data.company.address || "未记录"}</dd>
+                  <dt>营业状态</dt>
+                  <dd>{data.company.operating_status && data.company.operating_status !== "unknown" ? <Badge value={data.company.operating_status} /> : "尚无明确状态证据"}</dd>
+                </dl>
               </div>
-              <CompanyStatus
-                company={detail.data.company}
-                busy={busy}
-                onChange={quickStatus}
-              />
-            </div>
-            <ContactEntrySummary
-              company={detail.data.company}
-              contacts={detail.data.contacts}
-              adding={adding}
-              onAdd={() => setAdding((v) => !v)}
-            />
-            {adding && (
-              <section className="panel">
+            </section>
+            <SocialPanel
+              key={`social:${selected}`}
+              companyId={selected}
+              version={version}
+              onOpenAccount={openAccount}
+              contacts={data.contacts}
+              openDiscovery={openDiscovery}
+              headerAction={<button type="button" onClick={() => setAdding((v) => !v)} aria-expanded={adding}>新增联系人</button>}
+              addForm={adding && (
                 <ManualContactForm
-                  companyId={detail.data.company.id}
-                  revision={detail.data.company.revision}
+                  companyId={data.company.id}
+                  revision={data.company.revision}
                   onSaved={() => {
                     setAdding(false);
                     refresh();
@@ -95,111 +125,77 @@ export function CompanyDetailPage({
                   onCancel={() => setAdding(false)}
                   onRefresh={refresh}
                 />
-              </section>
-            )}
-            <div className="detail-grid">
-              <section className="panel">
-                <div className="section-title">
-                  <h3>资料</h3>
-                </div>
-                <dl className="facts">
-                  <dt>官方网站</dt>
-                  <dd>
-                    <External url={detail.data.company.website} />
-                  </dd>
-                  <dt>营业状态</dt>
-                  <dd>
-                    {detail.data.company.operating_status &&
-                    detail.data.company.operating_status !== "unknown" ? (
-                      <>
-                        <Badge value={detail.data.company.operating_status} />
-                        <div>
-                          <External
-                            url={detail.data.company.operating_source_url}
-                          >
-                            查看状态来源
-                          </External>{" "}
-                          · {date(detail.data.company.operating_observed_at)}
-                        </div>
-                      </>
-                    ) : (
-                      "尚无明确状态证据"
-                    )}
-                  </dd>
-                  <dt>联系电话</dt>
-                  <dd>{detail.data.company.phone || "未记录"}</dd>
-                  <dt>地址</dt>
-                  <dd>{detail.data.company.address || "未记录"}</dd>
-                  <dt>业务类型</dt>
-                  <dd>
-                    {detail.data.company.business_types.map(label).join("、") ||
-                      [...new Set((detail.data.company.type_hints || []).map((h) => h.business_type))]
-                        .map((t) => `${label(t)}（来自市场定义，待核实）`).join("、") ||
-                      "待核实"}
-                  </dd>
-                  <dt>来源类别</dt>
-                  <dd>{(detail.data.company.categories || []).join("、") || "—"}</dd>
-                  <dt>官网采集时间</dt>
-                  <dd>{date(detail.data.company.last_checked_at)}</dd>
-                  <dt>人工确认时间</dt>
-                  <dd>{date(detail.data.company.manual_checked_at)}</dd>
-                  <dt>跟进备注</dt>
-                  <dd className="pre-wrap">
-                    {detail.data.company.notes || "尚无备注"}
-                  </dd>
-                </dl>
-                <details className="diagnostics">
-                  <summary>诊断信息</summary>
-                  <p className="muted">企业编号 <code>{detail.data.company.id}</code> · 修订 {detail.data.company.revision}</p>
-                </details>
-              </section>
-              <Schedules companyId={selected} version={version} />
-            </div>
-            <RelatedLocations
-              key={`locations:${selected}`}
-              companies={detail.data.related_locations || []}
-              onOpen={openCompany}
+              )}
             />
-            <SocialPanel
-              key={`social:${selected}`}
-              companyId={selected}
-              version={version}
-              onOpenAccount={openAccount}
-              contacts={detail.data.contacts}
-            />
-            <section className="panel">
+            <section className="panel" id="company-facts" aria-labelledby="company-facts-title">
               <div className="section-title">
-                <h3>来源与字段证据</h3>
-                <span className="muted">观察事实与当前资料分开保存</span>
+                <h3 id="company-facts-title" tabIndex={-1}>资料</h3>
               </div>
-              {detail.data.observations.length ? (
-                <div className="evidence-list">
-                  {detail.data.observations.map((o) => (
-                    <article key={o.id}>
-                      <div className="row between">
-                        <strong>
-                          {label(o.field)} · {display(o.value)}
-                        </strong>
-                        <Badge value={o.method} />
+              <dl className="facts">
+                <dt>官方网站</dt>
+                <dd><External url={data.company.website} /></dd>
+                <dt>营业状态</dt>
+                <dd>
+                  {data.company.operating_status && data.company.operating_status !== "unknown" ? (
+                    <>
+                      <Badge value={data.company.operating_status} />
+                      <div>
+                        <External url={data.company.operating_source_url}>查看状态来源</External>{" "}
+                        · {date(data.company.operating_observed_at)}
                       </div>
-                      <blockquote>{o.evidence || "未提供证据片段"}</blockquote>
-                      <div className="row between">
-                        <External url={o.source_url} />
-                        <time>{date(o.observed_at)}</time>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              ) : (
+                    </>
+                  ) : (
+                    "尚无明确状态证据"
+                  )}
+                </dd>
+                <dt>联系电话</dt>
+                <dd>{data.company.phone || "未记录"}</dd>
+                <dt>地址</dt>
+                <dd>{data.company.address || "未记录"}</dd>
+                <dt>业务类型</dt>
+                <dd>{businessTypes(data.company)}</dd>
+                <dt>来源类别</dt>
+                <dd>{(data.company.categories || []).join("、") || "—"}</dd>
+                <dt>建档时间</dt>
+                <dd>{date(data.company.created_at)}</dd>
+                <dt>官网采集时间</dt>
+                <dd>{date(data.company.last_checked_at)}</dd>
+                <dt>人工确认时间</dt>
+                <dd>{date(data.company.manual_checked_at)}</dd>
+                <dt>跟进备注</dt>
+                <dd className="pre-wrap">{data.company.notes || "尚无备注"}</dd>
+              </dl>
+              <div className="facts-more">
+              <RelatedLocations
+                key={`locations:${selected}`}
+                companies={data.related_locations || []}
+                onOpen={openCompany}
+              />
+              <Schedules companyId={selected} version={version} collapsible />
+              <details className="diagnostics">
+                <summary>诊断信息</summary>
+                <p className="muted">企业编号 <code>{data.company.id}</code> · 修订 {data.company.revision}</p>
+              </details>
+              </div>
+            </section>
+            {data.observations.length ? (
+              <details className="panel detail-collapsible" id="company-evidence">
+                <summary>来源证据 · {data.observations.length} 条 <span className="muted">{evidenceSummary(data.observations)}</span></summary>
+                <p className="muted">来源证据和当前资料分开保存。</p>
+                <EvidenceGroups items={data.observations} />
+              </details>
+            ) : (
+              <section className="panel" id="company-evidence" aria-labelledby="company-evidence-title">
+                <h3 id="company-evidence-title" tabIndex={-1}>来源证据</h3>
                 <Empty title="暂无来源证据">
                   人工录入不等同于自动发现。来源不明确时不推定发现渠道。
                 </Empty>
-              )}
-            </section>
-            <section className="panel">
-              <h3>资料变化</h3>
-              {<ChangeList items={detail.data.changes} onOpen={openCompany} />}
-            </section>
+              </section>
+            )}
+            <details className="panel detail-collapsible" id="company-history">
+              <summary>历史 · 资料变化 {data.changes.length} 条{data.changes[0] && <span className="muted">最近：{label(data.changes[0].field)} · {date(data.changes[0].created_at)}</span>}</summary>
+              <ChangeList items={data.changes} onOpen={openCompany} limit={10} />
+            </details>
           </>
         ))}
     </Resource>
