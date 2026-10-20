@@ -325,7 +325,7 @@ main:focus{outline:none}
 .stats-toggle{min-height:32px}
 .list-count{margin-top:12px;flex-wrap:wrap}.list-count>.actions{flex-wrap:wrap}
 .company-cards{list-style:none;margin:0 0 16px;padding:0;display:grid;gap:10px}
-.company-cards:focus{outline:none}
+
 .company-card{position:relative;display:block;width:100%;text-align:left;white-space:normal;padding:16px 40px 16px 16px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font-size:var(--fs-sm)}
 .company-card .card-line{display:block;margin-top:4px;overflow-wrap:anywhere}
 .company-card .card-line:first-child{margin-top:0}
@@ -373,7 +373,7 @@ dialog>header .sheet-count{margin-left:auto;margin-right:8px;font-size:var(--fs-
 .related-locations,.schedule-details,.diagnostics{margin-top:12px}
 .related-locations>summary,.schedule-details>summary,.diagnostics>summary{cursor:pointer;min-height:32px;display:list-item}
 .schedule-details .schedule-panel{box-shadow:none;margin:10px 0 0}
-#company-contacts h3:focus,#company-facts h3:focus{outline:none}
+
 .social-account-rows{list-style:none;margin:8px 0;padding:0}
 .social-account-rows li{border-top:1px solid var(--line)}
 .social-account-rows button{display:block;width:100%;min-height:44px;padding:10px 0;border:0;background:transparent;text-align:left;white-space:normal;color:var(--ink)}
@@ -415,7 +415,7 @@ label:has(>input[type=checkbox]){min-height:32px;min-width:32px}
 td>input[type=checkbox],th>input[type=checkbox]{width:18px;height:18px}
 .review-card a,.evidence-list a,.facts a,.social-search a{display:inline-flex;align-items:center;min-height:24px}
 summary{min-height:24px}
-.review-heading:focus{outline:none}
+
 @media(max-width:779px){
  .text-button{min-height:44px}
  .icon-button{min-width:44px;min-height:44px}

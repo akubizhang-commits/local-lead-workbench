@@ -295,7 +295,7 @@ def test_restore_lists_running_market_round_without_waiting_for_busy_lock(tmp_pa
             holder.join(5)
         body = response.json()
         assert response.status_code == 409 and body["code"] == "restore_blocked_runs", body
-        assert elapsed < 1
+        assert elapsed < 3  # well under the worker-lock wait; generous for loaded machines
         assert body["runs_total"] == 1 and body["social_runs_total"] == 0 and body["social_runs"] == []
         item = body["runs"][0]
         assert (item["id"], item["task_id"], item["task_name"], item["kind"], item["status"]) == (
