@@ -265,7 +265,7 @@ class ParsingTests(unittest.TestCase):
         fields = {o["field"]: o["value"] for o in parsed["observations"]}
         self.assertEqual(fields["name"], "Fixture Clothing")
         self.assertIn("wholesaler", fields["business_types"])
-        self.assertIn("distributor", fields["business_types"])
+        self.assertIn("distributor", fields["business_types_evidence"])  # Not an enum value (D5).
         self.assertEqual(fields["phone"], "+1-212-555-0100")
         self.assertEqual(parsed["social_links"], ["https://www.linkedin.com/company/fixture"])
         for item in parsed["observations"] + parsed["contacts"]:

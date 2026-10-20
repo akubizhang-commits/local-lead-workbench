@@ -376,7 +376,10 @@ def test_export_metadata_and_invalid_market_filters(store):
 def test_market_type_aliases_filter_page_and_export_without_rewriting_data(store, selected, stored):
     market, run = market_run(store)
     company = store.ingest_market(record(business_types=[stored]), run["id"], "fixture", market["id"])
-    store.ingest_market(record(1, business_types=["manufacturer"]), run["id"], "fixture", market["id"])
+    # Another enum type: a non-enum value (manufacturer) is only evidence now and leaves the
+    # company's types empty, so the market's type hint would match it (design §4.4 step 3, D5).
+    other = next(t for t in ("wholesaler", "retailer", "importer") if t != stored)
+    store.ingest_market(record(1, business_types=[other]), run["id"], "fixture", market["id"])
     assert store.company_page(market_id=market["id"], type=selected)["total"] == 1
     exported = store.companies(market_id=market["id"], type=selected, max_rows=None)
     assert [r["id"] for r in exported] == [company["id"]]

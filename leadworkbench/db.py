@@ -531,34 +531,64 @@ class Store(MarketAdminMixin, MarketSocialMixin, RunActivityMixin, MarketStoreMi
                     (review_id, fingerprint, url, evidence[:4000], now()))
         return "created"
 
+    def _observation_gate(self, con, company, field, value, url, evidence, timestamp, method, run_id, query):
+        """Shared noise filter in front of both write paths (design §4.4 steps 0-5).
+
+        Returns the value to continue with, or None when the observation was only stored."""
+        def observe(name, observed):
+            self._observe(con, company["id"], name, observed, url, evidence, timestamp, method, run_id, query)
+
+        if value is None or value == "":
+            return None
+        if field == "business_types_evidence":
+            observe(field, value)  # Before the field guard, or it would be dropped silently.
+            return None
+        if field not in {"name", "address", "phone", "website", "business_types"}:
+            return None
+        if field == "business_types":
+            if isinstance(value, str):
+                try:
+                    json.loads(value)
+                except ValueError:
+                    value = [value]  # A bare type name, not JSON.
+            if not isinstance(value, (str, list, tuple)):
+                return None
+            types = review_policy.enum_business_types(value)
+            if not types:
+                observe("business_types_evidence", value)
+                return None
+            if review_policy.business_types_add_nothing(company[field], types):
+                observe(field, encode(types))
+                return None
+            return encode(types)
+        if (field == "name" and method == "website" and not review_policy.is_blank(field, company[field])
+                and review_policy.website_name_verdict(company[field], value) in {"equivalent", "unrelated"}):
+            observe(field, value)
+            return None
+        return value
+
     def _observed_field(self, con, company, field, value, url, evidence, timestamp, method, run_id="", query=""):
-        if value is None or value == "" or field not in {"name", "address", "phone", "website", "business_types"}:
+        value = self._observation_gate(con, company, field, value, url, evidence, timestamp, method, run_id, query)
+        if value is None:
             return
         if self._market_run(con, run_id):
             return self._market_observed_field(
                 con, company, field, value, url, evidence, timestamp, method, run_id, query,
                 country=company["country"])
         self._observe(con, company["id"], field, value, url, evidence, timestamp, method, run_id, query)
-        if field == "business_types":
-            if isinstance(value, str):
-                try:
-                    value = json.loads(value)
-                except ValueError:
-                    value = [value]
-            if not isinstance(value, list):
-                return
-            value = encode(value)
         old = company[field]
         if review_policy.equivalent(field, old, value, country=company["country"]):
             return
         # All competing non-empty values need review. No auto overrides.
-        if old is not None and str(old).strip() not in ("", "[]"):
+        if not review_policy.is_blank(field, old):
             if self._review(con, company["id"], "field_update", field, old, value, url, evidence) == "merged":
                 return  # Same proposal from another page: evidence added, no extra history row.
+            reason = "来源观察；冲突需审核"
         else:
             con.execute(f"UPDATE companies SET {field}=?,revision=revision+1 WHERE id=?", (value, company["id"]))
+            reason = review_policy.AUTO_FILL_REASON
         con.execute("INSERT INTO changes(id,company_id,field,old_value,new_value,created_at,reason) VALUES(?,?,?,?,?,?,?)",
-                    (uid(), company["id"], field, old, value, now(), "来源观察；冲突需审核" if old else "补全空字段"))
+                    (uid(), company["id"], field, old, value, now(), reason))
 
     def ingest(self, record, run_id, query, *, city="", country="US"):
         if not record.get("source_key") or not record.get("source_url") or not record.get("name"):
@@ -1153,7 +1183,8 @@ class Store(MarketAdminMixin, MarketSocialMixin, RunActivityMixin, MarketStoreMi
             if company_id:
                 sql += " WHERE company_id=?"
                 params = (company_id,)
-            return [dict(r) for r in con.execute(sql + " ORDER BY created_at DESC LIMIT 500", params)]
+            return [{**dict(r), "auto_fill": review_policy.is_auto_fill(r["old_value"], r["reason"])}
+                    for r in con.execute(sql + " ORDER BY created_at DESC LIMIT 500", params)]
 
     def create_task(self, payload):
         id = uid()

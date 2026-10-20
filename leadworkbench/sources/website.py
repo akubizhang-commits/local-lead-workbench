@@ -23,6 +23,7 @@ from bs4 import BeautifulSoup, Tag
 
 from leadworkbench.social import organization_social
 from leadworkbench.website_link_policy import contact_page, link_kind
+from leadworkbench.review_policy import BUSINESS_TYPE_ENUM, NON_DESCRIPTIVE_PATH, clean_site_name
 from leadworkbench.contact_quality import (
     GENERAL_LOCAL, DEPARTMENT_LOCAL, has_supplier_intent, is_department,
     is_job_title, is_person_name, is_procurement_role, invalid_contact_reason,
@@ -805,14 +806,21 @@ def parse_page(html: str, source_url: str) -> dict:
     def observation(field, value, node):
         result["observations"].append({"field": field, "value": value, **provenance(node)})
 
+    def name_observation(raw, node, source):
+        # Titles and site names are cleaned first; slogans, navigation and lists give no name (design §4.3).
+        cleaned = clean_site_name(raw)
+        if cleaned:
+            result["observations"].append({"field": "name", "value": cleaned[:200], **provenance(node),
+                                           "evidence": f"{source}: {_evidence(node)}", "name_source": source})
+
     site_name = soup.find("meta", attrs={"property": "og:site_name"})
     if site_name and str(site_name.get("content", "")).strip():
-        observation("name", str(site_name["content"]).strip()[:200], site_name)
+        name_observation(str(site_name["content"]).strip(), site_name, "og:site_name")
     elif urlsplit(source_url).path in {"", "/"}:
         # Content-page headings describe a section, not the organization.
         name = soup.find("h1") or soup.find("title")
         if name and _text(name) and not GENERIC_HEADING.fullmatch(_text(name)):
-            observation("name", _text(name)[:200], name)
+            name_observation(_text(name), name, name.name)
     business_patterns = {
         "wholesaler": r"\bwholesal(?:e|er|ers|ing)\b|批发|批發",
         "distributor": r"\bdistribut(?:or|ors|ion)\b|分销|分銷",
@@ -820,19 +828,23 @@ def parse_page(html: str, source_url: str) -> dict:
         "retailer": r"\bretail(?:er|ers|ing)?\b|零售",
         "importer": r"\bimport(?:er|ers|ing)\b|进口|進口",
     }
-    business, snippets = [], []
+    if NON_DESCRIPTIVE_PATH.search(urlsplit(source_url).path):
+        business_patterns = {}  # Careers, blog and policy pages do not describe the company's business.
+    found = {}
     for kind, pattern in business_patterns.items():
         match = soup.find(string=re.compile(pattern, re.I))
         if match is not None:
-            business.append(kind)
             text = str(match).strip()
             position = re.search(pattern, text, re.I).start()
-            snippets.append(text[max(0, position - 100):position + 200])
-    if business:
-        result["observations"].append({
-            "field": "business_types", "value": business, "source_url": source_url,
-            "evidence": " | ".join(snippets), "observed_at": now,
-        })
+            found[kind] = text[max(0, position - 100):position + 200]
+    # Enum values may become business types; manufacturer/distributor are kept as evidence only (D5).
+    for field, kinds in (("business_types", [k for k in found if k in BUSINESS_TYPE_ENUM]),
+                         ("business_types_evidence", [k for k in found if k not in BUSINESS_TYPE_ENUM])):
+        if kinds:
+            result["observations"].append({
+                "field": field, "value": kinds, "source_url": source_url,
+                "evidence": " | ".join(found[k] for k in kinds), "observed_at": now,
+            })
 
     contacts_seen = set()
     cards_with_email = set()

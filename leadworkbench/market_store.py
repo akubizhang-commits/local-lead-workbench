@@ -9,6 +9,7 @@ from urllib.parse import parse_qsl, urlsplit, unquote
 import uuid
 from .company_comparison import distinct_branches
 from .errors import Invalid, NotFound
+from .review_policy import AUTO_FILL_REASON, is_blank
 
 
 def stamp():
@@ -334,7 +335,8 @@ class MarketStoreMixin:
             if (not manual or material) and outcome != "merged":
                 con.execute("INSERT INTO changes(id,company_id,field,old_value,new_value,created_at,reason) VALUES(?,?,?,?,?,?,?)", (
                     ident(), company["id"], field, old, value, stamp(),
-                    "市场来源变化；保留人工修正" if manual else "市场来源资料更新"))
+                    "市场来源变化；保留人工修正" if manual
+                    else AUTO_FILL_REASON if is_blank(field, old) else "市场来源资料更新"))
         if material:
             self._mark_market_changed(con, run_id, company["id"])
 

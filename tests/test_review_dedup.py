@@ -18,9 +18,14 @@ def pending(store, company_id, field="name"):
     return [r for r in store.reviews() if r["company_id"] == company_id and r["field"] == field]
 
 
+# "Acme Fixture Inc." -> "Acme Fixture" only drops a legal suffix, which is now an equivalent
+# website name (design §4.4 step 4); the stored name carries an extra word so proposals stay real.
+OLD = "Acme Fixture Supply Inc."
+
+
 def test_88_pages_with_same_rename_yield_one_review_with_all_evidence(tmp_path):
     store = Store(tmp_path)
-    company = store.manual_company("Acme Fixture Inc.", "https://acme.example")
+    company = store.manual_company(OLD, "https://acme.example")
     scan(store, company["id"], range(88))
     reviews = pending(store, company["id"])
     assert len(reviews) == 1
@@ -34,13 +39,13 @@ def test_88_pages_with_same_rename_yield_one_review_with_all_evidence(tmp_path):
 
 def test_accept_closes_same_value_and_rebases_competing_proposal(tmp_path):
     store = Store(tmp_path)
-    company = store.manual_company("Acme Fixture Inc.", "https://acme.example")
+    company = store.manual_company(OLD, "https://acme.example")
     scan(store, company["id"], range(3))
     scan(store, company["id"], [10], value="Acme Fixture Wholesale")
     # Simulate a legacy duplicate that predates merging.
     with store.connect() as con:
         con.execute("INSERT INTO reviews VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                    (uid(), company["id"], "field_update", "name", "Acme Fixture Inc.", "acme  fixture",
+                    (uid(), company["id"], "field_update", "name", OLD, "acme  fixture",
                      "https://acme.example/legacy", "legacy", "pending", "2999-01-01", uid()))
     target = next(r for r in pending(store, company["id"]) if r["new_value"] == "Acme Fixture")
     assert store.review_decision(target["id"], "accept") == 1
@@ -53,7 +58,7 @@ def test_accept_closes_same_value_and_rebases_competing_proposal(tmp_path):
 
 def test_reject_closes_same_value_and_rescan_does_not_reopen(tmp_path):
     store = Store(tmp_path)
-    company = store.manual_company("Acme Fixture Inc.", "https://acme.example")
+    company = store.manual_company(OLD, "https://acme.example")
     scan(store, company["id"], range(5))
     review = pending(store, company["id"])[0]
     assert store.review_decision(review["id"], "reject") == 0
@@ -96,12 +101,12 @@ def test_api_decision_reports_auto_closed_and_never_409s(tmp_path):
     from leadworkbench.api import create_app
     app = create_app(tmp_path, allowed_hosts={"testserver"})
     store = app.state.store
-    company = store.manual_company("Acme Fixture Inc.", "https://acme.example")
+    company = store.manual_company(OLD, "https://acme.example")
     scan(store, company["id"], range(4))
     scan(store, company["id"], range(2), value="Acme Fixture LLC")
     with store.connect() as con:
         con.execute("INSERT INTO reviews VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                    (uid(), company["id"], "field_update", "name", "Acme Fixture Inc.", "ACME FIXTURE",
+                    (uid(), company["id"], "field_update", "name", OLD, "ACME FIXTURE",
                      "https://acme.example/x", "x", "pending", "2999-01-01", uid()))
     with TestClient(app) as client:
         client.headers["X-Local-Token"] = client.get("/api/session").json()["token"]
