@@ -7,6 +7,7 @@ class RunActivityMixin:
     def task_activity(self, task_id, *, page=1, status='', run_id=''):
         self.task(task_id)  # Missing task must not look like an empty task.
         with self.connect() as con:
+            con.execute("BEGIN")  # deferred read transaction: rounds, page COUNT/rows and workflow from one snapshot
             rounds = [self.row(r) for r in con.execute(
                 'SELECT * FROM runs WHERE task_id=? ORDER BY created_at DESC,id DESC', (task_id,))]
             for run in rounds:
@@ -23,6 +24,7 @@ class RunActivityMixin:
 
     def refresh_activity(self, *, page=1, status='', run_id=''):
         with self.connect() as con:
+            con.execute("BEGIN")  # deferred read transaction: COUNT and rows from one snapshot
             return self._refresh_page(con, "r.kind='refresh'", [], page, status, run_id)
 
     def _refresh_page(self, con, where, args, page, status, run_id):

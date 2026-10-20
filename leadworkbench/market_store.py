@@ -1118,6 +1118,7 @@ class MarketStoreMixin:
         self._company_order(sort)
         self._refresh_facets()
         with self.connect() as con:
+            con.execute("BEGIN")  # deferred read transaction: COUNT and rows from one snapshot (not _begin/IMMEDIATE)
             query = self._company_query(con, q, status, type, market_id, run_id, segment, contact, category, excluded,
                                         best_tier, actual_city, nearby)
             total = self._company_total(con, query)
@@ -1131,6 +1132,7 @@ class MarketStoreMixin:
         self._company_order(sort)
         self._refresh_facets()
         with self.connect() as con:
+            con.execute("BEGIN")  # deferred read transaction: COUNT and rows from one snapshot (not _begin/IMMEDIATE)
             query = self._company_query(con, q, status, type, market_id, run_id, segment, contact, category, excluded,
                                         best_tier)
             keyed = self._company_ids(con, query, sort, max_rows)

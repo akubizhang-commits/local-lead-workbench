@@ -1055,6 +1055,7 @@ class Store(MarketAdminMixin, ReviewCleanupMixin, MarketSocialMixin, RunActivity
         paged = page is not None or page_size is not None
         page, page_size = (page or 1), (page_size or 20)
         with self.connect() as con:
+            con.execute("BEGIN")  # deferred read transaction: COUNT and rows from one snapshot (not _begin/IMMEDIATE)
             sql = f"""SELECT r.*,c.name company_name FROM reviews r JOIN companies c ON c.id=r.company_id
                 WHERE {where} {self.REVIEW_ORDER}"""
             if paged:
