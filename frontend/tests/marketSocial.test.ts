@@ -345,7 +345,7 @@ test('social-only RunCard labels social progress and omits map/website counters'
    progress:{done:1,total:3,discovered:0,social_done:1,social_total:3,enrichment_done:0,enrichment_total:0},
    message:'补充社媒',created_at:'2026-09-25T00:00:00Z',finished_at:null,error:null};
   await h.act(async()=>h.root.render(createElement(RunCard,{run,worker:{alive:true,last_seen:null},busy:false,act:async()=>{}})));
-  assert.match(document.body.textContent!,/社媒企业处理进度 · 1 \/ 3/);
-  assert.doesNotMatch(document.body.textContent!,/企业官网处理进度|已处理查询|市场累计/);
+  assert.match(document.body.textContent!,/社媒补全 · 已处理 1 \/ 3 家企业/);
+  assert.doesNotMatch(document.body.textContent!,/官网补全|地图检索 ·|市场累计/);
  }finally{await h.cleanup();}
 });

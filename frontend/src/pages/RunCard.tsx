@@ -8,6 +8,14 @@ import { Badge } from "../ui";
 import { queueReason } from "../workerStatus";
 
 import type { Action } from "./pageTypes";
+/** 取消本轮前的确认文案（决定 D13）。 */
+export const CANCEL_ROUND_CONFIRM =
+  "取消后本轮不再继续，已取得的企业和资料都会保留。暂停也能停下本轮，之后还可以继续。确定取消本轮吗？";
+export const ROUND_ACTION_NOTICE: Record<string, string> = {
+  pause: "已暂停本轮，已取得的结果保留",
+  resume: "本轮已继续，后台会按队列处理",
+  cancel: "已请求取消，已完成结果保留",
+};
 export function RunCard({
   run,
   worker,
@@ -73,20 +81,20 @@ export function RunCard({
       <div className="run-progress-grid">
         {(
           [
-            ["已处理查询", discoveryDone, discoveryTotal],
-            ["企业官网处理进度", done, total],
-            ["社媒企业处理进度", progress?.social_done, progress?.social_total],
+            ["地图检索", discoveryDone, discoveryTotal, "个查询"],
+            ["官网补全", done, total, "家企业"],
+            ["社媒补全", progress?.social_done, progress?.social_total, "家企业"],
           ] as const
         )
           .filter(
-            ([title]) => run.kind==="social"?title==="社媒企业处理进度":
-              title==="社媒企业处理进度"?progress?.social_total!==undefined:
-              run.kind !== "refresh" || title === "企业官网处理进度",
+            ([title]) => run.kind==="social"?title==="社媒补全":
+              title==="社媒补全"?progress?.social_total!==undefined:
+              run.kind !== "refresh" || title === "官网补全",
           )
-          .map(([title, finished, planned]) => (
+          .map(([title, finished, planned, unit]) => (
             <div key={title}>
               <small className="muted">
-                {title} · {finished ?? "—"} / {planned ?? "待确定"}
+                {title} · {planned ? `已处理 ${finished ?? 0} / ${planned} ${unit}` : "总数待确定"}
               </small>
               <div
                 className="progress"
@@ -136,25 +144,24 @@ export function RunCard({
             <button
               disabled={busy}
               key={action}
-              onClick={() =>
+              onClick={() => {
+                if (action === "cancel" && !window.confirm(CANCEL_ROUND_CONFIRM)) return;
                 act(
                   () =>
                     api(
                       `/runs/${encodeURIComponent(run.id)}/${action}`,
                       "POST",
                     ),
-                  action === "cancel"
-                    ? "已请求取消，已完成结果保留"
-                    : "运行控制已提交",
-                )
-              }
+                  ROUND_ACTION_NOTICE[action],
+                );
+              }}
             >
               {
                 (
                   {
-                    pause: "暂停",
-                    resume: "继续",
-                    cancel: "取消运行",
+                    pause: "暂停本轮",
+                    resume: "继续本轮",
+                    cancel: "取消本轮…",
                   } as Record<string, string>
                 )[action]
               }

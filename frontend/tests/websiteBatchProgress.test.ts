@@ -15,8 +15,8 @@ test('website progress distinguishes company completion from scanned and remaini
     })));
     assert.match(document.body.textContent!, /累计读取 20 页 · 待扫描 6 个链接/);
     assert.match(document.body.textContent!, /后台分批继续，无需手动操作/);
-    assert.match(document.body.textContent!, /企业官网处理进度 · 0 \/ 1/);
-    assert.ok(![...document.querySelectorAll('button')].some(b=>b.textContent==='继续'));
+    assert.match(document.body.textContent!, /官网补全 · 已处理 0 \/ 1 家企业/);
+    assert.ok(![...document.querySelectorAll('button')].some(b=>b.textContent==='继续本轮'));
   } finally {await h.cleanup();}
 });
 

@@ -20,26 +20,65 @@ function stageInterrupted(stage:WorkflowStage,flow:Workflow) {
  return ['paused','cancelled'].includes(flow.status)&&
   (stage.pending+stage.running>0||stage.processed<stage.total||stage.key==='social');
 }
-export function stageText(stage:WorkflowStage,flow:Workflow) {
- const errors=stage.partial+stage.failed+stage.blocked;
- if(stage.key==='refresh'&&!flow.auto_enrich&&!stage.total)return '未开启';
- if(stageInterrupted(stage,flow))return label(flow.status);
+export type StageTone='teal'|'info'|'warn'|'muted';
+const STAGE_NAMES:Record<string,string>={planning:'规划检索范围',discovery:'地图检索',refresh:'官网补全',social:'社媒补全'};
+/** 阶段名按 key 映射（design §3.1 第 5 条），没有映射的 key 用后端 title。 */
+export const stageName=(stage:Pick<WorkflowStage,'key'|'title'>)=>STAGE_NAMES[stage.key]||stage.title;
+/** 计数单位：规划 = 项，地图检索 = 个查询，官网补全和社媒补全 = 家企业。 */
+export const stageUnit=(key:string)=>key==='refresh'||key==='social'?'家企业':key==='discovery'?'个查询':'项';
+const stageRemaining=(s:WorkflowStage)=>Math.max(s.pending+s.running,s.total-s.processed,0);
+function stageErrors(s:WorkflowStage){return s.partial+s.failed+s.blocked;}
+/** 左列唯一的状态文字和颜色（design 表 3.2，自上而下取第一条满足的）。 */
+export function stageText(stage:WorkflowStage,flow:Workflow,offline=false):{text:string;tone:StageTone} {
+ const errors=stageErrors(stage);
+ if(stage.key==='refresh'&&!flow.auto_enrich&&!stage.total)return {text:'未开启',tone:'muted'};
+ if(offline&&stage.pending+stage.running>0)return {text:'后台离线',tone:'warn'};
+ if(stageInterrupted(stage,flow))return flow.status==='paused'?{text:'已暂停',tone:'info'}:{text:'已取消',tone:'muted'};
  if(stage.key==='social'){
-  if(stage.running)return '处理中';
-  if(socialWaiting(flow.social))return '等待平台继续';
-  if(socialHasWork(flow.social))return '排队中';
+  if(stage.running)return {text:'处理中',tone:'teal'};
+  if(socialWaiting(flow.social))return {text:'等待平台继续',tone:'warn'};
+  if(socialHasWork(flow.social))return {text:'排队中',tone:'info'};
  }
- if(!stage.total)return stage.key==='planning'?'暂无规划记录':'未开始';
- if(stage.running)return '处理中';
- if(stage.key==='discovery'&&stage.pending&&flow.maps_recovery?.manual_required)return '等待处理后恢复';
- if(stage.key==='discovery'&&stage.pending&&['cooldown','query_wait','probe'].includes(flow.maps_recovery?.phase||''))return '等待自动继续';
- if(stage.pending)return flow.status==='paused'?'已暂停':flow.status==='cancelled'?'已取消':errors?'需关注':'排队中';
- if(stage.key==='planning'&&stage.mode==='text_only'&&!stage.failed&&!stage.blocked)return '已生成文字检索方案';
- if(!errors)return '已完成';
+ if(!stage.total)return {text:stage.key==='planning'?'暂无规划记录':'未开始',tone:'muted'};
+ if(stage.running)return {text:'处理中',tone:'teal'};
+ if(stage.key==='discovery'&&stage.pending&&flow.maps_recovery?.manual_required)return {text:'等待处理后恢复',tone:'warn'};
+ if(stage.key==='discovery'&&stage.pending&&['cooldown','query_wait','probe'].includes(flow.maps_recovery?.phase||''))return {text:'等待自动继续',tone:'warn'};
+ if(stage.pending)return errors?{text:'需关注',tone:'warn'}:{text:'排队中',tone:'info'};
+ if(stage.key==='planning'&&stage.mode==='text_only'&&!stage.failed&&!stage.blocked)return {text:'已生成文字检索方案',tone:'teal'};
+ if(!errors)return {text:'已完成',tone:'teal'};
  const hasResults=stage.key==='refresh'?
   (stage.website_summary?stage.website_summary.with_pages>0:stage.succeeded>0||flow.website_pages>0):
   stage.succeeded>0||stage.partial>0;
- return hasResults?'部分完成':'未取得结果';
+ return {text:hasResults?'部分完成':'未取得结果',tone:'warn'};
+}
+/** 右列：剩余量、时间或提示；未开始或未开启写“—”（design §3.1 第 3 条）。 */
+export function stageNext(stage:WorkflowStage,flow:Workflow,offline=false):string {
+ const {text}=stageText(stage,flow,offline);
+ const unit=stageUnit(stage.key);
+ const r=stageRemaining(stage);
+ const recovery=stage.key==='discovery'?flow.maps_recovery:null;
+ switch(text){
+  case '未开启':case '暂无规划记录':case '未开始':case '已生成文字检索方案':return '—';
+  case '后台离线':return '进度已保留';
+  case '等待平台继续':return '仍有平台待处理';
+  case '等待处理后恢复':return '需要手动恢复';
+  case '等待自动继续':return recovery?recoveryTime(recovery):'等待后台继续';
+  case '已完成':case '部分完成':case '未取得结果':return '全部已处理';
+ }
+ if(r>0)return `剩余 ${r} ${unit}`;
+ return stage.key==='social'&&socialHasWork(flow.social)?'仍有平台待处理':'—';
+}
+/** 进度条的 aria-valuetext：“已处理 N / M 单位；成功 s，需关注 i，剩余 r”。 */
+export function stageValueText(stage:WorkflowStage):string {
+ return `已处理 ${stage.processed} / ${stage.total} ${stageUnit(stage.key)}；成功 ${stage.succeeded}，需关注 ${stageErrors(stage)}，剩余 ${stage.pending+stage.running}`;
+}
+/** 第 4 行“结果汇总”的状态（7 种）。 */
+export function summaryText(flow:Workflow,{offline,active,issue}:{offline:boolean;active:boolean;issue:boolean}):string {
+ if(offline)return '进度已保留';
+ if(active)return '持续汇总中';
+ if(flow.status==='completed')return issue?'本轮已结束 · 有需关注项':'本轮已结束';
+ if(flow.status==='partial')return '部分完成';
+ return label(flow.status);
 }
 function duration(seconds:number){const mins=Math.floor(seconds/60);return mins>=60?`${Math.floor(mins/60)}小时${mins%60}分钟`:`${mins}分钟`;}
 function recoveryTime(recovery:MapsRecovery){
@@ -60,11 +99,12 @@ function StageRow({stage:s,index,flow,offline,busy,onOpenSettings,onSocialChange
  const interrupted=stageInterrupted(s,flow);
  const waiting=!!recovery&&(recovery.manual_required||!!recovery.reason)||social&&socialWaiting(flow.social);
  const complete=s.total>0&&s.processed>=s.total&&!remaining&&!issues&&!interrupted&&!(social&&socialHasWork(flow.social));
- const unit=s.key==='refresh'||social?'家企业':s.key==='discovery'?'个查询':'项';
+ const unit=stageUnit(s.key);
  const step=flow.social_only&&social?'3B':({planning:'1',discovery:'2',refresh:'3A',social:'3B'}[s.key]||String(index+1));
  const retry=s.retry_pending??0;
  const unattempted=s.unattempted??Math.max(0,s.pending-retry);
- const text=offline&&remaining?'后台离线':fallback&&complete?'已完成':stageText(s,flow);
+ const status=stageText(s,flow,offline);
+ const name=stageName(s);
  const detailLabel=website?'官网检索明细':social?(issues?`平台明细 · 需关注 ${issues} 家`:'平台明细'):issues?`需关注 ${issues} 项`:retry?`待重试 ${retry} 项`:fallback?'文字检索说明':waiting?'等待原因':'查看明细';
  const tip=website?websiteDetailsTip(s.website_summary,s.processed):[recovery?.reason,...(social?flow.social?.platforms.filter(p=>p.reason).map(p=>p.reason)||[]:[]),...(s.details||[])].filter(Boolean).map(runMessage).join('；')||
   (issues?`部分完成 ${s.partial} · 失败 ${s.failed} · 受阻 ${s.blocked}。已取得的结果已保存。`:
@@ -75,22 +115,21 @@ function StageRow({stage:s,index,flow,offline,busy,onOpenSettings,onSocialChange
     <span className={`workflow-step${complete?' is-complete':''}`} aria-hidden="true">
      {step}
     </span>
-    <div><h3>{s.title}</h3><span className={`workflow-stage-status${issues&&!s.running||waiting||offline&&remaining?' is-warning':''}`}>{text}</span></div>
+    <div><h3>{name}</h3><span className={`workflow-stage-status tone-${status.tone}${status.tone==='warn'?' is-warning':''}`}>{status.text}</span></div>
    </div>
    <div className="workflow-stage-progress">
     {s.total>0?<>
      <div className="workflow-progress-caption"><span>已处理 <strong>{s.processed}</strong> / {s.total} <small>{unit}</small></span></div>
      <div className="workflow-track">
-      <progress className="sr-only" aria-label={`${s.title}已处理进度`} max={s.total} value={s.processed}
-       aria-valuetext={`已处理 ${s.processed} / ${s.total} ${unit}；成功 ${s.succeeded}，需关注 ${issues}，剩余 ${remaining}`}/>
+      <progress className="sr-only" aria-label={`${name}已处理进度`} max={s.total} value={s.processed}
+       aria-valuetext={stageValueText(s)}/>
       <span className="workflow-track-success" aria-hidden="true" style={{width:`${s.succeeded/s.total*100}%`}}/>
       <span className="workflow-track-issues" aria-hidden="true" style={{width:`${issues/s.total*100}%`}}/>
      </div>
     </>:<span className="workflow-no-total">{s.key==='refresh'&&!flow.auto_enrich?'本市场未开启官网自动补全':'总数待确定'}</span>}
    </div>
    <div className="workflow-stage-next">
-    <span>{interrupted?label(flow.status):offline&&remaining?'进度已保留':recovery?.manual_required?'需要手动恢复':
-     recovery?.next_attempt_at?recoveryTime(recovery):remaining?`剩余 ${remaining} ${unit}`:social&&socialHasWork(flow.social)?'仍有平台待处理':s.total?'全部已处理':'—'}</span>
+    <span>{stageNext(s,flow,offline)}</span>
     <WorkflowHint label={detailLabel} tip={tip} expanded={open} controls={id} onToggle={()=>setOpen(!open)} warning={issues>0||retry>0||waiting}/>
    </div>
   </div>
@@ -153,7 +192,7 @@ export function TaskWorkflow({flow,worker,onResume,onViewCompanies,busy,onOpenSe
   <div className="workflow-guide"><span>阶段进展{parallel?' · 3A 官网与 3B 社媒并行补全':flow.social_only?' · 社媒补充轮次':''}</span><span className="workflow-legend"><span><i className="workflow-track-success"/>成功</span><span><i className="workflow-track-issues"/>需关注</span><span><i/>待执行</span></span></div>
   <ol className="workflow-stages">{stages.map((s,i)=><StageRow key={`${flow.run_id}-${s.key}`} stage={s} index={i} flow={flow} offline={offline}
    busy={busy} onOpenSettings={onOpenSettings} onSocialChange={onSocialChange}/>)}
-   <li className="workflow-stage workflow-summary-row"><div className="workflow-stage-heading"><span className="workflow-step" aria-hidden="true">4</span><div><h3>结果汇总</h3><span className="workflow-stage-status">{offline?'进度已保留':active?'持续汇总中':flow.status==='completed'?(issue?'本轮已结束 · 有需关注项':'本轮已结束'):flow.status==='partial'?'部分完成':label(flow.status)}</span></div></div>
+   <li className="workflow-stage workflow-summary-row"><div className="workflow-stage-heading"><span className="workflow-step" aria-hidden="true">4</span><div><h3>结果汇总</h3><span className="workflow-stage-status">{summaryText(flow,{offline,active,issue})}</span></div></div>
     <p><strong>{flow.companies_found.toLocaleString()}</strong> 家企业已保存<span>结果随采集保存</span></p>
     {onViewCompanies&&<button type="button" className="workflow-view-results" onClick={onViewCompanies}>查看企业 <span aria-hidden="true">→</span></button>}
    </li>

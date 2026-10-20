@@ -162,6 +162,8 @@
 .workflow-stage-heading h3{font-size:14px;margin:0;line-height:1.5}
 .workflow-stage-status{display:block;font-size:12px;color:var(--workflow-status-fg);margin-top:3px}
 .workflow-stage-status.is-warning,.workflow-warning{color:var(--workflow-amber)}
+.workflow-stage-status.tone-info{color:var(--info-fg)}
+.workflow-stage-status.tone-muted{color:var(--text-2)}
 .workflow-stage-progress{min-width:0}
 .workflow-progress-caption{display:flex;align-items:baseline;justify-content:space-between;gap:8px;color:var(--workflow-muted);font-size:13px;font-variant-numeric:tabular-nums;margin-bottom:7px}
 .workflow-progress-caption strong{font-size:19px;font-weight:600;color:var(--navy)}
