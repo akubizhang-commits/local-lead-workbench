@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { EXPORT_BUSY, EXPORT_DISABLED, ExportJobsPanel, exportBody, useExportJobs } from "../ExportJobs";
 import { batchStatusPayload } from "../companyEdits";
@@ -6,12 +6,14 @@ import { CompanyStatus, StatusOptions } from "../CompanyStatus";
 import { date, filtersQuery, hintLabel, tierClass, TIERS, type Filters } from "../helpers";
 import { CategoryFilter } from "../CategoryFilter";
 import { ExclusionRules } from "../ExclusionRules";
-import { useResource } from "../hooks";
+import { nextFrame, useResource } from "../hooks";
+import { useMediaQuery } from "../useMediaQuery";
+import { CompanyCards } from "../CompanyCards";
 import { defaultFilters } from "../navigation";
 import type { Company, CompanyPage, Task, CityCount } from "../types";
 import { ActualCityCell } from "../ActualCity";
 import { RECHECK_LIMIT, recheckConfirm, recheckQueued, type RecheckCreated } from "../MarketRecheck";
-import { Alert, Badge, Empty, Icon } from "../ui";
+import { Alert, Badge, Empty, Icon, Modal } from "../ui";
 
 import { Resource } from "../Resource";
 import type { Action } from "./pageTypes";
@@ -58,6 +60,11 @@ const EXPORTS: [string, string, "csv" | "xlsx", "entries" | "companies", string]
   ["entries-xlsx", "导出联系入口 XLSX", "xlsx", "entries", "联系入口"],
   ["companies-csv", "导出企业表 CSV", "csv", "companies", "企业表"],
 ];
+/** 筛选（n）：除 q 和 sort 以外非空的筛选项数；category、excluded 各算 1（review NIT11）。 */
+export function activeFilterCount(filters: Filters): number {
+  const keys = ["status", "type", "market_id", "run_id", "segment", "contact", "best_tier", "actual_city", "nearby"] as const;
+  return keys.filter((k) => !!filters[k]).length + (filters.category?.length ? 1 : 0) + (filters.excluded ? 1 : 0);
+}
 /** 联系入口 column: best tier, deduplicated entry count, gap reason; legacy counts stay in the tooltip. */
 export function EntryCell({ company: c }: { company: Company }) {
   return (
@@ -131,25 +138,63 @@ export function CompaniesPage({
   useEffect(() => {
     setSelection({});
   }, [version]);
-  return (
-    <>
-      <div className="panel toolbar market-toolbar">
-        <form
-          className="search-box"
-          onSubmit={(e) => {
-            e.preventDefault();
-            updateFilters({ q: draftQuery });
-          }}
-        >
-          <Icon name="search" size={18} />
-          <input
-            aria-label="搜索企业"
-            placeholder="搜索企业名称、地址、地区或官网"
-            value={draftQuery}
-            onChange={(e) => setDraftQuery(e.target.value)}
-          />
-          <button type="submit">搜索</button>
-        </form>
+  const narrow = useMediaQuery("(max-width: 779px)");
+  const [sheet, setSheet] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  const exportMenu = useRef<HTMLDetailsElement>(null);
+  // Drawer count keeps the last successful total while the list reloads (design §4.4).
+  const lastTotal = useRef<number | undefined>(undefined);
+  if (companies.data) lastTotal.current = companies.data.total;
+  const pages = companies.data ? Math.max(1, Math.ceil(companies.data.total / companies.data.page_size)) : undefined;
+  const activeFilters = activeFilterCount(filters);
+  function clearFilters() {
+    setDraftQuery("");
+    updateFilters(defaultFilters());
+  }
+  const searchForm = (
+    <form
+      className="search-box"
+      onSubmit={(e) => {
+        e.preventDefault();
+        updateFilters({ q: draftQuery });
+      }}
+    >
+      <Icon name="search" size={18} />
+      <input
+        aria-label="搜索企业"
+        placeholder="搜索企业名称、地址、地区或官网"
+        value={draftQuery}
+        onChange={(e) => setDraftQuery(e.target.value)}
+      />
+      <button type="submit">搜索</button>
+    </form>
+  );
+  const statsButton = (
+    <button type="button" className="text-button stats-toggle" aria-expanded={showStats} aria-controls="stats-note"
+      onClick={() => setShowStats((v) => !v)}>ⓘ 新增、存量与资料变化的统计口径</button>
+  );
+  const statsText = (
+    <p id="stats-note" className="list-help">新增＝本轮首次进入该市场；存量＝此前已有且本轮再次找到；变化为其中资料发生变化的企业。未再次找到不代表停业，候选企业仍需业务核实。</p>
+  );
+  const exportButtons = (after?: () => void) => EXPORTS.map(([key, title, format, layout]) => (
+    <button
+      className={key === "entries-csv" ? "primary" : undefined}
+      disabled={busy || !!exports.active || companies.loading || !!companies.error}
+      key={key}
+      onClick={() => {
+        after?.();
+        act(
+          () => exports.start(exportBody(filters, format, layout)),
+          (started) => (started ? "导出已在后台开始，完成后可在下方下载" : EXPORT_BUSY),
+        );
+      }}
+    >
+      <Icon name="download" size={16} />
+      {title}
+    </button>
+  ));
+  const filterFieldList = [
+    { key: "market", label: "目标市场", control: (
         <select
           aria-label="目标市场筛选"
           value={filters.market_id || ""}
@@ -168,6 +213,33 @@ export function CompaniesPage({
             </option>
           ))}
         </select>
+    ) },
+    { key: "status", label: "客户匹配状态", control: (
+        <select
+          aria-label="客户匹配状态筛选"
+          value={filters.status}
+          onChange={(e) => updateFilters({ status: e.target.value })}
+        >
+          <option value="">全部客户匹配状态</option>
+          <option value="candidate">候选企业</option>
+          <option value="verified">符合目标客户</option>
+          <option value="not_fit">不符合目标客户</option>
+          <option value="do_not_contact">拒绝联系</option>
+        </select>
+    ) },
+    { key: "tier", label: "最佳入口等级", control: (
+        <select
+          aria-label="最佳入口等级筛选"
+          value={filters.best_tier || ""}
+          onChange={(e) => updateFilters({ best_tier: e.target.value })}
+        >
+          <option value="">全部入口等级</option>
+          {TIERS.map(([code, title]) => (
+            <option key={code} value={code}>{title}</option>
+          ))}
+        </select>
+    ) },
+    { key: "segment", label: "本轮分类", control: (
         <select
           aria-label="本轮分类筛选"
           value={filters.segment || ""}
@@ -180,17 +252,8 @@ export function CompaniesPage({
           <option value="changed">资料变化</option>
           <option value="not_seen">未再次找到</option>
         </select>
-        <select
-          aria-label="客户匹配状态筛选"
-          value={filters.status}
-          onChange={(e) => updateFilters({ status: e.target.value })}
-        >
-          <option value="">全部客户匹配状态</option>
-          <option value="candidate">候选企业</option>
-          <option value="verified">符合目标客户</option>
-          <option value="not_fit">不符合目标客户</option>
-          <option value="do_not_contact">拒绝联系</option>
-        </select>
+    ) },
+    { key: "type", label: "企业类型", control: (
         <select
           aria-label="企业类型筛选"
           value={filters.type}
@@ -201,6 +264,33 @@ export function CompaniesPage({
           <option value="retail">零售商</option>
           <option value="import">进口贸易商</option>
         </select>
+    ) },
+    { key: "city", label: "实际城市", control: (
+        <select
+          aria-label="实际城市筛选"
+          value={filters.actual_city || ""}
+          onChange={(e) => updateFilters({ actual_city: e.target.value })}
+        >
+          <option value="">全部城市</option>
+          {cities.data?.map((city) => (
+            <option key={city.city_key} value={city.city}>
+              {city.city}（{city.count} 家）{city.nearby ? " · 邻近" : ""}
+            </option>
+          ))}
+        </select>
+    ) },
+    { key: "nearby", label: "邻近城市", control: (
+        <select
+          aria-label="邻近城市筛选"
+          value={filters.nearby || ""}
+          onChange={(e) => updateFilters({ nearby: e.target.value as Filters["nearby"] })}
+        >
+          <option value="">全部</option>
+          <option value="only">只看邻近城市</option>
+          <option value="hide">隐藏邻近城市</option>
+        </select>
+    ) },
+    { key: "contact", label: "联系入口", control: (
         <select
           aria-label="联系入口筛选"
           value={filters.contact || ""}
@@ -212,16 +302,8 @@ export function CompaniesPage({
           <option value="procurement">有采购联系人</option>
           <option value="email">有其他公开邮箱</option>
         </select>
-        <select
-          aria-label="最佳入口等级筛选"
-          value={filters.best_tier || ""}
-          onChange={(e) => updateFilters({ best_tier: e.target.value })}
-        >
-          <option value="">全部入口等级</option>
-          {TIERS.map(([code, title]) => (
-            <option key={code} value={code}>{title}</option>
-          ))}
-        </select>
+    ) },
+    { key: "sort", label: "排序", control: (
         <select
           aria-label="企业排序"
           value={filters.sort || "newest"}
@@ -235,27 +317,15 @@ export function CompaniesPage({
           <option value="updated">最近更新优先</option>
           <option value="tier">入口等级优先</option>
         </select>
-        <select
-          aria-label="实际城市筛选"
-          value={filters.actual_city || ""}
-          onChange={(e) => updateFilters({ actual_city: e.target.value })}
-        >
-          <option value="">全部城市</option>
-          {cities.data?.map((city) => (
-            <option key={city.city_key} value={city.city}>
-              {city.city}（{city.count} 家）{city.nearby ? " · 邻近" : ""}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label="邻近城市筛选"
-          value={filters.nearby || ""}
-          onChange={(e) => updateFilters({ nearby: e.target.value as Filters["nearby"] })}
-        >
-          <option value="">全部</option>
-          <option value="only">只看邻近城市</option>
-          <option value="hide">隐藏邻近城市</option>
-        </select>
+    ) },
+  ];
+  const filterFields = filterFieldList.map((f) => ({ ...f, field: <label className="field"><span>{f.label}</span>{f.control}</label> }));
+  const desktopOrder = ["market", "segment", "status", "type", "contact", "tier", "sort", "city", "nearby"];
+  return (
+    <>
+      {!narrow && <div className="panel toolbar market-toolbar">
+        {searchForm}
+        {desktopOrder.map((k) => filterFields.find((f) => f.key === k)!).map((f) => <span key={f.key} className="toolbar-field">{f.control}</span>)}
         <CategoryFilter
           marketId={filters.market_id}
           selected={filters.category || []}
@@ -265,15 +335,36 @@ export function CompaniesPage({
         <button aria-expanded={showRules} onClick={() => setShowRules((v) => !v)}>
           排除规则
         </button>
-        <button
-          onClick={() => {
-            setDraftQuery("");
-            updateFilters(defaultFilters());
-          }}
-        >
-          重置
+        {activeFilters > 0 && <button onClick={clearFilters}>清除筛选</button>}
+      </div>}
+      {narrow && <div className="panel toolbar narrow-toolbar">
+        {searchForm}
+        <button type="button" className="filter-button" onClick={() => setSheet(true)}>
+          {activeFilters ? `筛选（${activeFilters}）` : "筛选"}
         </button>
-      </div>
+      </div>}
+      {sheet && (
+        <Modal title="筛选企业" variant="sheet" onClose={() => setSheet(false)}
+          headerExtra={<span className="sheet-count muted" aria-live="polite">当前 {companies.error ? "—" : lastTotal.current ?? "—"} 家</span>}>
+          <div className="form-body filter-sheet">
+            <div className="filter-sheet-wide">{filterFields[0].field}</div>
+            <div className="filter-sheet-grid">{filterFields.slice(1).map((f) => <span key={f.key}>{f.field}</span>)}</div>
+            <CategoryFilter inline marketId={filters.market_id} selected={filters.category || []} version={version}
+              onChange={(category) => updateFilters({ category })} />
+            <button type="button" className="text-button" onClick={() => {
+              setSheet(false);
+              setShowRules(true);
+              nextFrame(() => document.getElementById("exclusion-rules-title")?.focus());
+            }}>管理排除规则 →</button>
+            {statsButton}
+            {showStats && statsText}
+          </div>
+          <footer>
+            <button type="button" onClick={clearFilters}>清除筛选</button>
+            <button type="button" className="primary" onClick={() => setSheet(false)}>查看 {companies.error ? "—" : lastTotal.current ?? "—"} 家</button>
+          </footer>
+        </Modal>
+      )}
       {showRules && <ExclusionRules version={version} busy={busy} act={act} />}
       <ExcludedNotice
         hidden={companies.data?.excluded_total ?? 0}
@@ -286,33 +377,37 @@ export function CompaniesPage({
           <button onClick={refresh}>重试</button>
         </Alert>
       )}
-      <details className="market-definition list-help"><summary>查看新增、存量与资料变化的统计口径</summary><p>新增＝本轮首次进入该市场；存量＝此前已有且本轮再次找到；变化为其中资料发生变化的企业。未再次找到不代表停业，候选企业仍需业务核实。</p></details>
-      <div className="section-title">
-        <span className="muted">
-          共 {companies.data?.total ?? "—"} 家 · 每页 50 家
-        </span>
-        <div className="actions">
-          {exports.active && <span className="export-disabled">{EXPORT_DISABLED}</span>}
-          {EXPORTS.map(([key, title, format, layout]) => (
-            <button
-              className={key === "entries-csv" ? "primary" : undefined}
-              disabled={busy || !!exports.active || companies.loading || !!companies.error}
-              key={key}
-              onClick={() =>
-                act(
-                  () => exports.start(exportBody(filters, format, layout)),
-                  (started) => (started ? "导出已在后台开始，完成后可在下方下载" : EXPORT_BUSY),
-                )
-              }
-            >
-              <Icon name="download" size={16} />
-              {title}
-            </button>
-          ))}
+      <div className="section-title list-count">
+        <div className="count-line">
+          <span className="muted">
+            {narrow
+              ? `共 ${companies.data?.total ?? "—"} 家 · 第 ${companies.data?.page ?? page} / ${pages ?? "—"} 页`
+              : `共 ${companies.data?.total ?? "—"} 家 · 每页 50 家`}
+          </span>
+          {!narrow && statsButton}
         </div>
+        {narrow ? (
+          <details className="export-menu" ref={exportMenu} onKeyDown={(e) => {
+            if (e.key === "Escape" && exportMenu.current?.open) {
+              e.preventDefault();
+              exportMenu.current.open = false;
+              exportMenu.current.querySelector("summary")?.focus();
+            }
+          }}>
+            <summary>导出</summary>
+            <div className="export-menu-items">{exportButtons(() => { if (exportMenu.current) exportMenu.current.open = false; })}</div>
+          </details>
+        ) : (
+          <div className="actions">
+            {exports.active && <span className="export-disabled">{EXPORT_DISABLED}</span>}
+            {exportButtons()}
+          </div>
+        )}
       </div>
+      {!narrow && showStats && statsText}
+      {narrow && exports.active && <p className="export-disabled">{EXPORT_DISABLED}</p>}
       <ExportJobsPanel state={exports} exportDays={exportDays} />
-      {!!Object.keys(selection).length && <div className="batch-toolbar" aria-label="批量客户匹配状态">
+      {!narrow && !!Object.keys(selection).length && <div className="batch-toolbar" aria-label="批量客户匹配状态">
         <span>已选 {Object.keys(selection).length} 家（仅当前页）</span>
         <label>
           批量标记为{" "}
@@ -371,8 +466,16 @@ export function CompaniesPage({
           {Object.keys(selection).length > RECHECK_LIMIT && <span className="muted">一次最多 20 家，请减少选择</span>}
         </>}
       </div>}
+      <a className="skip-link inline-skip" href="#company-list" onClick={(e) => {
+        e.preventDefault();
+        document.getElementById("company-list")?.focus();
+      }}>跳到企业列表</a>
       <Resource {...companies} retry={refresh}>
-        <section className="panel table-wrap">
+        {narrow && companies.data?.items.length ? (
+          <CompanyCards items={companies.data.items} marketId={filters.market_id} onOpen={openCompany} />
+        ) : (
+        <section className="panel table-wrap" id={narrow ? undefined : "company-list"} tabIndex={narrow ? undefined : -1}
+          role="region" aria-label="企业列表">
           {companies.data?.items.length ? (
             <table>
               <thead>
@@ -529,6 +632,7 @@ export function CompaniesPage({
             </Empty>
           )}
         </section>
+        )}
       </Resource>
       <nav className="pagination" aria-label="企业列表分页">
         <span className="muted">

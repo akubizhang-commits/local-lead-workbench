@@ -20,7 +20,7 @@ export function ExclusionRules({marketId,version,busy,act}:{marketId?:string;ver
  const add=(kind:'category'|'keyword',value:string,reset:()=>void)=>act(async()=>{const rule=await api<ExclusionRule>('/exclusion-rules','POST',{...target,kind,value});reset();return rule;},
   result=>(result as ExclusionRule).reused?'已有相同的排除规则':'已添加排除规则，命中的企业默认隐藏');
  return <section className="panel exclusion-rules" aria-labelledby="exclusion-rules-title">
-  <h3 id="exclusion-rules-title">排除规则</h3>
+  <h3 id="exclusion-rules-title" tabIndex={-1}>排除规则</h3>
   <p className="muted">命中规则的企业默认隐藏，不会删除，也不改变客户匹配状态；删除规则即可恢复显示。</p>
   <form className="row" onSubmit={e=>{e.preventDefault();if(category)add('category',category,()=>setCategory(''));}}>
    <label>排除类别 <select value={category} onChange={e=>setCategory(e.target.value)} disabled={busy}>

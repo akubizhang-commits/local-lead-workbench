@@ -317,3 +317,38 @@ main:focus{outline:none}
  .comparison{grid-template-columns:1fr}
  .comparison>svg{transform:rotate(90deg);justify-self:center}
 }
+
+/* P1-14 企业库窄屏：卡片列表、筛选抽屉、导出菜单（design §4.4）。 */
+.skip-link.inline-skip{position:absolute;left:-9999px;top:auto}
+.skip-link.inline-skip:focus{position:static;display:inline-block;margin:0 0 10px}
+.count-line{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.stats-toggle{min-height:32px}
+.list-count{margin-top:12px;flex-wrap:wrap}.list-count>.actions{flex-wrap:wrap}
+.company-cards{list-style:none;margin:0 0 16px;padding:0;display:grid;gap:10px}
+.company-cards:focus{outline:none}
+.company-card{position:relative;display:block;width:100%;text-align:left;white-space:normal;padding:16px 40px 16px 16px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font-size:var(--fs-sm)}
+.company-card .card-line{display:block;margin-top:4px;overflow-wrap:anywhere}
+.company-card .card-line:first-child{margin-top:0}
+.company-card .card-name{font-size:15px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.company-card .card-meta,.company-card .card-gap{font-size:var(--fs-xs);color:var(--text-2)}
+.company-card .card-chevron{position:absolute;right:14px;top:50%;transform:translateY(-50%)}
+.company-card .card-chevron svg{color:var(--decor)}
+.narrow-toolbar{flex-wrap:nowrap}
+.narrow-toolbar .search-box{flex:1;min-width:0;flex-basis:auto}
+.narrow-toolbar .search-box input{min-width:0;min-height:44px}
+.filter-button{min-height:44px;flex-shrink:0}
+dialog.sheet{margin:auto 0 0;width:100vw;max-width:100vw;max-height:90vh;border-radius:14px 14px 0 0}
+dialog.sheet footer{position:sticky;bottom:0}
+dialog>header .sheet-count{margin-left:auto;margin-right:8px;font-size:var(--fs-sm)}
+.filter-sheet .field{margin-bottom:12px}
+.filter-sheet-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px}
+.filter-sheet select{width:100%;min-height:44px}
+.category-inline{margin:4px 0 12px}
+.category-inline-options{display:flex;flex-direction:column;gap:8px}
+.category-inline-options label{display:flex;gap:8px;align-items:center;font-size:var(--fs-sm);min-height:44px}
+.export-menu{position:relative}
+.export-menu>summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border:1px solid #dce2de;border-radius:7px;background:#fff;font-size:var(--fs-sm)}
+.export-menu-items{position:absolute;right:0;top:calc(100% + 6px);z-index:5;display:flex;flex-direction:column;gap:8px;padding:10px;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px #10271f20;max-width:calc(100vw - 32px)}
+.export-menu-items button{white-space:normal;min-height:44px}
+@media(max-width:779px){.page-heading.view-companies>div>p{display:none}.list-count{flex-wrap:nowrap}}
+@media(max-width:779px){.page-heading.view-companies{flex-direction:row;align-items:center;margin-bottom:14px}.page-heading.view-companies>.actions{width:auto;padding-top:0}.page-heading.view-companies h1{margin:0}.narrow-toolbar{padding:10px;margin-bottom:12px}.list-count{margin:8px 0 10px}.company-card{padding:12px 36px 12px 14px}}
