@@ -149,3 +149,32 @@ def test_legacy_market_without_keywords_keeps_working(tmp_path):
     assert task["query_estimate"]["terms"] == sorted(market_plan.TYPE_QUERIES["wholesale"])
     run = store.start_task(task["id"])
     assert run["status"] == "queued"
+
+
+@pytest.mark.parametrize("name,config", [
+    ("catalogue 1 term", lambda: validate_selection({**SAN_JOSE, "keywords": ["metal roofing supply"]})),
+    ("catalogue 10 terms", lambda: validate_selection({**SAN_JOSE, "keywords": [f"term {i}" for i in range(10)]})),
+    ("legacy text city", lambda: dict(country="US", state="California", city="San Jose", company_types=["wholesale"],
+                                      keywords=["metal roofing supply"])),
+    ("legacy without keywords", lambda: dict(country="US", state="California", city="San Jose",
+                                             company_types=["wholesale", "retail"], keywords=[])),
+    ("ZA municipality", lambda: validate_selection({**za_metro(), "keywords": ["metal supplier"]})),
+])
+def test_estimate_initial_matches_plan_market_jobs(name, config, tmp_path, monkeypatch):
+    """Preview and worker agree on the first round (review round 1, MEDIUM); geocoder stubbed, no network."""
+    import asyncio
+
+    async def geocoder(*args, **kwargs):
+        # Catalogue places and ZA municipalities never look the city up; legacy text cities fail here.
+        assert name.startswith("legacy"), name
+        return None, []
+    monkeypatch.setattr(market_plan, "_geocode", geocoder)
+    payload = config()
+    estimate = market_plan.estimate_queries(payload)
+    plan = asyncio.run(market_plan.plan_market(payload, tmp_path))
+    assert estimate["initial_max"] == len(plan["jobs"]), name
+    if estimate["geometry"] != "geocoder":
+        assert estimate["initial_min"] == len(plan["jobs"]), name
+    assert estimate["query_terms"] == sorted({job["query"] for job in plan["jobs"]}), name
+    expected = {"catalogue 1 term": "catalogue", "catalogue 10 terms": "catalogue", "ZA municipality": None}
+    assert estimate["bounds_source"] == expected.get(name, "catalogue_fallback"), name

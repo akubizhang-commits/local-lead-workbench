@@ -555,20 +555,25 @@ def estimate_queries(config) -> dict:
     location = ', '.join(part for part in (city, state, country.upper()) if part)
     geography = config.get('geography') or {}
     place_id, scope = geography.get('place_id'), geography.get('scope')
-    bbox = None
+    bbox, bounds_source = None, None
     if place_id:
         from .regions import index
         place = index().get(place_id) or {}
         if place.get('bbox') and place.get('geo'):
             try:
                 bbox = tuple(_bbox(place['bbox']))
+                bounds_source = 'catalogue'
             except ValueError:
                 bbox = None
     if bbox is None and scope != 'whole_municipality' and country:
         fallback = _catalogue_fallback(country, state, city)
         if fallback:
+            # The worker tries the geocoder first; this range is only its fallback, so the
+            # maximum is an estimate (review round 1, MEDIUM; option A).
             bbox = tuple(fallback[0]['bbox'])
+            bounds_source = 'catalogue_fallback'
     geometry, initial_min, initial_max, maximum, query_terms = _estimate_cached(
         terms, location, place_id, bbox, scope)
     return {'terms': list(terms), 'query_terms': list(query_terms), 'geometry': geometry,
-            'initial_min': initial_min, 'initial_max': initial_max, 'max': maximum}
+            'initial_min': initial_min, 'initial_max': initial_max, 'max': maximum,
+            'bounds_source': bounds_source}
