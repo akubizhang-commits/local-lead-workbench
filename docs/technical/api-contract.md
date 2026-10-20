@@ -70,7 +70,7 @@ X-Local-Token: <当前实例token>
 
 | 方法 | 路径 | 输入 | HTTP 200 返回 / 注意 |
 |---|---|---|---|
-| GET | `/api/companies` | `q/status/type/category/excluded`，默认空串/hide | `Company[]`；不分页、无数量上限 |
+| GET | `/api/companies` | `q/status/type/category/excluded/sort/page/page_size`，默认 page=1、page_size=50 | 分页信封 `{items,total,page,page_size,excluded_total}`，与 `/api/company-page` 相同（不分页数组已删除（2026-10 P1 第二批）） |
 | GET | `/api/company-page` | 见§4分页协议 | `{items,total,page,page_size,excluded_total}` |
 | GET | `/api/company-categories` | `market_id?`、`excluded=hide/only/include` | `[{category,category_key,count}]`，按 count 降序，≤200 |
 | GET | `/api/exclusion-rules` | `market_id?` | 规则数组（带 `matched`）；传市场时为全局+该市场规则 |
@@ -85,7 +85,7 @@ X-Local-Token: <当前实例token>
 | GET | `/api/reviews` | 无 | 待审核`Review[]`，按创建时间倒序；无分页。同企业同字段同值的观察合并为一条审核，每条含 `evidence_count`（来源数）与 `evidence_items`（最近≤5条 `{source_url,evidence,observed_at}`） |
 | POST | `/api/reviews/{id}/decision` | `{decision:"accept"或"reject"}` | `{ok:true,auto_closed:N}`；联系人变化 reject 另返回 `kept_previous:true`，accept 时当前值已变返回 409 并作废该建议（N 为同时自动关闭的同值待审核数）；已处理409；重复企业候选不允许accept覆盖另一企业 |
 | GET | `/api/changes` | 无 | 变更数组，最新500条，含`company_name` |
-| GET | `/api/exports` | `format=csv/xlsx`、`layout=companies/entries`及§4筛选；无page | 文件二进制；默认csv+companies，`leads.*` / `contact-entries.*`，详见§8与 P0 节 |
+| — | `/api/exports` | 已删除（2026-10 P1 第二批），请求返回 404 `unknown_endpoint` | 改用 `POST /api/export-jobs` → `GET /api/export-jobs/{id}` → `GET /api/export-jobs/{id}/file`，见 P1 第一批“后台导出作业” |
 
 ### 3.3 社媒配置、浏览器与任务
 
@@ -332,7 +332,7 @@ Content-Type: application/json
 
 源码：`api.py:482–493`、`export.py:17–81`。
 
-GET `/api/exports`接收与分页接口相同的q/status/type/market_id/run_id/segment/contact/sort，加format；不接收page/page_size，不受UI每页限制。仅run可推导market。返回：
+导出通过后台作业完成（`POST /api/export-jobs`，见 P1 第一批一节）；同步的 GET `/api/exports` 已删除（2026-10 P1 第二批）。作业接收与分页接口相同的q/status/type/market_id/run_id/segment/contact/sort，加format/layout；不接收page/page_size，不受UI每页限制。仅run可推导market。文件响应：
 
 - CSV：`text/csv; charset=utf-8`，UTF-8 BOM；`Content-Disposition: attachment; filename="leads.csv"`。
 - XLSX：`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`；文件名`leads.xlsx`。
@@ -540,17 +540,17 @@ Run.progress 增加 `social_total/social_done/social_accounts`；仅社媒父轮
 ### 后台导出作业（第 8 节）
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| POST | `/api/export-jobs` | `ExportJobInput`（extra=forbid）：`format` 必填 csv/xlsx，`layout` 默认 `companies`，其余筛选与 `/api/exports` 相同。202 返回作业；已有 queued/running 作业时 409 `export_busy` 带 `job_id`（同时只允许一个） |
+| POST | `/api/export-jobs` | `ExportJobInput`（extra=forbid）：`format` 必填 csv/xlsx，`layout` 默认 `companies`，其余筛选与 `/api/company-page` 相同（不含 page/page_size）。202 返回作业；已有 queued/running 作业时 409 `export_busy` 带 `job_id`（同时只允许一个） |
 | GET | `/api/export-jobs?limit=5` | 最近的作业，created_at 倒序，limit 1–20 |
 | GET | `/api/export-jobs/{id}` | 作业：status queued/running/succeeded/failed/cancelled，phase、processed/total、rows、size_bytes、expires_at、error{code,message} |
 | POST | `/api/export-jobs/{id}/cancel` | 已结束 409 `conflict` |
 | GET | `/api/export-jobs/{id}/file` | 未完成 409；文件已清理 410 `export_expired`；`Content-Disposition` 带 ASCII 回退名与 `filename*` |
 
-作业在独立子进程（`python -m leadworkbench.export_job`）里生成，状态是 `exports/jobs/<id>.json` 文件，不在数据库里；子进程意外退出或 API 重启后，作业在下一次相关请求时标记为 failed / `interrupted`。API 关闭时向子进程发 SIGTERM，最多等 5 s，作业记为 cancelled。导出进行中恢复备份返回 409 `export_running`。`GET /api/exports` 保留，响应头加 `Deprecation: true` 和 `Link: </api/export-jobs>; rel="successor-version"`，界面不再调用。
+作业在独立子进程（`python -m leadworkbench.export_job`）里生成，状态是 `exports/jobs/<id>.json` 文件，不在数据库里；子进程意外退出或 API 重启后，作业在下一次相关请求时标记为 failed / `interrupted`。API 关闭时向子进程发 SIGTERM，最多等 5 s，作业记为 cancelled。导出进行中恢复备份返回 409 `export_running`。当时保留的同步 `GET /api/exports` 已删除（2026-10 P1 第二批），见下方 P1 第二批一节。
 
 ### 分页（第 4 节）
-- `GET /api/reviews`：新增 `page`、`page_size`（1–200，默认 20）、`kind`。都不传时仍返回数组（已过时，带 `X-Total-Count`）；传任一个返回 `{items,total,page,page_size}`。排序改为 `created_at DESC, rowid DESC`（数组形式同样），原来同一时间记录顺序不确定的部分现在确定；超出最后一页返回空 items。
-- `GET /api/companies`：新增 `page`、`page_size`（默认 50）、`sort`；传参时返回与 `/api/company-page` 相同的信封，不传时仍返回数组（带 `X-Total-Count`）。
+- `GET /api/reviews`：新增 `page`、`page_size`（1–200，默认 20）、`kind`。传任一个返回 `{items,total,page,page_size}`；都不传时的数组模式已删除（2026-10 P1 第二批），现在按 page=1、page_size=20 返回信封。排序改为 `created_at DESC, rowid DESC`（数组形式同样），原来同一时间记录顺序不确定的部分现在确定；超出最后一页返回空 items。
+- `GET /api/companies`：新增 `page`、`page_size`（默认 50）、`sort`；返回与 `/api/company-page` 相同的信封；不传参数时的数组模式已删除（2026-10 P1 第二批），按 page=1、page_size=50 返回信封。
 
 ### 诊断包
 `GET /api/diagnostics/bundle` → `application/zip`（`diagnostics-YYYYMMDD-HHMMSS.zip`），在内存里生成，白名单文件：manifest.json、environment.json（只有数字的聚合计数）、config.json、worker.json、runs.json、logs/{api,worker,export,retention}.log（合计 ≤ 5 MB）。打包时对令牌、密钥、邮箱、网址、电话、主目录、异常消息和企业/联系人名称脱敏，不含数据库、备份、导出文件、Maps 原始结果和社媒登录信息。降级模式下也可用，此时 manifest 写 `name_redaction: "skipped"`。
@@ -567,3 +567,51 @@ Run.progress 增加 `social_total/social_done/social_accounts`；仅社媒父轮
 ### 恢复（第 9 节“恢复流程”的更新）
 校验条件增加：备份的 `schema_migrations` 里有当前版本不认识的 id 时返回 400“该备份来自更新版本的应用，当前版本无法恢复”。复制完成后对目标库执行与启动相同的统一迁移执行器（含 R05–R08 的每次启动修复，以前要等下次启动才执行），效果等同“恢复后重启一次”。
 
+
+## 2026-10：P1 第二批（结果质量与审核）
+
+### 新增接口
+
+| 方法 | 路径 | 请求 | 响应与错误 |
+|---|---|---|---|
+| GET | `/api/industry-presets` | — | 10 个预设行业 `[{id,label,terms:{wholesale,retail,import}}]` |
+| POST | `/api/tasks/preview` | 新建：`TaskInput`；编辑：`MarketPreviewInput{market_id,industry?,keywords}`（extra=forbid，地区一律取自该市场） | `{terms,query_terms,geometry:"catalogue"\|"geocoder"\|"text_only",initial_min,initial_max,max,bounds_source,keywords,existing_market,existing_market_scope}`；不写库、不联网。`bounds_source='catalogue_fallback'` 表示没有目录地点、按内置城市范围估算上限（worker 先尝试定位服务）；市场不存在 404；展开后超过 30 个 422 |
+| PATCH | `/api/tasks/{id}` | `MarketPatch{industry?,keywords}`（extra=forbid；地区字段 422“不支持此字段”） | 更新后的 task；404；已归档 409 `market_archived`；身份冲突 409 `market_exists`（extra `existing_id`、`archived`）；展开后超过 30 个 400。预设按市场已存的 company_types 展开 |
+| POST | `/api/tasks/{id}/archive` | — | task（带 `archived_at`）；有 queued/running/paused 轮次或未结束的批量复核时 409 `market_busy`；已归档时幂等 |
+| POST | `/api/tasks/{id}/restore` | — | task；启用中的过期计划顺延到下一个周期，不补跑；未归档时幂等 |
+| POST | `/api/tasks/{id}/website-recheck` | `RecheckInput`：`company_ids`（1–20，去重后计数）与 `select:"never_attempted"` 二选一 | 202 `{run_id,queued,skipped:[{company_id,name,reason}]}`；超过 20 家或两种模式都给/都不给 422；409 `market_archived` / `recheck_running` / `nothing_to_recheck` |
+| GET | `/api/tasks/{id}/website-recheck` | — | 最近一个批次 `{run_id,status,total,done,skipped,created_at,finished_at,pages_checked,entries_added}` 或 null |
+| GET | `/api/company-cities` | `market_id?`、`excluded` | 实际城市计数，最多 200 条 |
+| GET | `/api/review-cleanup` | — | `{plan_id,total,rules:[{rule,label,count,samples}]}`（只读，每条规则最多 5 个样例） |
+| POST | `/api/review-cleanup` | `{plan_id}`（64 位小写 hex，否则 422） | `{closed,rules:{rule:count}}`；候选为 0 时 200 `{closed:0}`（幂等）；集合已变 409 `plan_changed` |
+
+### 变更
+
+- `POST /api/tasks`：`keywords` 与 `industry`（预设 id）至少给一个，否则 422 loc `["body","keywords"]`“请填写检索关键词，或从预设行业中选择一个”；不再使用服装默认检索词；`company_types` 可选；展开后最多 30 个。已有的无关键词市场按旧规则继续运行，task 带 `needs_keywords`、`legacy_terms`。
+- `GET /api/tasks?archived=exclude|only|include`：默认 `exclude`，非法值 422。task 新增 `archived_at`、`query_estimate`、`needs_keywords`、`legacy_terms`、`round_summary`，`market_stats.nearby`。
+- 归档市场在以下操作返回 409 `market_archived`：开始一轮、新建或启用计划、社媒设置与开始社媒、重新定位、继续该市场的轮次或批量复核、修改关键词。`dispatch_due` 只把归档市场计划的 next_due_at 往后推，不建轮次。
+- `POST /api/schedules`：同一市场已有启用计划时 409 `schedule_exists`（extra `existing_id`）；`interval_months` 可省略，discovery 默认 1 个月、refresh 默认 3 个月。
+- `PATCH /api/schedules/{id}`：body `SchedulePatch{enabled?,interval_months?,timezone?}`（至少一项，否则 422“请至少修改一项”）；启用会撞上已有启用计划时 409 `schedule_exists`；周期或时区变化时重算 next_due_at，anchor 不变；重新启用的过期计划不补跑。
+- `GET /api/schedules?task_id=`：可选，1–64 个字符；带上时按 `enabled DESC, anchor IS NULL, anchor, rowid` 排序；schedule 新增 `task_name`。
+- `GET /api/company-page`、`POST /api/export-jobs`：新增 `actual_city`（1–120 个字符）和 `nearby=""|only|hide` 筛选；列表行和详情新增 `actual_city`、`actual_city_basis`、`nearby`。联系入口导出的“实际城市 / 城市依据”读 company_cities。
+- `POST /api/companies/{id}/refresh`：企业已在某个未结束轮次的复核队列里时，返回那个轮次并带 `already_queued: true`，不新建轮次。
+- `GET /api/changes` 与企业详情的 changes：每条新增 `auto_fill`（原值为空且不是人工决定）。官网观察写入规则：网页标题先清洗；与现名等价或没有共同词时只存观察值；自动采集的业务类型只接受批发商、零售商、进口贸易商，其余只作为 `business_types_evidence` 观察值；原值为空时直接写入，reason“自动补全：原值为空”，不进审核；电话按 E.164 比较。
+
+### 删除（2026-10 P1 第二批）
+
+- `GET /api/exports`：已删除，请求落到 `/{path}`，返回 404 `unknown_endpoint`。改用 `POST /api/export-jobs` → `GET /api/export-jobs/{id}` → `GET /api/export-jobs/{id}/file`。
+- `GET /api/companies`、`GET /api/reviews` 的不分页数组模式：已删除。不带参数时分别按 page=1、page_size=50 / 20 返回分页信封；不再有 `X-Total-Count`、`Deprecation`、`Link` 响应头。
+
+### 新增错误码
+
+| code | HTTP | 文案 |
+|---|---|---|
+| `market_archived` | 409 | 市场已归档，请先恢复后再操作。 |
+| `market_busy` | 409 | 该市场还有未结束的轮次（排队、运行或暂停中），请先取消后再归档。已取得的企业会保留。 |
+| `market_exists` | 409 | 已有相同地区和关键词的目标市场「{name}」，请直接使用该市场。（extra：`existing_id`、`archived`） |
+| `schedule_exists` | 409 | 该市场已有启用中的定时计划（每 {n} 个月，下次 {date}）。请直接修改这个计划。（extra：`existing_id`） |
+| `recheck_running` | 409 | 该市场已有批量官网复核在进行中（已完成 {done} / {total} 家），请等待完成或取消后再发起。 |
+| `nothing_to_recheck` | 409 | 所选企业都不需要复核：{原因汇总}。 |
+| `plan_changed` | 409 | 待审核内容已变化，请重新预览后再确认清理。 |
+
+前端对 409、422 以外的其他 4xx 统一显示“请求未完成：<服务端提示>”。

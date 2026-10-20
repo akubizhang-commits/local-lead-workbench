@@ -1,17 +1,21 @@
--- Generated 2026-10-19 from a temporary Store; no production DB opened.
--- Startup migrations (unified registry: 0001–0011, P0 ledger items, R01–R08); schema only, no data.
+-- Generated 2026-10-20 from a temporary Store; no production DB opened.
+-- Startup migrations (unified registry: 0001–0011, P0 ledger items, R01–R08, P1 batch 2 p1b_20261019_*); schema only, no data.
 -- Not an upgrade migration; use only to inspect/reconstruct an empty schema.
--- SHA256 leadworkbench/api.py: ae627c70aaf2bb0f57eb1bf94650cea987adc703479fe7c03a292e48d6e37cfd
--- SHA256 leadworkbench/db.py: c2546aa7344b504881ac3bb0f9df139100b4774ef0e23db6323092b2d981f97f
--- SHA256 leadworkbench/migrations.py: 60908986a78154cc611b2ce0958b9fda26b54d9dfa3d6f4a049fa993b5fb0712
--- SHA256 leadworkbench/market_store.py: b34262e3566df5e2f23ec0470334f956026c6c358a0fe0d74be70e264b452ddd
+-- SHA256 leadworkbench/api.py: 50b1f8004d47b0bf195f625143662230948cada17cccc6dcbd4bce7e9a75e124
+-- SHA256 leadworkbench/db.py: e8635fc71304e465dbd4128dc2c6918c1025a4ef48b622fcf76951e6596f2d42
+-- SHA256 leadworkbench/migrations.py: 70f862acfc5c996fb4adec545b799560f37f8074d7e31933585ae4cb039dec03
+-- SHA256 leadworkbench/market_store.py: 08c6470af6b39d06e43783baff63954fa38762690e2bb2f68648312703f6494a
 -- SHA256 leadworkbench/social_store.py: fed32f249f81063764318afe445fa596da5adf731017f936a7ed23738a2aa2f4
 -- SHA256 leadworkbench/social_discovery_store.py: 4f2319d01f227a9a8779e2507a4e63319abe6e246e7fd25b45bf7e33672cf8d5
 -- SHA256 leadworkbench/maps_policy.py: 3cefc797ace75cb7d59af5d0e23984bc95ef843b965fb3d83358ed15e2bdf3ac
 -- SHA256 leadworkbench/website_policy.py: 56383c243026023dcab9562f90a8b107069ec4c468495bdaf61273bb4f304d78
--- SHA256 leadworkbench/market_social.py: 286b9b46f92296655a960cd0726c057135467d31df484eaa3e124f60fcbb798d
+-- SHA256 leadworkbench/market_social.py: c0ff78fce1001514c1778f6a6ceb6f00fc0289aa078d4f269fbb17ab4b40dca5
 -- SHA256 leadworkbench/social_policy.py: ce6efa902e053d9d5f87916ee735d5ca849fbcb16a30c659fb6a51acd25a033f
 -- SHA256 leadworkbench/p0_migrations.py: 8041c759b99663d2e231630855276175e70cf440cd8f32cd1f6d571fa39eb806
+-- SHA256 leadworkbench/p1b_migrations.py: 74d25d1e98af1c820d077c71bbd557e4112f54267a5d21af5abb843614891f4e
+-- SHA256 leadworkbench/market_admin.py: f195dc4d01d0ad5b4108cea21438499dc84b2d885636849c64b2257da1f4117a
+-- SHA256 leadworkbench/review_cleanup.py: 4754c2e7d500a59ae65f3ffe77b9f4628452c36c9123c2b94ea207064553048e
+-- SHA256 leadworkbench/company_cities.py: 104dd8c630bbd12a958ca56f7d1ded7d2e335825bee793c7b070a97098ece284
 PRAGMA foreign_keys=ON;
 BEGIN TRANSACTION;
 CREATE TABLE schema_migrations(id TEXT PRIMARY KEY, applied_at TEXT NOT NULL);
@@ -176,78 +180,79 @@ CREATE TABLE contact_change_proposals(
         status TEXT NOT NULL CHECK(status IN ('pending','accepted','rejected','superseded')),
         origin TEXT NOT NULL DEFAULT 'proposal' CHECK(origin IN ('proposal','legacy','repair')),
         created_at TEXT NOT NULL, decided_at TEXT);
-
+CREATE TABLE task_state(
+        task_id TEXT PRIMARY KEY REFERENCES tasks(id), archived_at TEXT, updated_at TEXT NOT NULL);
+CREATE TABLE market_changes(
+        id TEXT PRIMARY KEY, market_id TEXT NOT NULL, field TEXT NOT NULL,
+        old_value TEXT, new_value TEXT, reason TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE market_recheck_runs(
+        run_id TEXT PRIMARY KEY REFERENCES runs(id), market_id TEXT NOT NULL REFERENCES tasks(id),
+        requested INTEGER NOT NULL, skipped TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL);
+CREATE TABLE market_round_baselines(
+        run_id TEXT NOT NULL REFERENCES runs(id), company_id TEXT NOT NULL REFERENCES companies(id),
+        rank INTEGER NOT NULL, PRIMARY KEY(run_id, company_id));
+CREATE TABLE market_round_summaries(
+        run_id TEXT PRIMARY KEY REFERENCES runs(id), market_id TEXT NOT NULL REFERENCES tasks(id),
+        payload TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE review_resolutions(
+        review_id TEXT PRIMARY KEY REFERENCES reviews(id), previous_status TEXT NOT NULL,
+        status TEXT NOT NULL, rule TEXT NOT NULL, batch_id TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE company_cities(
+        company_id TEXT PRIMARY KEY REFERENCES companies(id), city TEXT NOT NULL, city_key TEXT NOT NULL,
+        target_keys TEXT NOT NULL, target_scope TEXT NOT NULL, nearby_global INTEGER NOT NULL,
+        parsed INTEGER NOT NULL);
+CREATE TABLE company_cities_dirty(company_id TEXT PRIMARY KEY);
 CREATE INDEX observations_company ON observations(company_id,observed_at);
-
 CREATE INDEX work_items_run ON work_items(run_id,state);
-
 CREATE INDEX market_membership_company ON market_memberships(company_id,market_id);
-
 CREATE INDEX run_companies_market ON run_companies(market_id,run_id,segment,changed);
-
 CREATE INDEX market_runs_market ON market_runs(market_id,run_id);
-
 CREATE INDEX listing_alias_source ON listing_aliases(source_key);
-
 CREATE INDEX review_evidence_review ON review_evidence(review_id);
-
 CREATE INDEX social_evidence_company ON social_evidence(company_id,entity_id);
-
 CREATE INDEX social_work_state ON social_work(state,run_id);
-
 CREATE INDEX contacts_company ON contacts(company_id);
-
 CREATE INDEX contacts_company_email ON contacts(company_id, lower(trim(email)));
-
 CREATE INDEX contact_versions_contact ON contact_versions(contact_id, observed_at);
-
 CREATE INDEX reviews_status ON reviews(status, created_at);
-
 CREATE INDEX reviews_company_field ON reviews(company_id, kind, field, status);
-
 CREATE INDEX reviews_contact ON reviews(kind, new_value, status);
-
 CREATE INDEX locations_company ON locations(company_id);
-
 CREATE INDEX changes_company ON changes(company_id, created_at);
-
 CREATE INDEX observations_company_field ON observations(company_id, field, observed_at);
-
 CREATE INDEX companies_newest ON companies(created_at DESC, id);
-
 CREATE INDEX companies_status ON companies(status);
-
 CREATE INDEX listings_company ON listings(company_id);
-
 CREATE INDEX work_items_target ON work_items(target, stage);
-
 CREATE INDEX contact_facets_company ON contact_facets(company_id, category, tier_rank);
-
 CREATE INDEX contact_facets_company_email ON contact_facets(company_id, email_key);
-
 CREATE INDEX company_categories_key ON company_categories(category_key, company_id);
-
 CREATE UNIQUE INDEX exclusion_rules_unique
         ON exclusion_rules(scope, COALESCE(market_id,''), kind, value_key);
-
 CREATE INDEX contact_proposals_contact ON contact_change_proposals(contact_id, proposal_key, status);
-
+CREATE INDEX market_changes_market ON market_changes(market_id, created_at);
+CREATE INDEX market_recheck_market ON market_recheck_runs(market_id, created_at);
+CREATE UNIQUE INDEX schedules_one_enabled_market
+    ON schedules(task_id) WHERE enabled=1 AND task_id IS NOT NULL;
+CREATE INDEX market_round_summaries_market ON market_round_summaries(market_id, created_at);
+CREATE INDEX company_cities_key ON company_cities(city_key, company_id);
 CREATE TRIGGER contacts_facets_insert AFTER INSERT ON contacts
         BEGIN INSERT OR IGNORE INTO contact_facets_dirty(contact_id) VALUES(new.id); END;
-
 CREATE TRIGGER contacts_facets_update
         AFTER UPDATE OF company_id,name,role,email,url,kind,role_status,association_status,evidence ON contacts
         BEGIN INSERT OR IGNORE INTO contact_facets_dirty(contact_id) VALUES(new.id); END;
-
 CREATE TRIGGER contacts_facets_delete AFTER DELETE ON contacts
         BEGIN DELETE FROM contact_facets WHERE contact_id=old.id;
               DELETE FROM contact_facets_dirty WHERE contact_id=old.id; END;
-
 CREATE TRIGGER manual_contacts_facets_insert AFTER INSERT ON manual_contacts
         BEGIN INSERT OR IGNORE INTO contact_facets_dirty(contact_id) VALUES(new.contact_id); END;
-
 CREATE TRIGGER manual_contacts_facets_update AFTER UPDATE ON manual_contacts
         BEGIN INSERT OR IGNORE INTO contact_facets_dirty(contact_id) VALUES(new.contact_id); END;
-
+CREATE TRIGGER companies_city_insert AFTER INSERT ON companies
+        BEGIN INSERT OR IGNORE INTO company_cities_dirty(company_id) VALUES(new.id); END;
+CREATE TRIGGER companies_city_update AFTER UPDATE OF address,country,city ON companies
+        BEGIN INSERT OR IGNORE INTO company_cities_dirty(company_id) VALUES(new.id); END;
+CREATE TRIGGER memberships_city_insert AFTER INSERT ON market_memberships
+        BEGIN INSERT OR IGNORE INTO company_cities_dirty(company_id) VALUES(new.company_id); END;
 PRAGMA user_version=2;
 COMMIT;

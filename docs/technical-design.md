@@ -386,15 +386,15 @@ running -> pausing -> paused -> running
 | POST `/api/runs/{id}/pause` | 请求在安全点暂停 |
 | POST `/api/runs/{id}/resume` | 继续允许恢复的运行 |
 | POST `/api/runs/{id}/cancel` | 取消未完成工作 |
-| GET `/api/companies` | 分页筛选 |
+| GET `/api/companies` | 分页筛选（只返回分页信封；不分页数组已删除（2026-10 P1 第二批）） |
 | GET `/api/companies/{id}` | 企业、地点、联系人及证据 |
 | PATCH `/api/companies/{id}` | 人工编辑，带修订号 |
 | POST `/api/companies/{id}/refresh` | 单企业复核 |
-| GET `/api/reviews` | 待审核项 |
+| GET `/api/reviews` | 待审核项（分页信封，默认每页 20） |
 | POST `/api/reviews/{id}/decision` | 确认或拒绝，记录决策 |
 | POST `/api/schedules` | 创建定时发现／复核计划 |
 | PATCH `/api/schedules/{id}` | 修改或禁用计划 |
-| POST `/api/exports` | 按筛选快照生成导出 |
+| POST `/api/export-jobs` | 按筛选快照在后台生成导出（同步 `/api/exports` 已删除（2026-10 P1 第二批）） |
 | POST `/api/backups` | 创建一致性备份 |
 
 启动、导出等可重复提交动作接受 idempotency key；人工编辑使用 revision 防止覆盖另一处更新。

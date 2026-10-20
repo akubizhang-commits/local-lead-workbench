@@ -38,7 +38,7 @@ const server=createServer(async(req,res)=>{
    if(req.method==='PATCH'){Object.assign(c,json.fields||{});if(json.status)c.status=json.status;if(json.business_types)c.business_types=json.business_types;c.revision++;c.manual_checked_at='2026-09-22T08:00:00Z';return reply(c);}
    return reply({company:c,contacts,related_locations:related,observations:[],changes:[],social_links:[]});
   }
-  // Export jobs (the synchronous /api/exports was removed in P1 batch 2): create -> poll -> download file.
+  // Export jobs (the synchronous export endpoint was removed in P1 batch 2): create -> poll -> download file.
   if(url.pathname==='/api/export-jobs'&&req.method==='POST'){exportJob={...exportJobBase,filters:json,format:json.format,layout:json.layout};return reply(exportJob,202);}
   if(url.pathname==='/api/export-jobs')return reply(exportJob?[exportJob]:[]);
   if(url.pathname==='/api/export-jobs/job-1')return reply(exportJob);
@@ -97,7 +97,7 @@ try{
  await page.getByRole('button',{name:'CSV',exact:true}).click();
  const exportRequest=requests.findLast(r=>r.path==='/api/export-jobs'&&r.method==='POST');assert.equal(exportRequest.body.contact,'email');assert.equal(exportRequest.body.sort,'updated');assert.equal(exportRequest.body.page,undefined);
  const dl=page.waitForEvent('download');await page.getByRole('button',{name:'下载文件',exact:true}).click();await dl;
- assert.ok(requests.some(r=>r.path==='/api/export-jobs/job-1/file'));assert.ok(!requests.some(r=>r.path==='/api/exports'));
+ assert.ok(requests.some(r=>r.path==='/api/export-jobs/job-1/file'));assert.ok(requests.every(r=>!r.path.startsWith('/api/export')||r.path.startsWith('/api/export-jobs')));
  await page.getByRole('button',{name:'目标市场',exact:true}).click();
  await page.getByText('后台采集离线',{exact:true}).first().waitFor();
  assert.match(await page.locator('.worker-health').innerText(),/API 连接正常不代表正在采集/);

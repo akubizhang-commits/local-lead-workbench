@@ -456,3 +456,45 @@ PY
 ### 文件型状态（不在数据库里）
 `retention.json`（保留策略与确认状态，0600；恢复备份不会改变它）、`exports/jobs/<id>.json`（导出作业）、`run/maps/<guard_pid>.json`（Maps 守护进程注册表）、`logs/*.log`。保留策略从不删除数据库记录。
 
+
+## 2026-10：P1 第二批
+
+### 迁移条目
+
+7 个 once 条目追加在统一注册表 R08 之后（`leadworkbench/p1b_migrations.py`），旧库和恢复的旧备份都走同一个执行器：
+
+| id | 内容 | 对旧库的影响 |
+|---|---|---|
+| `p1b_20261019_market_admin` | 建 `task_state`、`market_changes`、`market_recheck_runs` 及索引 | 只新增空表 |
+| `p1b_20261019_schedule_dedupe` | `enabled=1 AND task_id IS NOT NULL` 的计划按 task_id 分组，每组保留 `anchor IS NULL, anchor, rowid` 排序的第一条，其余 `enabled=0`，每条写一行 `market_changes(field='schedule')`；然后建部分唯一索引 `schedules_one_enabled_market` | 只停用重复计划，不删除；无重复时不写记录 |
+| `p1b_20261019_round_summaries` | 建 `market_round_baselines`、`market_round_summaries` | 只新增空表；历史轮次的摘要读取时现算 |
+| `p1b_20261019_review_resolutions` | 建 `review_resolutions` | 只新增空表；升级不清理任何审核 |
+| `p1b_20261019_company_cities_schema` | 建 `company_cities`、`company_cities_dirty` 和 3 个触发器 | 只新增 |
+| `p1b_20261019_company_cities_mark` | 把全部企业写进 `company_cities_dirty` | 只新增 |
+| `p1b_20261019_company_cities_fill` | 每批 5000 家解析地址写 `company_cities`，有剩余就抛 `Pending` 续跑 | 只新增 |
+
+### 新表（8 张）
+
+- `task_state(task_id PK→tasks, archived_at, updated_at)`：归档状态；恢复时 archived_at 置 NULL，不删行。
+- `market_changes(id PK, market_id, field, old_value, new_value, reason, created_at)`：关键词修改、归档/恢复、计划去重与补值的审计记录；market_id 故意不加外键（旧库可能有指向已不存在市场的计划）。
+- `market_recheck_runs(run_id PK→runs, market_id→tasks, requested, skipped JSON, created_at)`：批量官网复核批次与跳过原因。
+- `market_round_baselines(run_id→runs, company_id→companies, rank)`：轮次开始时的入口等级基线。
+- `market_round_summaries(run_id PK→runs, market_id→tasks, payload JSON, created_at)`：本轮新增摘要。
+- `review_resolutions(review_id PK→reviews, previous_status, status, rule, batch_id, created_at)`：一次性审核清理的关闭记录（batch_id 为 plan_id）；清理只把审核改为 `auto_closed`，不改 companies、不删行。
+- `company_cities(company_id PK→companies, city, city_key, target_keys JSON, target_scope, nearby_global, parsed)`：实际城市派生表。
+- `company_cities_dirty(company_id PK)`：待刷新标记。
+
+索引：`market_changes_market`、`market_recheck_market`、`market_round_summaries_market`、`company_cities_key(city_key, company_id)`，以及部分唯一索引 `schedules_one_enabled_market ON schedules(task_id) WHERE enabled=1 AND task_id IS NOT NULL`（同一市场只有一个启用计划；Store 层先查后写返回 409，索引兜底，`IntegrityError` 只转换 `schedules.task_id` 冲突）。
+
+触发器：`companies_city_insert`、`companies_city_update`（`AFTER UPDATE OF address,country,city`）、`memberships_city_insert`，都只往 `company_cities_dirty` 写标记；读入口（企业列表、详情、市场、导出）前每批最多刷新 2000 条，数据库忙时跳过，下次读取补上。缺行时显示现算、不写库，筛选按 parsed=0 处理。
+
+### market_keys 的派生说明
+
+market_keys 是派生数据，由市场的地区和关键词算出；编辑关键词时整组替换；被替换的旧身份记录在 market_changes.old_value 里（`{"keywords":[…],"identities":[…]}`）。
+
+### company_cities 的口径
+
+- `city` / `city_key`：`address_city.city_from_address` 从地址解析出的城市及其 `normalized` 值；解析不出时 `city=''`、`parsed=0`。
+- `target_keys`：目标城市名字集合 `company_cities.target_city_keys(companies.city, 首个市场的 official_name)`，对两个名字分别：1) 规范化原名；2) 去掉末尾 ` (balance)`；3) 去掉末尾一个 LSAD 词（unified/consolidated/metropolitan/metro government、urban county、city、town、village、cdp，不去 county）；4) 去掉开头 `urban `；5) `X (Y)` 时 X、Y 各并入；6) 按 `-` 或 `/` 切开取第一段。每一步结果都并入集合。
+- `target_scope`：`none`（companies.city 为空）、`municipality`（首次发现该企业的市场是南非整个自治市）、`city`（其余）。
+- 两种邻近口径：市场上下文按该市场的 target_city_keys 集合比较（自治市市场一律不标邻近）；全局企业库用刷新时算好的 `nearby_global = parsed=1 AND target_scope='city' AND target_keys 非空 AND city_key ∉ target_keys`。只比名称，不算距离。

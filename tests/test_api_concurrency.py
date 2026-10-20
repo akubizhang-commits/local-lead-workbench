@@ -281,7 +281,7 @@ async def test_7_facet_refresh_busy_does_not_fail_reads(client, monkeypatch):
 
 
 async def test_8_paged_lists_stay_consistent_during_writes(client):
-    """The unpaged json_array responses were removed (design §10.2); paged lists read one snapshot."""
+    """Unpaged array responses were removed (design §10.2); paged lists stay consistent under writes."""
     http, app = client
     store = app.state.store
     for i in range(30):

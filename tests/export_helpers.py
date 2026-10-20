@@ -1,11 +1,11 @@
-"""Export through the background job API (the synchronous /api/exports was removed, design §10.2)."""
+"""Export through the background job API (the synchronous export endpoint was removed, design §10.2)."""
 import time
 
 
 def export_job_file(client, timeout=30, **params):
     """POST /api/export-jobs, poll until succeeded (at most ``timeout`` s), return the file response.
 
-    Defaults match the removed GET /api/exports: CSV, companies layout."""
+    Defaults match the removed synchronous export: CSV, companies layout."""
     body = {"format": "csv", "layout": "companies", **params}
     response = client.post("/api/export-jobs", json=body)
     assert response.status_code == 202, response.text

@@ -17,7 +17,7 @@ Base `/api`. JSON responses. Error body `{detail: string}`. Arrays returned dire
 Run `{id,task_id,kind,status,progress:{done,total,discovered},message,created_at,finished_at,error}`.
 `POST /api/runs/{id}/{pause|resume|cancel}` -> Run. Statuses queued/running/paused/completed/partial/blocked/failed/cancelled.
 
-`GET /api/companies?q=&status=&type=` -> Company[] (up to 500).
+`GET /api/companies?q=&status=&type=&page=&page_size=` -> `{items:Company[],total,page,page_size,excluded_total}` (defaults page=1, page_size=50; the unpaged array was removed in P1 batch 2, 2026-10).
 Company `{id,name,address,phone,website,city,country,business_types:string[],status,notes,revision,created_at,last_checked_at,contact_count}`. Status candidate/verified/not_fit/do_not_contact.
 `GET /api/companies/{id}` -> `{company:Company,contacts:Contact[],observations:Observation[],changes:Change[],social_links:string[]}`.
 `PATCH /api/companies/{id}` body `{revision,fields:{name?,address?,phone?,website?},notes?,status?}` -> Company.
@@ -27,16 +27,16 @@ Contact `{id,name,role,email,url,kind,role_status,association_status,source_url,
 Observation `{id,field,value,source_url,evidence,observed_at,method}`.
 Change `{id,company_id,company_name,field,old_value,new_value,created_at,reason}`.
 
-`GET /api/reviews` -> `[{id,company_id,company_name,kind,field,old_value,new_value,source_url,evidence,status,created_at}]`.
+`GET /api/reviews?page=&page_size=&kind=` -> `{items:[{id,company_id,company_name,kind,field,old_value,new_value,source_url,evidence,status,created_at}],total,page,page_size}` (defaults page=1, page_size=20; the unpaged array was removed in P1 batch 2, 2026-10).
 `POST /api/reviews/{id}/decision` body `{decision:"accept"|"reject"}` -> `{ok:true}`.
 `GET /api/changes` -> Change[].
 
 `GET /api/schedules` -> `[{id,task_id,company_id,kind,interval_months,timezone,next_due_at,enabled}]`.
 `POST /api/schedules` body `{task_id?:string,company_id?:string,kind:"discovery"|"refresh",interval_months:3,timezone:"Asia/Shanghai",enabled:true}` -> schedule. Exactly one target.
-`PATCH /api/schedules/{id}` body `{enabled:boolean}` -> schedule.
+`PATCH /api/schedules/{id}` body `{enabled?,interval_months?,timezone?}` (at least one) -> schedule; one enabled plan per market (409 `schedule_exists`).
 
 `GET /api/settings` -> `{data_dir,version,network_mode:"direct-public",paid_services:false,ai_enabled:false}`.
 `POST /api/backups` -> `{name,created_at}`; `GET /api/backups` -> list; `POST /api/backups/restore` body `{name}` -> `{ok:true}`; application refuses restore while active runs exist.
-`GET /api/exports?format=csv|xlsx&q=&status=&type=` -> download; browser use authenticated fetch then blob. CSV contains companies; XLSX companies/contacts/locations; do_not_contact excluded by default.
+`GET /api/exports` was removed in P1 batch 2 (2026-10) and returns 404 `unknown_endpoint`; export with `POST /api/export-jobs`, poll `GET /api/export-jobs/{id}`, then download `GET /api/export-jobs/{id}/file` (authenticated fetch then blob). CSV contains companies; XLSX companies/contacts/locations; do_not_contact excluded by default.
 
 UI fully Chinese, clean desktop workspace, navigable details and readable evidence. Empty production database initially. User-visible distinction: actual discovered records vs manual entries; role verification vs email presence; no data vs failed source.

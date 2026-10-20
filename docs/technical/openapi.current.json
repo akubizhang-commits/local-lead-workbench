@@ -154,12 +154,39 @@
       "get": {
         "summary": "Tasks",
         "operationId": "tasks_api_tasks_get",
+        "parameters": [
+          {
+            "name": "archived",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "exclude",
+                "only",
+                "include"
+              ],
+              "type": "string",
+              "default": "exclude",
+              "title": "Archived"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -169,10 +196,204 @@
         "summary": "Create Task",
         "operationId": "create_task_api_tasks_post",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/TaskInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{id}/website-recheck": {
+      "post": {
+        "summary": "Website Recheck Create",
+        "operationId": "website_recheck_create_api_tasks__id__website_recheck_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecheckInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Website Recheck",
+        "operationId": "website_recheck_api_tasks__id__website_recheck_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{id}/archive": {
+      "post": {
+        "summary": "Archive Task",
+        "operationId": "archive_task_api_tasks__id__archive_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{id}/restore": {
+      "post": {
+        "summary": "Restore Task",
+        "operationId": "restore_task_api_tasks__id__restore_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/preview": {
+      "post": {
+        "summary": "Preview Task",
+        "operationId": "preview_task_api_tasks_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Body"
               }
             }
           },
@@ -194,6 +415,69 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{id}": {
+      "patch": {
+        "summary": "Update Task",
+        "operationId": "update_task_api_tasks__id__patch",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarketPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/industry-presets": {
+      "get": {
+        "summary": "Industry Presets",
+        "operationId": "industry_presets_api_industry_presets_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           }
@@ -1015,6 +1299,85 @@
               "type": "string",
               "default": "",
               "title": "Best Tier"
+            }
+          },
+          {
+            "name": "actual_city",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 120,
+              "default": "",
+              "title": "Actual City"
+            }
+          },
+          {
+            "name": "nearby",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "",
+                "only",
+                "hide"
+              ],
+              "type": "string",
+              "default": "",
+              "title": "Nearby"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/company-cities": {
+      "get": {
+        "summary": "Company Cities",
+        "operationId": "company_cities_api_company_cities_get",
+        "parameters": [
+          {
+            "name": "market_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Market Id"
+            }
+          },
+          {
+            "name": "excluded",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "hide",
+                "only",
+                "include"
+              ],
+              "type": "string",
+              "default": "hide",
+              "title": "Excluded"
             }
           }
         ],
@@ -2179,26 +2542,10 @@
         }
       }
     },
-    "/api/changes": {
+    "/api/review-cleanup": {
       "get": {
-        "summary": "Changes",
-        "operationId": "changes_api_changes_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/schedules": {
-      "get": {
-        "summary": "Schedules",
-        "operationId": "schedules_api_schedules_get",
+        "summary": "Review Cleanup Preview",
+        "operationId": "review_cleanup_preview_api_review_cleanup_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2211,13 +2558,13 @@
         }
       },
       "post": {
-        "summary": "Create Schedule",
-        "operationId": "create_schedule_api_schedules_post",
+        "summary": "Review Cleanup",
+        "operationId": "review_cleanup_api_review_cleanup_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ScheduleInput"
+                "$ref": "#/components/schemas/ReviewCleanupConfirm"
               }
             }
           },
@@ -2245,10 +2592,106 @@
         }
       }
     },
+    "/api/changes": {
+      "get": {
+        "summary": "Changes",
+        "operationId": "changes_api_changes_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schedules": {
+      "get": {
+        "summary": "Schedules",
+        "operationId": "schedules_api_schedules_get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create Schedule",
+        "operationId": "create_schedule_api_schedules_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/schedules/{id}": {
       "patch": {
-        "summary": "Toggle",
-        "operationId": "toggle_api_schedules__id__patch",
+        "summary": "Update Schedule",
+        "operationId": "update_schedule_api_schedules__id__patch",
         "parameters": [
           {
             "name": "id",
@@ -2265,7 +2708,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Toggle"
+                "$ref": "#/components/schemas/SchedulePatch"
               }
             }
           }
@@ -2456,213 +2899,6 @@
           },
           "required": true
         },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/exports": {
-      "get": {
-        "summary": "Export",
-        "operationId": "export_api_exports_get",
-        "parameters": [
-          {
-            "name": "format",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "enum": [
-                "csv",
-                "xlsx"
-              ],
-              "type": "string",
-              "default": "csv",
-              "title": "Format"
-            }
-          },
-          {
-            "name": "layout",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "enum": [
-                "companies",
-                "entries"
-              ],
-              "type": "string",
-              "default": "companies",
-              "title": "Layout"
-            }
-          },
-          {
-            "name": "q",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "",
-              "title": "Q"
-            }
-          },
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "",
-              "title": "Status"
-            }
-          },
-          {
-            "name": "type",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "",
-              "title": "Type"
-            }
-          },
-          {
-            "name": "market_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "",
-              "title": "Market Id"
-            }
-          },
-          {
-            "name": "run_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "",
-              "title": "Run Id"
-            }
-          },
-          {
-            "name": "contact",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "enum": [
-                "",
-                "email",
-                "procurement"
-              ],
-              "type": "string",
-              "default": "",
-              "title": "Contact"
-            }
-          },
-          {
-            "name": "sort",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "enum": [
-                "newest",
-                "procurement",
-                "email",
-                "updated",
-                "tier"
-              ],
-              "type": "string",
-              "default": "newest",
-              "title": "Sort"
-            }
-          },
-          {
-            "name": "segment",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "enum": [
-                "",
-                "new",
-                "existing",
-                "changed",
-                "not_seen"
-              ],
-              "type": "string",
-              "default": "",
-              "title": "Segment"
-            }
-          },
-          {
-            "name": "category",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 120
-              },
-              "maxItems": 20,
-              "default": [],
-              "title": "Category"
-            }
-          },
-          {
-            "name": "excluded",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "enum": [
-                "hide",
-                "only",
-                "include"
-              ],
-              "type": "string",
-              "default": "hide",
-              "title": "Excluded"
-            }
-          },
-          {
-            "name": "best_tier",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "enum": [
-                "",
-                "named_procurement",
-                "named_role",
-                "named_unknown",
-                "department_email",
-                "general_email",
-                "form_phone",
-                "company_phone",
-                "none"
-              ],
-              "type": "string",
-              "default": "",
-              "title": "Best Tier"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3246,6 +3482,22 @@
             ],
             "title": "Best Tier",
             "default": ""
+          },
+          "actual_city": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Actual City",
+            "default": ""
+          },
+          "nearby": {
+            "type": "string",
+            "enum": [
+              "",
+              "only",
+              "hide"
+            ],
+            "title": "Nearby",
+            "default": ""
           }
         },
         "additionalProperties": false,
@@ -3324,6 +3576,34 @@
         ],
         "title": "ManualContactInput"
       },
+      "MarketPatch": {
+        "properties": {
+          "industry": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Industry"
+          },
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "title": "Keywords"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "MarketPatch",
+        "description": "Keyword edit; regions cannot change (extra=forbid -> 422 on body.<field>, design §6.1).\nNo preset expansion here: the Store expands with the market's stored company types (R3-1)."
+      },
       "MarketSocialRunInput": {
         "properties": {
           "social_platforms": {
@@ -3348,6 +3628,43 @@
         "additionalProperties": false,
         "type": "object",
         "title": "MarketSocialRunInput"
+      },
+      "RecheckInput": {
+        "properties": {
+          "company_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "maxLength": 64,
+                  "minLength": 1
+                },
+                "type": "array",
+                "maxItems": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Ids"
+          },
+          "select": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "never_attempted"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Select"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "RecheckInput",
+        "description": "Exactly one mode: up to 20 chosen companies, or the server's never-attempted selection (D2, D10)."
       },
       "Restore": {
         "properties": {
@@ -3410,6 +3727,21 @@
         ],
         "title": "RetentionPolicyInput"
       },
+      "ReviewCleanupConfirm": {
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Plan Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "plan_id"
+        ],
+        "title": "ReviewCleanupConfirm"
+      },
       "ScheduleInput": {
         "properties": {
           "task_id": {
@@ -3443,11 +3775,17 @@
             "title": "Kind"
           },
           "interval_months": {
-            "type": "integer",
-            "maximum": 24.0,
-            "minimum": 1.0,
-            "title": "Interval Months",
-            "default": 3
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 24.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Months"
           },
           "timezone": {
             "type": "string",
@@ -3466,6 +3804,48 @@
           "kind"
         ],
         "title": "ScheduleInput"
+      },
+      "SchedulePatch": {
+        "properties": {
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "interval_months": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 24.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Months"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SchedulePatch"
       },
       "SocialConnectionsInput": {
         "properties": {
@@ -3760,6 +4140,18 @@
             "title": "County",
             "default": ""
           },
+          "industry": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Industry"
+          },
           "keywords": {
             "items": {
               "type": "string"
@@ -3836,20 +4228,6 @@
         "additionalProperties": false,
         "type": "object",
         "title": "TaskSocialSettingsInput"
-      },
-      "Toggle": {
-        "properties": {
-          "enabled": {
-            "type": "boolean",
-            "title": "Enabled"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "enabled"
-        ],
-        "title": "Toggle"
       },
       "ValidationError": {
         "properties": {
