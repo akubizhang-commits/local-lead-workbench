@@ -387,7 +387,7 @@ dialog>header .sheet-count{margin-left:auto;margin-right:8px;font-size:var(--fs-
  .page-heading.view-detail>.actions>*{flex:1 1 40%;min-height:44px}
 }
 /* 企业详情高度（P1-13 门槛）：联系人区折叠条目、表格行、资料 dl 更紧凑。 */
-#company-contacts details.social-section{margin-top:0;padding:10px 0;border-top:1px solid var(--line)}
+#company-contacts details.social-section{margin-top:0;padding:5px 0;border-top:1px solid var(--line)}
 #company-contacts details.social-section>summary{min-height:32px;display:list-item;align-content:center}
 #company-contacts .social-account-list td{padding-top:10px;padding-bottom:10px}
 #company-contacts .social-account-list th{padding-top:10px;padding-bottom:10px}
@@ -404,3 +404,24 @@ main:has(.detail-anchors) .page-footer{margin-top:20px}
 .facts-more>details[open]{flex-basis:100%}
 #company-contacts>.section-title{flex-wrap:wrap}
 #company-contacts>.section-title>.actions{flex-wrap:wrap}
+
+/* P2：禁用原因（U-15）与触控目标（U-19）。 */
+.disabled-reason{display:block;font-size:var(--fs-xs);color:var(--text-2);margin-top:6px;white-space:normal}
+dialog footer .disabled-reason{margin:0 auto 0 0;align-self:center}
+.page-heading>.actions .disabled-reason{flex-basis:100%;text-align:right;margin-top:0}
+.text-button{min-height:24px;align-items:center}
+.icon-button{min-width:32px;min-height:32px}
+label:has(>input[type=checkbox]){min-height:32px;min-width:32px}
+td>input[type=checkbox],th>input[type=checkbox]{width:18px;height:18px}
+.review-card a,.evidence-list a,.facts a,.social-search a{display:inline-flex;align-items:center;min-height:24px}
+summary{min-height:24px}
+.review-heading:focus{outline:none}
+@media(max-width:779px){
+ .text-button{min-height:44px}
+ .icon-button{min-width:44px;min-height:44px}
+ label:has(>input[type=checkbox]){min-height:44px}
+}
+.check-hit{display:inline-flex;align-items:center;justify-content:center;min-width:32px;min-height:32px;cursor:pointer}
+.check-hit input[type=checkbox]{width:18px;height:18px}
+@media(max-width:779px){.check-hit{min-width:44px;min-height:44px}}
+.social-account-list .company-link{min-height:24px}

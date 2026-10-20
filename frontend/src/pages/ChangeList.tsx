@@ -24,7 +24,7 @@ export function ChangeList({
               className="text-button"
               onClick={() => onOpen(c.company_id)}
             >
-              {c.company_name || c.company_id}
+              {c.company_name || "关联企业信息缺失"}
             </button>
             <time>{date(c.created_at)}</time>
           </div>

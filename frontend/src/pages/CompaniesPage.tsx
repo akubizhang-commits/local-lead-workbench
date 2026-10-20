@@ -147,6 +147,8 @@ export function CompaniesPage({
   if (companies.data) lastTotal.current = companies.data.total;
   const pages = companies.data ? Math.max(1, Math.ceil(companies.data.total / companies.data.page_size)) : undefined;
   const activeFilters = activeFilterCount(filters);
+  // U-12: any search or filter (sort does not count) means an empty result is “no match”, not an empty library.
+  const filtered = Object.entries(filters).some(([key, value]) => key !== "sort" && (Array.isArray(value) ? value.length > 0 : Boolean(value)));
   function clearFilters() {
     setDraftQuery("");
     updateFilters(defaultFilters());
@@ -481,7 +483,7 @@ export function CompaniesPage({
               <thead>
                 <tr>
                   <th>
-                    <input
+<label className="check-hit">                    <input
                       type="checkbox"
                       aria-label="选择当前页全部企业"
                       disabled={busy}
@@ -501,7 +503,7 @@ export function CompaniesPage({
                             : {},
                         )
                       }
-                    />
+                    /></label>
                   </th>
                   <th>企业 / 地区</th>
                   <th>业务类型</th>
@@ -519,7 +521,7 @@ export function CompaniesPage({
                 {companies.data.items.map((c) => (
                   <tr key={c.id}>
                     <td>
-                      <input
+<label className="check-hit">                      <input
                         type="checkbox"
                         aria-label={`选择 ${c.name}`}
                         disabled={busy}
@@ -534,7 +536,7 @@ export function CompaniesPage({
                             return next;
                           });
                         }}
-                      />
+                      /></label>
                     </td>
                     <td>
                       <button
@@ -619,17 +621,15 @@ export function CompaniesPage({
               </tbody>
             </table>
           ) : (
-            <Empty
-              title={
-                Object.entries(filters).some(
-                  ([key, value]) => key !== "sort" && Boolean(value),
-                )
-                  ? "没有匹配的企业"
-                  : "企业库还是空的"
-              }
-            >
-              更新目标市场或人工录入企业后，资料会保存在这里。可调整筛选查看其他记录。
-            </Empty>
+            filtered ? (
+              <Empty title="没有匹配的企业" action={<button type="button" className="primary" onClick={clearFilters}>清除筛选</button>}>
+                当前搜索或筛选下没有企业。
+              </Empty>
+            ) : (
+              <Empty title="企业库还是空的">
+                更新目标市场或人工录入企业后，资料会保存在这里。可调整筛选查看其他记录。
+              </Empty>
+            )
           )}
         </section>
         )}

@@ -384,6 +384,7 @@ export default function App() {
                   <button
                     className="primary"
                     disabled={busy || !detail.data.company.website}
+                    aria-describedby={detail.data.company.website ? undefined : "refresh-reason"}
                     onClick={() =>
                       act(
                         () =>
@@ -404,6 +405,9 @@ export default function App() {
                     复核官网
                   </button>
                   <CompanyStatus company={detail.data.company} busy={busy} onChange={quickStatus} />
+                  {!detail.data.company.website && (
+                    <small className="disabled-reason" id="refresh-reason">没有官网地址，无法复核。可先在“编辑资料”里补充官网。</small>
+                  )}
                 </>
               )}
             </div>
@@ -498,7 +502,7 @@ export default function App() {
         </main>
       </div>
       {modal === "task" && (
-        <Modal title="创建目标市场" onClose={() => setModal(null)}>
+        <Modal title="创建目标市场" initialFocus="[name=state]" onClose={() => setModal(null)}>
           <TaskForm
             onCancel={() => setModal(null)}
             onDone={() => {
@@ -563,12 +567,14 @@ export default function App() {
             )}
           </div>
           <footer>
+            {!confirmRestore && <small className="disabled-reason" id="restore-reason">先勾选上方的确认项。</small>}
             <button disabled={restoring} onClick={() => setRestore(null)}>
               取消
             </button>
             <button
               className="danger"
               disabled={!confirmRestore || restoring}
+              aria-describedby={confirmRestore ? undefined : "restore-reason"}
               onClick={() => void submitRestore(restore)}
             >
               {restoring ? "恢复中…" : "确认恢复"}

@@ -38,3 +38,31 @@ test("review pages: totals, paging and stepping back after the last item of a pa
   assert.ok((document.body.textContent||"").includes("共 20 条待审核 · 第 1 / 1 页"),document.body.textContent||"");
  }finally{await h.cleanup();}
 });
+test("U-13: after a decision focus moves to the next review's title, or the list heading when none is left",async()=>{
+ const h=await setupDOM();
+ let ids=["r0","r1","r2"];
+ globalThis.fetch=async(input)=>{const url=String(input);
+  if(url==="/api/session")return json({token:"t"});
+  if(url.startsWith("/api/reviews?"))return json({items:ids.map(review),total:ids.length,page:1,page_size:20});
+  return json({});};
+ try{
+  const {ReviewsPage}=await import("../src/pages/ReviewsPage.tsx");
+  const {useState}=await import("react");
+  function Wrap(){const [version,setVersion]=useState(0);
+   return createElement(ReviewsPage,{version,busy:false,refresh:()=>{},openCompany:()=>{},
+    act:async(work:()=>Promise<unknown>)=>{await work();setVersion(v=>v+1);}} as never);}
+  const wait=()=>h.act(async()=>{await new Promise(r=>setTimeout(r,50));});
+  await h.act(async()=>h.root.render(createElement(Wrap)));await wait();
+  const accept=(id:string)=>[...document.querySelectorAll<HTMLElement>(".review-card")].find(c=>c.querySelector(`[data-review-id="${id}"]`))!.querySelector<HTMLButtonElement>("button.primary")!;
+  const b=accept("r1");b.focus();
+  ids=["r0","r2"];
+  await h.act(async()=>b.click());await wait();
+  assert.equal((document.activeElement as HTMLElement).dataset.reviewId,"r2");
+  const last=accept("r2");ids=["r0"];
+  await h.act(async()=>last.click());await wait();
+  assert.ok((document.activeElement as HTMLElement).hasAttribute("data-review-list-heading"),"no next one: the list heading");
+  ids=[];
+  await h.act(async()=>accept("r0").click());await wait();
+  assert.ok((document.activeElement as HTMLElement).hasAttribute("data-review-list-heading"));
+ }finally{await h.cleanup();}
+});

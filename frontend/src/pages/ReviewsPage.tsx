@@ -33,6 +33,16 @@ export function ReviewsPage({
   const reviews = useResource<ReviewPage>(`/reviews?page=${page}&page_size=${REVIEW_PAGE_SIZE}`, version);
   const data = reviews.data;
   const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
+  // U-13: after a decision, move focus to the next review's title (or the list heading when none is left).
+  const [focusNext, setFocusNext] = useState<{ next: string | null; after: ReviewPage } | null>(null);
+  useEffect(() => {
+    if (!focusNext || !data || data === focusNext.after) return;
+    const titles = Array.from(document.querySelectorAll<HTMLElement>("[data-review-id]"));
+    const heading = document.querySelector<HTMLElement>("[data-review-list-heading]");
+    const target = focusNext.next ? titles.find((t) => t.dataset.reviewId === focusNext.next) || titles[0] || heading : heading;
+    target?.focus();
+    setFocusNext(null);
+  }, [data, focusNext]);
   // Deciding the last item of a later page leaves it empty: go back one page.
   useEffect(() => {
     if (data && !data.items.length && page > 1) setPage((p) => Math.max(1, p - 1));
@@ -43,7 +53,7 @@ export function ReviewsPage({
     <Resource {...reviews} retry={refresh}>
       {data && data.total > 0 && (
         <nav className="review-pagination" aria-label="审核分页">
-          <span className="muted">共 {data.total} 条待审核 · 第 {page} / {pages} 页</span>
+          <span className="muted" tabIndex={-1} data-review-list-heading="">共 {data.total} 条待审核 · 第 {page} / {pages} 页</span>
           <div className="actions">
             <button disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>上一页</button>
             <button disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>下一页</button>
@@ -55,8 +65,10 @@ export function ReviewsPage({
           reviews={data.items}
           busy={busy}
           onOpen={openCompany}
-          onDecision={(r, decision) =>
-            act(
+          onDecision={(r, decision) => {
+            const index = data.items.findIndex((item) => item.id === r.id);
+            setFocusNext({ next: data.items[index + 1]?.id ?? null, after: data });
+            return act(
               () =>
                 api(`/reviews/${encodeURIComponent(r.id)}/decision`, "POST", {
                   decision,
@@ -76,11 +88,12 @@ export function ReviewsPage({
                       ? "已拒绝此次变更，保留原值"
                       : "审核决定已保存",
               ),
-            )
-          }
+            );
+          }}
         />
       ) : (
         <section className="panel">
+          <h2 className="sr-only" tabIndex={-1} data-review-list-heading="">待审核列表</h2>
           <Empty title="没有待处理的审核项">
             来源冲突、身份不明与新的候选值会进入这里，等待你的判断。
           </Empty>

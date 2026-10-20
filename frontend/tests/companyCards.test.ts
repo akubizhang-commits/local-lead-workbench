@@ -128,3 +128,21 @@ test("without matchMedia the desktop table renders", async () => {
     assert.equal(document.querySelector(".company-card"), null);
   } finally { await h.cleanup(); }
 });
+test("U-12: no match under a search shows 清除筛选, which clears filters and the search box", async () => {
+  const h = await mount({ narrow: false });
+  try {
+    h.setTotal(0);
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="搜索企业"]')!;
+    await h.setFilters((f: object) => ({ ...f, q: "__no_match__", status: "verified" }));
+    await h.wait();
+    assert.match(document.body.textContent!, /没有匹配的企业/);
+    assert.match(document.body.textContent!, /当前搜索或筛选下没有企业。/);
+    const clear = [...document.querySelectorAll<HTMLButtonElement>(".empty button")].find((b) => b.textContent === "清除筛选")!;
+    assert.equal(clear.className, "primary");
+    await h.act(async () => clear.click());
+    await h.wait();
+    const last = h.updates.at(-1) as Record<string, unknown>;
+    assert.equal(last.q, ""); assert.equal(last.status, "");
+    assert.equal(input.value, "");
+  } finally { await h.cleanup(); }
+});

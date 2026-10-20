@@ -5,6 +5,18 @@ export function Badge({value}:{value:string}) {return <span className={`badge ba
 export function Empty({title='暂无记录',children,action}:{title?:string;children?:ReactNode;action?:ReactNode}) {return <div className="empty"><span className="empty-icon"><Icon name="detail" size={30}/></span><h3>{title}</h3><p>{children}</p>{action}</div>}
 export function External({url,children}:{url?:string|null;children?:ReactNode}) {const href=safeUrl(url);return href ? <a href={href} target="_blank" rel="noopener noreferrer">{children || url} ↗</a> : <span className="muted">{url || '未记录'}</span>}
 /** Modal dialog. variant 'sheet' slides up from the bottom (narrow filter drawer); headerExtra renders after the title. */
-export function Modal({title,children,onClose,variant='dialog',headerExtra}:{title:string;children:ReactNode;onClose:()=>void;variant?:'dialog'|'sheet';headerExtra?:ReactNode}) {const ref=useRef<HTMLDialogElement>(null);useEffect(()=>{const previous=document.activeElement as HTMLElement;ref.current?.showModal();return ()=>previous?.focus();},[]);return <dialog ref={ref} className={variant==='sheet'?'sheet':undefined} onCancel={e=>{e.preventDefault();onClose();}} onClick={e=>{if(e.target === ref.current)onClose();}}><header><h2>{title}</h2>{headerExtra}<button className="icon-button" aria-label="关闭对话框" onClick={onClose}><Icon name="close"/></button></header>{children}</dialog>}
+/** U-13: first enabled field in the dialog body, else the first footer button, else the close button. */
+export function initialFocusTarget(dialog:HTMLElement):HTMLElement|null {
+ const enabled=(e:Element)=>!(e as HTMLInputElement).disabled&&!e.closest('header')&&(e as HTMLInputElement).type!=='hidden';
+ const field=Array.from(dialog.querySelectorAll<HTMLElement>('input,select,textarea')).find(enabled);
+ if(field)return field;
+ return Array.from(dialog.querySelectorAll<HTMLElement>('footer button')).find(enabled)||dialog.querySelector<HTMLElement>('header .icon-button');
+}
+/**
+ * initialFocus: 'first-field' (default, U-13), 'none', or a CSS selector inside the dialog. Forms that fill in
+ * asynchronously (region lists) may replace the focused control, so focus is re-applied for up to 1 s while it
+ * has fallen out of the dialog; once the user has focus inside the dialog nothing more happens.
+ */
+export function Modal({title,children,onClose,variant='dialog',headerExtra,initialFocus='first-field'}:{title:string;children:ReactNode;onClose:()=>void;variant?:'dialog'|'sheet';headerExtra?:ReactNode;initialFocus?:string}) {const ref=useRef<HTMLDialogElement>(null);useEffect(()=>{const previous=document.activeElement as HTMLElement;const dialog=ref.current;dialog?.showModal();let timer:ReturnType<typeof setInterval>|undefined;if(dialog&&initialFocus!=='none'){const target=()=>initialFocus==='first-field'?initialFocusTarget(dialog):dialog.querySelector<HTMLElement>(initialFocus)||initialFocusTarget(dialog);target()?.focus();let ticks=0;timer=setInterval(()=>{const active=document.activeElement;if(++ticks>10)clearInterval(timer);else if(!active||active===document.body||!dialog.contains(active))target()?.focus();},100);}return ()=>{clearInterval(timer);previous?.focus();};},[]);return <dialog ref={ref} className={variant==='sheet'?'sheet':undefined} onCancel={e=>{e.preventDefault();onClose();}} onClick={e=>{if(e.target === ref.current)onClose();}}><header><h2>{title}</h2>{headerExtra}<button className="icon-button" aria-label="关闭对话框" onClick={onClose}><Icon name="close"/></button></header>{children}</dialog>}
 export function Field({label:caption,children,wide=false}:{label:string;children:ReactNode;wide?:boolean}) {return <label className={`field ${wide?'wide':''}`}><span>{caption}</span>{children}</label>}
 export function Alert({children}:{children:ReactNode}) {return <div className="alert" role="alert">{children}</div>}

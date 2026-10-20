@@ -48,7 +48,7 @@ export function SocialAccountList({
       </ul>
     );
   return (
-    <div className="table-wrap" role="region" aria-label="联系人与账号" tabIndex={0}>
+    <div className="table-wrap">
       <table className="social-account-list">
         <thead>
           <tr>
