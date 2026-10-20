@@ -82,7 +82,7 @@ X-Local-Token: <当前实例token>
 | PATCH | `/api/companies/{id}` | `CompanyPatch` | 更新后`Company`；必须revision |
 | POST | `/api/companies/batch-status` | `BatchStatus` | `{updated: N}`；整批原子校验revision |
 | POST | `/api/companies/{id}/refresh` | 无 | `Run`；无官网400、拒绝联系409 |
-| GET | `/api/reviews` | 无 | 待审核`Review[]`，按创建时间倒序；无分页。同企业同字段同值的观察合并为一条审核，每条含 `evidence_count`（来源数）与 `evidence_items`（最近≤5条 `{source_url,evidence,observed_at}`） |
+| GET | `/api/reviews` | `page`（默认1）、`page_size`（1–200，默认20）、`kind`（`field_update`/`contact`/`duplicate_candidate`，默认全部） | 分页信封`{items,total,page,page_size}`，items为待审核`Review`，按 `created_at DESC, rowid DESC` 排序；不再有不分页数组。同企业同字段同值的观察合并为一条审核，每条含 `evidence_count`（来源数）与 `evidence_items`（最近≤5条 `{source_url,evidence,observed_at}`） |
 | POST | `/api/reviews/{id}/decision` | `{decision:"accept"或"reject"}` | `{ok:true,auto_closed:N}`；联系人变化 reject 另返回 `kept_previous:true`，accept 时当前值已变返回 409 并作废该建议（N 为同时自动关闭的同值待审核数）；已处理409；重复企业候选不允许accept覆盖另一企业 |
 | GET | `/api/changes` | 无 | 变更数组，最新500条，含`company_name` |
 | — | `/api/exports` | 已删除（2026-10 P1 第二批），请求返回 404 `unknown_endpoint` | 改用 `POST /api/export-jobs` → `GET /api/export-jobs/{id}` → `GET /api/export-jobs/{id}/file`，见 P1 第一批“后台导出作业” |
@@ -151,7 +151,7 @@ X-Local-Token: <当前实例token>
 | SocialLinkInput | url必填1–4096，必须能分类为支持的平台账号/帖子/集合；evidence默认""最长3000；不是抓取请求 |
 | SocialDecisionInput | status=confirmed/candidate/excluded；scope=brand/location/employee/third_party/unknown默认unknown；revision必填≥1；confirmed+unknown业务400 |
 | SocialOutreachInput | entity_id必填1–64；state=draft/contacted/replied/closed；note必填1–5000，业务层另拒绝纯空白并trim；要求企业非拒绝联系、关联status=confirmed |
-| ScheduleInput | task_id/company_id默认null，必须恰好一个真值；kind=discovery/refresh且分别对应task/company；interval_months默认3、1–24；timezone默认Asia/Shanghai且ZoneInfo有效；enabled默认true |
+| ScheduleInput | task_id/company_id默认null，必须恰好一个真值；kind=discovery/refresh且分别对应task/company；interval_months可省略、1–24，省略时discovery按1个月、refresh按3个月；timezone默认Asia/Shanghai且ZoneInfo有效；enabled默认true |
 | Decision / Toggle / Restore | 分别为`decision=accept/reject`、必填enabled布尔、name必填1–200；restore还要求纯文件名、`.sqlite3`后缀、已有非符号链接备份 |
 
 ### 企业分页
@@ -290,8 +290,9 @@ Content-Type: application/json
 `POST /api/schedules`：
 
 ```json
-{"task_id":"<market-id>","kind":"discovery","interval_months":3,"timezone":"Asia/Shanghai","enabled":true}
+{"task_id":"<market-id>","kind":"discovery","timezone":"Asia/Shanghai","enabled":true}
 ```
+不传 `interval_months` 时市场计划（discovery）默认每 1 个月，企业复核（refresh）默认每 3 个月；可显式传 1–24。
 
 返回Schedule，含服务端计算的anchor/next_due_at。按日历月推进，不是固定90天；需要worker运行。暂停的旧任务可使当期调度延后。计划不是发送计划。
 
