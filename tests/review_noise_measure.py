@@ -135,6 +135,43 @@ def measure_market_path(fixture=None):
     return result
 
 
+def seed_baseline(store, group, fixture=None):
+    """Starting companies plus the evidence's original review rows inserted as pending
+    (an upgraded database that still holds the noise). Returns {key: company_id}."""
+    fixture = fixture or load_fixture()
+    ids = {company["key"]: seed_company(store, company) for company in fixture["groups"][group]["companies"]}
+    with store.connect() as con:
+        for n, review in enumerate(fixture["groups"][group]["baseline"]):
+            old, new = review["old_value"], review["new_value"]
+            if review["kind"] == "duplicate_candidate":
+                old, new = ids[old], ids[new]
+            con.execute("""INSERT INTO reviews(id,company_id,kind,field,old_value,new_value,source_url,evidence,
+                status,created_at,fingerprint) VALUES(?,?,?,?,?,?,?,?,'pending',?,?)""", (
+                uuid.uuid4().hex, ids[review["company"]], review["kind"], review["field"], old, new,
+                review["source_url"], review["evidence"], f"2026-10-17T08:{n:02d}:00+00:00", uuid.uuid4().hex))
+    return ids
+
+
+def pending_count(store):
+    with store.connect() as con:
+        return con.execute("SELECT count(*) FROM reviews WHERE status='pending'").fetchone()[0]
+
+
+def measure_cleanup(fixture=None):
+    """Per group: pending before, closed by the one-time cleanup, pending after."""
+    fixture = fixture or load_fixture()
+    result = {}
+    for name in GROUPS:
+        with temp_store() as store:
+            seed_baseline(store, name, fixture)
+            before = pending_count(store)
+            preview = store.review_cleanup_preview()
+            closed = store.review_cleanup(preview["plan_id"])
+            result[name] = {"before": before, "closed": closed["closed"], "after": pending_count(store),
+                            "rules": closed["rules"]}
+    return result
+
+
 def _table(headers, rows):
     lines = ["| " + " | ".join(headers) + " |", "|" + "---|" * len(headers)]
     lines += ["| " + " | ".join(str(c) for c in row) + " |" for row in rows]
@@ -164,6 +201,15 @@ def report(fixture=None):
                      "；".join(f"{r['company']}.{r['field']}: {r['before']} → {r['after']}" for r in m["rewritten"]) or "—",
                      ", ".join(f"{k}={v}" for k, v in m["changed"].items()), m["reviews"]))
     out.append(_table(("组", "噪音字段被改写", "全部被改写字段", "改写明细", "run_companies.changed", "字段审核"), rows))
+    cleanup, rows, totals = measure_cleanup(fixture), [], [0, 0, 0]
+    for name in GROUPS:
+        c = cleanup[name]
+        totals = [totals[0] + c["before"], totals[1] + c["closed"], totals[2] + c["after"]]
+        rows.append((name, c["before"], c["closed"], c["after"],
+                     ", ".join(f"{k}={v}" for k, v in sorted(c["rules"].items())) or "—"))
+    rows.append(("合计", *totals, ""))
+    out += ["", "## 一次性审核清理：证据中的原始审核按待审核插入后", "",
+            _table(("组", "清理前待审核", "清理关闭", "清理后待审核", "规则"), rows)]
     return "\n".join(out) + "\n"
 
 

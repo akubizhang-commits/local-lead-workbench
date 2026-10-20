@@ -19,6 +19,7 @@ from .market_store import MarketStoreMixin
 from .social_store import SocialStoreMixin
 from .market_social import MarketSocialMixin
 from .market_admin import MarketAdminMixin
+from .review_cleanup import ReviewCleanupMixin
 from .contact_projection import group_contact_records, contact_key
 from .company_comparison import website_key, brief, distinct_branches, branch_identity, equivalent_format
 from . import review_policy
@@ -162,7 +163,8 @@ PRAGMA user_version=1;
 ARCHIVED_FILTER = {"include": "", "exclude": "WHERE st.archived_at IS NULL", "only": "WHERE st.archived_at IS NOT NULL"}
 
 
-class Store(MarketAdminMixin, MarketSocialMixin, RunActivityMixin, MarketStoreMixin, SocialStoreMixin):
+class Store(MarketAdminMixin, ReviewCleanupMixin, MarketSocialMixin, RunActivityMixin, MarketStoreMixin,
+            SocialStoreMixin):
     _facets_enabled = False
     _cities_enabled = False
 

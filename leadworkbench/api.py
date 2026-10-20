@@ -444,6 +444,10 @@ class RetentionConfirm(Input):
     plan_id: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
+class ReviewCleanupConfirm(Input):
+    plan_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 def backup_kind(name):
     """manual / auto (with reason) / other; legacy backup-* are manual (decision D3)."""
     match = re.fullmatch(r"auto-(pre-restore|pre-repair)-.+\.sqlite3", name)
@@ -1011,6 +1015,14 @@ def create_app(data_dir=None, *, allowed_hosts=None):
         if isinstance(result, dict):
             return result  # contact change: may carry kept_previous
         return {"ok": True, "auto_closed": result or 0}
+
+    @app.get("/api/review-cleanup")
+    def review_cleanup_preview():
+        return store.review_cleanup_preview()
+
+    @app.post("/api/review-cleanup")
+    def review_cleanup(body: ReviewCleanupConfirm):
+        return store.review_cleanup(body.plan_id)
 
     @app.get("/api/changes")
     def changes():

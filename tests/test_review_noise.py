@@ -120,3 +120,91 @@ def test_blank_business_types_are_auto_filled_without_review(tmp_path):
     assert [(c["old_value"], c["new_value"], c["reason"], c["auto_fill"]) for c in rows] == [
         ("[]", '["retailer"]', "自动补全：原值为空", True)]
     assert [c["auto_fill"] for c in detail if c["field"] == "business_types"] == [True]
+
+
+def _all_groups(store):
+    fixture = measure.load_fixture()
+    for name in measure.GROUPS:
+        measure.seed_baseline(store, name, fixture)
+
+
+def test_cleanup_closes_only_obvious_duplicates(tmp_path):
+    import hashlib
+    from db_hash import content_hash
+    from fastapi.testclient import TestClient
+    from leadworkbench.api import create_app
+    app = create_app(tmp_path, allowed_hosts={"testserver"})
+    store = app.state.store
+    _all_groups(store)
+    assert measure.pending_count(store) == 11
+    untouched = ["companies", "changes", "observations"]
+    before = content_hash(store.path, tables=untouched)
+    with store.connect() as con:
+        total_reviews = con.execute("SELECT count(*) FROM reviews").fetchone()[0]
+    with TestClient(app) as client:
+        client.headers["X-Local-Token"] = client.get("/api/session").json()["token"]
+        preview = client.get("/api/review-cleanup").json()
+        assert preview["total"] == 6
+        assert {r["rule"]: r["count"] for r in preview["rules"]} == {
+            "phone_format": 2, "name_title": 2, "business_type_enum": 2}
+        assert all(len(r["samples"]) == r["count"] and r["label"] for r in preview["rules"])
+        assert client.post("/api/review-cleanup", json={"plan_id": "x" * 64}).status_code == 422
+        assert client.post("/api/review-cleanup", json={}).status_code == 422
+        done = client.post("/api/review-cleanup", json={"plan_id": preview["plan_id"]})
+        assert done.status_code == 200
+        assert done.json() == {"closed": 6, "rules": {"phone_format": 2, "name_title": 2, "business_type_enum": 2}}
+        assert measure.pending_count(store) == 5
+        again = client.get("/api/review-cleanup").json()
+        assert again["total"] == 0 and again["rules"] == []
+        assert again["plan_id"] == hashlib.sha256(b"").hexdigest()
+        repeat = client.post("/api/review-cleanup", json={"plan_id": preview["plan_id"]})
+        assert repeat.status_code == 200 and repeat.json() == {"closed": 0, "rules": {}}
+    with store.connect() as con:
+        assert con.execute("SELECT count(*) FROM reviews").fetchone()[0] == total_reviews
+        assert con.execute("SELECT count(*) FROM review_resolutions").fetchone()[0] == 6
+        assert {tuple(r) for r in con.execute("SELECT previous_status,status,batch_id FROM review_resolutions")} == {
+            ("pending", "auto_closed", preview["plan_id"])}
+        closed = con.execute("SELECT evidence FROM reviews WHERE status='auto_closed'").fetchall()
+        assert all(r[0].endswith("，未修改企业资料") and "；审核清理：" in r[0] for r in closed)
+        kept = sorted((r["kind"], r["field"]) for r in con.execute("SELECT kind,field FROM reviews WHERE status='pending'"))
+    assert kept == [("duplicate_candidate", "company"), ("duplicate_candidate", "company"),
+                    ("field_update", "name"), ("field_update", "phone"), ("field_update", "phone")]
+    assert content_hash(store.path, tables=untouched) == before
+
+
+def test_cleanup_refuses_a_changed_plan_and_never_runs_on_startup(tmp_path):
+    from leadworkbench.db import Store
+    from leadworkbench.errors import DomainError
+    import pytest
+    store = Store(tmp_path)
+    _all_groups(store)
+    preview = store.review_cleanup_preview()
+    company = store.manual_company("Noise Co", "https://noise.example")
+    with store.connect() as con:
+        con.execute("""INSERT INTO reviews(id,company_id,kind,field,old_value,new_value,source_url,evidence,status,
+            created_at,fingerprint) VALUES('late',?,'field_update','phone','+1 408-435-5020','(408) 435-5020',
+            'https://noise.example/','x','pending','2026-10-18',?)""", (company["id"], "late-fingerprint"))
+        # Stored value matches the review's old value (startup rebases stale old values).
+        con.execute("UPDATE companies SET phone='+1 408-435-5020' WHERE id=?", (company["id"],))
+    from db_hash import content_hash
+    before = content_hash(store.path)
+    with pytest.raises(DomainError) as error:
+        store.review_cleanup(preview["plan_id"])
+    assert (error.value.code, error.value.status) == ("plan_changed", 409)
+    assert str(error.value) == "待审核内容已变化，请重新预览后再确认清理。"
+    assert content_hash(store.path) == before
+    assert Store(tmp_path).review_cleanup_preview()["total"] == 7
+    assert measure.pending_count(Store(tmp_path)) == 12  # D3: restarting never cleans up by itself.
+
+
+def test_cleanup_name_rule_skips_maps_sources(tmp_path):
+    from leadworkbench.db import Store
+    store = Store(tmp_path)
+    company = store.manual_company("Omni Sheet Metal, Inc.", "https://omni.example")
+    with store.connect() as con:
+        for n, url in enumerate(("https://www.google.com/maps/place/omni", "https://omni.example/")):
+            con.execute("""INSERT INTO reviews(id,company_id,kind,field,old_value,new_value,source_url,evidence,status,
+                created_at,fingerprint) VALUES(?,?,'field_update','name','Omni Sheet Metal, Inc.','Omni Sheet Metal',
+                ?,'x','pending','2026-10-18',?)""", (f"r{n}", company["id"], url, f"f{n}"))
+    preview = store.review_cleanup_preview()
+    assert [s["review_id"] for r in preview["rules"] for s in r["samples"]] == ["r1"]
