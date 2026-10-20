@@ -425,3 +425,6 @@ summary{min-height:24px}
 .check-hit input[type=checkbox]{width:18px;height:18px}
 @media(max-width:779px){.check-hit{min-width:44px;min-height:44px}}
 .social-account-list .company-link{min-height:24px}
+/* 企业库表格：名称列不被“任意断行”挤成一个字宽。 */
+td:has(>.company-link){min-width:240px}
+.company-link>span{min-width:0;flex:1}
