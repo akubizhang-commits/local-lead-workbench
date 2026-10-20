@@ -166,9 +166,6 @@ export default function App() {
             寻迹<span>本地线索工作台</span>
           </div>
         </a>
-        <div className="workspace-label">
-          工作空间 <span>LOCAL</span>
-        </div>
         <nav aria-label="主导航">
           {navigation.map(([id, title, icon]) => (
             <button
@@ -206,7 +203,7 @@ export default function App() {
             </div>
           </div>
           <div className="profile">
-            <span>本</span>
+            <span aria-hidden="true">本</span>
             <div>
               本地工作空间<small>内部测试版</small>
             </div>
@@ -220,9 +217,9 @@ export default function App() {
         <header className="topbar">
           <nav className="breadcrumbs" aria-label="页面位置">
             <span>工作空间</span>
-            <span className="slash">/</span>
+            <span className="slash" aria-hidden="true">/</span>
             {view === "tasks" && route.task ? (
-              <><button className="text-button" onClick={()=>setView("tasks")}>市场检索任务列表</button><span className="slash">/</span><button className="text-button" onClick={()=>navigate(backFromRefreshDetail(route))}>资料复核列表</button>{route.item&&<><span className="slash">/</span><span aria-current="page">资料复核详情</span></>}</>
+              <><button className="text-button" onClick={()=>setView("tasks")}>市场检索任务列表</button><span className="slash" aria-hidden="true">/</span><button className="text-button" onClick={()=>navigate(backFromRefreshDetail(route))}>资料复核列表</button>{route.item&&<><span className="slash" aria-hidden="true">/</span><span aria-current="page">资料复核详情</span></>}</>
             ) : view === "detail" ? (
               <>
                 <button
@@ -231,14 +228,14 @@ export default function App() {
                 >
                   企业库
                 </button>
-                <span className="slash">/</span>
+                <span className="slash" aria-hidden="true">/</span>
                 <>
                   {route.account ? (
                     <>
                       <button className="text-button" onClick={backToCompany}>
                         企业详情
                       </button>
-                      <span className="slash">/</span>
+                      <span className="slash" aria-hidden="true">/</span>
                       <span aria-current="page">
                         {route.account?.startsWith("contact:")
                           ? "联系人详情"
@@ -287,17 +284,6 @@ export default function App() {
             <div>
               {view === "tasks" && route.task && <button className="text-button page-back" onClick={()=>route.item?navigate(backFromRefreshDetail(route)):setView("tasks")}>{route.item?"← 返回资料复核列表":"← 返回市场检索任务列表"}</button>}
               {view === "detail" && <button className="text-button page-back" onClick={route.account?backToCompany:()=>setView("companies")}>{route.account?"← 返回企业详情":"← 返回企业库"}</button>}
-              <div className="eyebrow">
-                LEAD WORKBENCH{" "}
-                <span>
-                  /{" "}
-                  {String(
-                    navigation.findIndex(
-                      (n) => n[0] === (view === "detail" ? "companies" : view),
-                    ) + 1,
-                  ).padStart(2, "0")}
-                </span>
-              </div>
               <h1>
                 {view === "tasks" && route.task ? (route.item ? "资料复核详情" : "资料复核任务") : view === "detail"
                   ? route.account

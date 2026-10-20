@@ -438,7 +438,7 @@ export function CompaniesPage({
                         className="company-link"
                         onClick={() => openCompany(c.id)}
                       >
-                        <span className="avatar">{c.name.slice(0, 1)}</span>
+                        <span className="avatar" aria-hidden="true">{c.name.slice(0, 1)}</span>
                         <span>
                           <strong>{c.name}</strong>
                           <ActualCityCell company={c} />

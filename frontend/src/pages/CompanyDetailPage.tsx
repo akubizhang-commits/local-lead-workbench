@@ -58,7 +58,7 @@ export function CompanyDetailPage({
         ) : (
           <>
             <div className="panel company-hero">
-              <span className="avatar large">
+              <span className="avatar large" aria-hidden="true">
                 {detail.data.company.name.slice(0, 1)}
               </span>
               <div>
