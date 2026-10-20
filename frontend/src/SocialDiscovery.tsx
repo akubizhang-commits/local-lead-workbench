@@ -68,7 +68,7 @@ function ManualPlatformGates({run,disabled,onChange}:{run:SocialRun;disabled:boo
   if(!entries.length)return null;
   return <section className="social-run-gates" aria-label="当前平台等待状态">
     <h5>当前平台等待状态</h5>
-    <p className="muted">同一平台的手动任务和市场任务共用访问间隔；请先处理登录或连接问题，再恢复。</p>
+    <p className="muted">同一平台的手动查找和市场轮次共用访问间隔；请先处理登录或连接问题，再恢复。</p>
     {entries.map(([platform,gate])=>{
       const deadline=gate.next_attempt_at?Date.parse(gate.next_attempt_at):0;
       const cooling=deadline>now;
@@ -149,7 +149,7 @@ function DiscoveryRuns({companyId,onChange,disabled}:{companyId?:string;onChange
         const starting=action==='start'||action==='read'||action==='platform-search'||action==='profile';
         const run=await api<SocialRun>(starting?'/social/runs':`/social/runs/${encodeURIComponent(selectedId!)}/retry`,'POST',starting?(companyId?{company_ids:[companyId],...(action==='read'?{read_only:true}:action==='platform-search'?{platform_search:true}:action==='profile'?{profile_only:true}:{})}:{pilot:true}):undefined);
         setSelected(run.id);
-        setNotice(action==='retry'?'已创建重试运行，历史报告保留。':'已提交发现任务，请查看逐项处理结果。');
+        setNotice(action==='retry'?'已创建重试运行，历史报告保留。':'已开始查找，请查看逐项处理结果。');
       }
       setRevision(v=>v+1);
     }catch(error){setFailure(error instanceof Error ? actionMessage(error) :'操作失败，请重试');}
@@ -160,22 +160,22 @@ function DiscoveryRuns({companyId,onChange,disabled}:{companyId?:string;onChange
     {companyId&&<button disabled={disabled||busy||list.loading||!!list.error||!!activeRun} onClick={()=>void act('profile')}>补充已有账号基础资料</button>}
     {companyId&&<button disabled={disabled||busy||list.loading||!!list.error||!!activeRun} onClick={()=>void act('read')}>读取已有账号与近期帖子</button>}
     {companyId&&<><button disabled={disabled||busy||list.loading||!!list.error||!!activeRun} onClick={()=>void act('platform-search')}>按企业名称站内搜索</button><p className="muted">使用设置中保存的 Facebook / Instagram / Twitter（X）专用会话查找候选账号，并自动补充基础资料，不依赖官网或搜索引擎。请先关闭并释放登录窗口。候选不等于已确认联系人；帖子需另行读取。</p></>}
-    <p className="muted">{companyId?'已有账号可直接读取，无需等待搜索。发现任务则从官网与搜索结果查找候选。':'由服务端选择最多20家企业，逐项记录发现、无结果与访问限制。'}按设置的读取方式获取简介和有限近期帖子，不代表完整历史；不会自动确认归属或发送消息。运行结束后点击页面顶部“刷新数据”查看新资料。</p>
-    {activeRun&&<p role="status">已有任务待处理或进行中，每 5 秒更新；可查看报告或取消运行。</p>}
+    <p className="muted">{companyId?'已有账号可以直接读取，不用等待搜索；“开始单企发现”会从官网和搜索结果查找候选账号。':'由服务端选择最多20家企业，逐项记录发现、无结果与访问限制。'}按设置的读取方式获取简介和有限近期帖子，不代表完整历史；不会自动确认归属或发送消息。运行结束后点击页面顶部“刷新数据”查看新资料。</p>
+    {activeRun&&<p role="status">这家企业已有一次查找在排队或进行中，每 5 秒更新；可以查看报告，或取消这次查找。</p>}
     {failure&&<Alert>{failure}</Alert>}{notice&&<p role="status">{notice}</p>}
     {list.error&&<Alert>运行列表读取失败：{list.error}<button disabled={busy} onClick={()=>setRevision(v=>v+1)}>重新读取</button></Alert>}
     {list.loading&&<p role="status">正在读取最近运行…</p>}
     {list.data?.length ? <Field label={companyId?'最近运行':'试点及社媒运行历史'}><select value={selectedId || ''} disabled={busy} onChange={e=>setSelected(e.target.value)}>
       {selected&&!list.data.some(run=>run.id===selected)&&<option value={selected}>新提交的运行 · {selected}</option>}
       {list.data.map(run=><option key={run.id} value={run.id}>{date(run.created_at)} · {socialStatus(run.status)} · {run.id}</option>)}
-    </select></Field>:!list.loading&&!list.error&&<p className="muted">尚无运行记录。</p>}
+    </select></Field>:!list.loading&&!list.error&&<p className="muted">还没有查找记录。</p>}
     {detail.error&&<Alert>报告读取失败：{detail.error}<button disabled={busy} onClick={()=>setRevision(v=>v+1)}>重读报告</button></Alert>}
     {detail.loading&&selectedId&&<p role="status">正在读取报告…</p>}
     {detail.data&&<><SocialRunReport run={detail.data} disabled={disabled||busy||!!detail.error}
       onChange={()=>{setRevision(v=>v+1);changeRef.current?.();}}/><div className="actions social-run-actions">
-      {detail.data.task_id?<a className="button" href={`/?view=tasks&page=1&task=${encodeURIComponent(detail.data.task_id)}&run=${encodeURIComponent(detail.data.parent_run_id!)}`}>查看所属市场任务</a>:
+      {detail.data.task_id?<a className="button" href={`/?view=tasks&page=1&task=${encodeURIComponent(detail.data.task_id)}&run=${encodeURIComponent(detail.data.parent_run_id!)}`}>查看所属目标市场</a>:
        socialActive(detail.data.status)?<button disabled={busy||!!detail.error||detail.data.status==='cancelling'} onClick={()=>void act('cancel')}>取消此运行</button>:<button disabled={disabled||busy||!!detail.error||!!activeRun} onClick={()=>void act('retry')}>新建重试运行</button>}
       <button disabled={busy} onClick={()=>setRevision(v=>v+1)}>刷新报告</button>
-    </div><p className="muted">{detail.data.task_id?'此运行由市场任务统一暂停、继续或取消。':'重试会创建新运行，保留当前历史报告。访问限制请先处理原因，再手动重试。'}</p></>}
+    </div><p className="muted">{detail.data.task_id?'这次查找跟随所属市场的轮次暂停、继续或取消。':'重试会创建新运行，保留当前历史报告。访问限制请先处理原因，再手动重试。'}</p></>}
   </section>;
 }

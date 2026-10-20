@@ -7,11 +7,11 @@ export function listContacts(contacts:Contact[]){
  return {active:[...groups.procurement,...groups.channels,...groups.other.filter(c=>!supplementary.includes(c))],supplementary,pending:groups.pending,hidden:[...groups.irrelevant,...groups.excluded]};
 }
 export function contactTitle(contact:Contact){
- return contact.name?.trim()||contact.email|| (contact.url?'企业联系页面':'企业联系方式');
+ return contact.name?.trim()||contact.email|| (contact.url?'企业联系页面':'企业联系入口');
 }
 export function contactChannels(contact:Contact){
  const kinds=new Set((contact.fields||[]).map(f=>f.key));
- return [contact.email||kinds.has('email')?'邮箱':'',kinds.has('phone')?'电话':'',kinds.has('whatsapp')?'WhatsApp':'',contact.url||kinds.has('url')?'官网联系页面':''].filter(Boolean).join(' / ')||'资料线索';
+ return [contact.email||kinds.has('email')?'邮箱':'',kinds.has('phone')?'电话':'',kinds.has('whatsapp')?'WhatsApp':'',contact.url||kinds.has('url')?'官网联系页面':''].filter(Boolean).join(' / ')||'来源资料';
 }
 export function contactRelation(contact:Contact){
  // U-20: the backend tier (e.g. 具名·岗位未明确 for christian.arredondo@) replaces the old guess.

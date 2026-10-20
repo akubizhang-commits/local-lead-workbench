@@ -19,7 +19,7 @@ export function SocialAccountList({
       <table className="social-account-list">
         <thead>
           <tr>
-            <th>联系人 / 账号</th>
+            <th>联系人与账号</th>
             <th>联系渠道</th>
             <th>企业关系</th>
             <th title="最近成功读取账号资料的时间">更新时间</th>

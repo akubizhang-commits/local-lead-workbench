@@ -286,7 +286,7 @@ export function CompaniesPage({
           <button onClick={refresh}>重试</button>
         </Alert>
       )}
-      <details className="market-definition list-help"><summary>查看新增、存量与资料变化的统计口径</summary><p>新增＝本轮首次进入该市场；存量＝此前已有且本轮再次找到；变化为其中资料发生变化的企业。未再次找到不代表停业，候选企业仍需业务核验。</p></details>
+      <details className="market-definition list-help"><summary>查看新增、存量与资料变化的统计口径</summary><p>新增＝本轮首次进入该市场；存量＝此前已有且本轮再次找到；变化为其中资料发生变化的企业。未再次找到不代表停业，候选企业仍需业务核实。</p></details>
       <div className="section-title">
         <span className="muted">
           共 {companies.data?.total ?? "—"} 家 · 每页 50 家

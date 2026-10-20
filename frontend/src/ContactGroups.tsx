@@ -14,10 +14,10 @@ export function ContactGroups({contacts}: {contacts: Contact[]}) {
       <div className="contact-grid">{channels.map(c => <ContactCard key={c.id} contact={c}/>)}</div>
     </>}
     {!!other.length && <details className="other-contacts">
-      <summary>其他公开联系方式 <span className="count">{other.length}</span><span className="muted">尚无明确采购证据，可尝试联系；相同邮箱已合并</span></summary>
+      <summary>其他公开联系入口 <span className="count">{other.length}</span><span className="muted">尚无明确采购证据，可尝试联系；相同邮箱已合并</span></summary>
       <div className="contact-grid">{other.map(c => <ContactCard key={c.id} contact={c}/>)}</div>
     </details>}
-    {!!irrelevant.length && <details className="other-contacts"><summary>非客户开发用途（{irrelevant.length}） · 不计入联系入口</summary><p className="muted">招聘、人力资源等明确无关的联系方式，保留原始来源备查。</p><div className="contact-grid">{irrelevant.map(c=><ContactCard key={c.id} contact={c}/>)}</div></details>}
+    {!!irrelevant.length && <details className="other-contacts"><summary>非客户开发用途（{irrelevant.length}） · 不计入联系入口</summary><p className="muted">招聘、人力资源等明确无关的联系入口，保留原始来源备查。</p><div className="contact-grid">{irrelevant.map(c=><ContactCard key={c.id} contact={c}/>)}</div></details>}
     {!!pending.length && <details className="other-contacts pending-contacts"><summary>待确认联系人 <span className="count">{pending.length}</span><span className="muted">证据待审核，不计入可用采购或邮箱数量</span></summary><div className="contact-grid">{pending.map(c=><ContactCard key={c.id} contact={c}/>)}</div></details>}
     {!!excluded.length && <details className="other-contacts excluded-contacts"><summary>不采用的联系人 <span className="count">{excluded.length}</span><span className="muted">不计入采购与可用联系入口，不导出</span></summary><div className="contact-grid">{excluded.map(c=><ContactCard key={c.id} contact={c}/>)}</div></details>}
   </>;

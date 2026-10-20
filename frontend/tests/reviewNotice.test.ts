@@ -46,6 +46,6 @@ test('contact change reviews offer to keep the previous record',async()=>{
    assert.match(document.body.textContent!,/不采用只丢弃本次采集的新信息，此前记录和采用状态不变。/);
   }
   await h.act(async()=>h.root.render(createElement(ReviewList,{reviews:[{...base,old_value:'',contact_change:'new'}],busy:false,onOpen:()=>{},onDecision:()=>{}})));
-  assert.deepEqual([...document.querySelectorAll('.review-card .actions button')].map(b=>b.textContent),['标记为不采用','确认联系信息']);
+  assert.deepEqual([...document.querySelectorAll('.review-card .actions button')].map(b=>b.textContent),['标记为不采用','确认联系入口']);
  } finally {await h.cleanup();}
 });

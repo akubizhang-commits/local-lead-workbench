@@ -49,7 +49,7 @@ export function SocialEntry({
       )}
       <p className="muted">
         {scopeNames[entry.scope]} · {entry.linked_company_count}{" "}
-        家企业记录关联同一链接
+        家企业关联同一链接
       </p>
       {pages.map((page, index) => (
         <SocialPosts

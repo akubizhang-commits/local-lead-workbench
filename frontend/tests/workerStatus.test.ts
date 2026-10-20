@@ -18,6 +18,6 @@ test('worker problem message replaces the heartbeat hint line',async()=>{
  const html=renderToStaticMarkup(createElement(WorkerHealth,{worker:{alive:true,last_seen:'2026-10-18T00:00:00+00:00',problem:{code:'disk_full',message:'后台采集暂停：磁盘空间不足'}},onRefresh:()=>{}}));
  assert.match(html,/后台已暂停：磁盘空间不足/);
  const offline=renderToStaticMarkup(createElement(WorkerHealth,{worker:{alive:false,last_seen:null},onRefresh:()=>{}}));
- assert.match(offline,/API 连接正常不代表正在采集/);
+ assert.match(offline,/本地服务连接正常，不代表后台在运行/);
  assert.doesNotMatch(offline,/磁盘/);
 });

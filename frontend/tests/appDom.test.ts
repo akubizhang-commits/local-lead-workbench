@@ -162,7 +162,7 @@ test("real DOM: company/account navigation and browser back retain filters and p
       new URL(window.location.href).searchParams.get("account"),
       null,
     );
-    assert.ok(document.body.textContent?.includes("联系人 / 账号"));
+    assert.ok(document.body.textContent?.includes("联系人与账号"));
     await h.click("← 返回企业库");
     const params = new URL(window.location.href).searchParams;
     for (const [key, value] of Object.entries({

@@ -39,34 +39,34 @@ export function MarketsPage({
         onRefresh={refresh}
       />
       {overview.data?.maps_policy && <section className="panel" aria-label="地图访问节奏">
-        <strong>地图采集 · 低速模式</strong>
+        <strong>地图检索 · 低速模式</strong>
         <p>{runMessage(overview.data.maps_policy.message)}</p>
         {overview.data.maps_policy.manual_required && <>
-          <p>冷却结束后，请确认访问已恢复再继续。活动任务的保留队列会自动继续；已暂停或结束的轮次需在任务列表点击继续。</p>
+          <p>冷却结束后，请确认访问已恢复再继续。排队中和运行中的轮次会按保留的队列自动继续；已暂停的轮次需要到市场详情点“继续本轮”。</p>
           <button disabled={busy || overview.data.maps_policy.retry_after_seconds > 0}
-            onClick={()=>act(()=>api('/maps/resume','POST',{}),'已解除地图保护暂停，活动任务的保留队列将逐个继续')}>
-            恢复地图采集
+            onClick={()=>act(()=>api('/maps/resume','POST',{}),'已解除地图保护暂停，排队中和运行中的轮次将逐个继续')}>
+            恢复地图检索
           </button>
         </>}
       </section>}
       <div className="metrics">
         {[
-          ["企业线索", overview.data?.companies, "company", "已保存的企业记录"],
+          ["企业", overview.data?.companies, "company", "本地保存的企业"],
           [
-            "联系记录",
+            "联系入口",
             overview.data?.contacts,
             "detail",
-            "含历史及不采用的记录",
+            "已去重，不含待确认和不采用",
           ],
-          ["排队等待", overview.data?.queued_runs, "clock", "等待后台处理"],
+          ["排队中的轮次", overview.data?.queued_runs, "clock", "等待后台处理"],
           [
-            "执行中任务",
+            "运行中的轮次",
             overview.data?.running_runs,
             "play",
             "以后台心跳确认是否在线",
           ],
           [
-            "等待人工审核",
+            "待审核",
             overview.data?.pending_reviews,
             "check",
             "确认资料与来源归属",
@@ -86,7 +86,7 @@ export function MarketsPage({
         <Icon name="globe" />
         <div>
           <strong>真实来源，持续维护</strong>
-          <p>发现企业 → 官网补全 → 人工核验 → 定期复核</p>
+          <p>发现企业 → 官网补全 → 人工审核 → 定期更新</p>
         </div>
         <div className="source-status">
           {(["maps", "website"] as const).map((key) => (
@@ -110,16 +110,16 @@ export function MarketsPage({
       </section>
       <div className="section-title">
         <h2>
-          市场检索任务列表 <span className="count">{tasks.data ? active.length : "—"}</span>
+          目标市场 <span className="count">{tasks.data ? active.length : "—"}</span>
         </h2>
         <span className="muted">持续积累 · 本轮变化可追溯</span>
       </div>
       <Resource {...tasks} retry={refresh}>
         {active.length ? (
-          <div className="table-wrap"><table><thead><tr><th>市场检索任务</th><th>目标地区</th><th>最近状态</th><th>最近检索</th><th>操作</th></tr></thead><tbody>
+          <div className="table-wrap"><table><thead><tr><th>目标市场</th><th>目标地区</th><th>最近一轮</th><th>最近一轮开始</th><th>操作</th></tr></thead><tbody>
             {active.map(task=><tr key={task.id}><td><button className="text-button" onClick={()=>setTaskDetail(task)}>{task.name}</button><p className="muted">{task.keywords.join(' · ')}</p></td>
             <td>{[task.country,task.state,task.county,task.city].filter(Boolean).join(' / ')}{(task.geography?.county_ids.length||0)>1&&<small className="muted">跨 {task.geography?.county_ids.length} 个县或同级地区 · 完整城市范围</small>}</td><td>{task.latest_run?<Badge value={task.latest_run.status}/>:"尚未运行"}</td><td>{date(task.latest_run?.created_at)}</td>
-            <td><div className="actions"><button onClick={()=>setTaskDetail(task)}>资料复核列表</button><button onClick={()=>openMarket(task.id)}>企业库</button>
+            <td><div className="actions"><button onClick={()=>setTaskDetail(task)}>查看进度</button><button onClick={()=>openMarket(task.id)}>企业库</button>
             <button disabled={busy||['running','queued','paused'].includes(task.latest_run?.status||'')} onClick={()=>{if(window.confirm(startConfirmText(task.query_estimate)))act(()=>api(`/tasks/${encodeURIComponent(task.id)}/runs`,"POST"),"市场更新已加入运行队列");}}>{task.latest_run?'更新市场':'开始检索'}</button></div></td></tr>)}
           </tbody></table></div>
         ) : (
@@ -144,7 +144,7 @@ export function MarketsPage({
           {archived.map(task=><tr key={task.id}><td>{task.name}</td><td>{date(task.archived_at)}</td>
             <td><button disabled={busy} onClick={()=>act(()=>api(`/tasks/${encodeURIComponent(task.id)}/restore`,"POST"),RESTORED)}>恢复</button></td></tr>)}
         </tbody></table></div></details>}
-      <section className="panel"><div className="row between"><div><h2>企业单独复核</h2><p className="muted">查看从企业详情或定时计划发起的复核记录。</p></div><button onClick={openStandalone}>查看复核列表</button></div></section>
+      <section className="panel"><div className="row between"><div><h2>单家官网复核</h2><p className="muted">查看从企业详情或定时计划发起的官网复核。</p></div><button onClick={openStandalone}>查看单家复核</button></div></section>
     </>
   );
 }

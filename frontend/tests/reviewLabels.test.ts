@@ -16,7 +16,7 @@ test('fieldValue shows review values in Chinese',()=>{
  assert.equal(fieldValue('contact','{broken'),'{broken');
  assert.equal(fieldValue('phone','(408) 435-5020'),'(408) 435-5020');
  assert.equal(fieldValue('name',null),'未记录');
- assert.equal(label('business_types_evidence'),'业务类型线索（未采用）');
+ assert.equal(label('business_types_evidence'),'业务类型证据（未采用）');
  assert.equal(label('importer'),'进口贸易商');
 });
 test('ReviewList compares business types in Chinese, not JSON',async()=>{

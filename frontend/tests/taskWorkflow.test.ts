@@ -12,18 +12,18 @@ test('workflow shows failure breakdown, current work and offline override',async
    contacts_found:2,website_links_remaining:3,auto_enrich:true,maps_wait:null,
    stages:[{key:'discovery',title:'Google Maps 检索',total:4,processed:4,pending:0,running:0,succeeded:2,partial:1,failed:1,blocked:0}]};
   await h.act(async()=>h.root.render(createElement(TaskWorkflow,{flow,worker:{alive:true,last_seen:null}})));
-  assert.equal(document.querySelector('.workflow-stage-status')!.textContent,'部分已完成');
+  assert.equal(document.querySelector('.workflow-stage-status')!.textContent,'部分完成');
   assert.doesNotMatch(document.body.textContent!,/有未完成项/);
   assert.match(document.body.textContent!,/已完成 2/);
   assert.match(document.body.textContent!,/失败 1/);
   assert.equal(document.querySelector('progress')?.value,4);
   await h.act(async()=>h.root.render(createElement(TaskWorkflow,{flow,worker:{alive:false,last_seen:null}})));
-  assert.match(document.body.textContent!,/后台离线，任务暂时无法推进/);
+  assert.match(document.body.textContent!,/后台离线，本轮暂时无法推进/);
  }finally{await h.cleanup();}
 });
 test('disabled website stage is not described as waiting for work',async()=>{
  const {stageText}=await import('../src/TaskWorkflow.tsx');
- assert.equal(stageText({key:'refresh',total:0,partial:0,failed:0,blocked:0} as any,{auto_enrich:false} as any),'未开启自动补全');
+ assert.equal(stageText({key:'refresh',total:0,partial:0,failed:0,blocked:0} as any,{auto_enrich:false} as any),'未开启');
 });
 
 test('planning fallback explains the limited result instead of implying full success',async()=>{
@@ -35,7 +35,7 @@ test('planning fallback explains the limited result instead of implying full suc
   const flow={status:'running',created_at:'2026-09-25T01:00:00Z',elapsed_seconds:125,current:'正在检索',updated_at:'2026-09-25T01:02:05Z',companies_found:0,website_pages:0,contacts_found:0,website_links_remaining:0,auto_enrich:true,maps_wait:null,stages:[stage]};
   await h.act(async()=>h.root.render(createElement(TaskWorkflow,{flow:flow as any,worker:{alive:true,last_seen:null}})));
   assert.match(document.body.textContent!,/无法进行坐标分区检索/);
-  assert.match(document.querySelector('progress')!.getAttribute('aria-valuetext')!,/执行结束 1 \/ 1/);
+  assert.match(document.querySelector('progress')!.getAttribute('aria-valuetext')!,/已处理 1 \/ 1 项/);
   assert.equal(document.querySelector('li.has-issues progress'),null);
   assert.doesNotMatch(document.body.textContent!,/部分完成 1/);
   assert.match(document.body.textContent!,/成功 1/);
@@ -117,7 +117,7 @@ test('zero tasks have no completion bar and cooldown uses minutes in the stage s
   const summaries=[...document.querySelectorAll('.workflow-stage-row')].map(el=>el.textContent);
   assert.match(summaries[0]!,/约116分钟后尝试/);
   assert.doesNotMatch(summaries[0]!,/6906秒|原因：/);
-  assert.match(summaries[1]!,/任务数待确定/);
+  assert.match(summaries[1]!,/总数待确定/);
   assert.doesNotMatch(summaries[1]!,/已完成|0 \/ 0/);
   assert.equal(document.querySelectorAll('progress').length,1);
   assert.match(document.querySelector('progress')!.getAttribute('aria-valuetext')!,/成功 31，需关注 0，剩余 71/);
@@ -156,8 +156,8 @@ test('ended stage results distinguish partial results, success and failure witho
  const {stageText}=await import('../src/TaskWorkflow.tsx');
  for(const key of ['discovery','social']){
   for(const [counts,want] of [
-   [{succeeded:2,partial:0,failed:1,blocked:0},'部分已完成'],
-   [{succeeded:0,partial:1,failed:1,blocked:0},'部分已完成'],
+   [{succeeded:2,partial:0,failed:1,blocked:0},'部分完成'],
+   [{succeeded:0,partial:1,failed:1,blocked:0},'部分完成'],
    [{succeeded:0,partial:0,failed:1,blocked:2},'未取得结果'],
    [{succeeded:3,partial:0,failed:0,blocked:0},'已完成'],
   ] as const){
@@ -170,11 +170,11 @@ test('ended stage results distinguish partial results, success and failure witho
 test('website results prefer ended-company page counts and fall back safely for older payloads',async()=>{
  const {stageText}=await import('../src/TaskWorkflow.tsx');
  const cases=[
-  {counts:{succeeded:0,partial:0,failed:0,blocked:12},summary:websiteSummary,pages:0,want:'部分已完成'},
+  {counts:{succeeded:0,partial:0,failed:0,blocked:12},summary:websiteSummary,pages:0,want:'部分完成'},
   {counts:{succeeded:2,partial:3,failed:0,blocked:7},summary:{...websiteSummary,with_pages:0,without_pages:12},pages:500,want:'未取得结果'},
   {counts:{succeeded:12,partial:0,failed:0,blocked:0},summary:websiteSummary,pages:18,want:'已完成'},
-  {counts:{succeeded:1,partial:0,failed:0,blocked:11},summary:undefined,pages:0,want:'部分已完成'},
-  {counts:{succeeded:0,partial:1,failed:0,blocked:11},summary:undefined,pages:2,want:'部分已完成'},
+  {counts:{succeeded:1,partial:0,failed:0,blocked:11},summary:undefined,pages:0,want:'部分完成'},
+  {counts:{succeeded:0,partial:1,failed:0,blocked:11},summary:undefined,pages:2,want:'部分完成'},
   {counts:{succeeded:0,partial:1,failed:0,blocked:11},summary:undefined,pages:0,want:'未取得结果'},
  ];
  for(const {counts,summary,pages,want} of cases){
@@ -186,7 +186,7 @@ test('website results prefer ended-company page counts and fall back safely for 
 test('pending, running, Maps recovery and social login never become ended result labels',async()=>{
  const {stageText}=await import('../src/TaskWorkflow.tsx');
  const stage=websiteStage({processed:10,pending:2,website_summary:{...websiteSummary,processed:10,pending:2}});
- assert.equal(stageText(stage,websiteFlow(stage,{status:'running'})),'有待处理异常');
+ assert.equal(stageText(stage,websiteFlow(stage,{status:'running'})),'需关注');
  assert.equal(stageText({...stage,running:1,pending:1},websiteFlow(stage,{status:'running'})),'处理中');
  const discovery={...stage,key:'discovery'};
  const recovery={phase:'cooldown',manual_required:false,retry_after_seconds:600,message:'等待',reason:'限流',
@@ -239,7 +239,7 @@ test('website details explain this round, exclusive page outcomes, grouped reaso
   assert.match(details.textContent!,/不计为访问失败/);
   assert.match(details.textContent!,/本次执行已结束，未能读取的来源不影响已保存资料；重试不保证网站恢复/);
   assert.doesNotMatch(details.textContent!,/500|待处理 0|处理中 0|异常项|下方.*筛选|旧的官网/);
-  assert.equal(document.querySelector('.workflow-summary-row .workflow-stage-status')!.textContent,'部分已完成');
+  assert.equal(document.querySelector('.workflow-summary-row .workflow-stage-status')!.textContent,'部分完成');
  }finally{await h.cleanup();}
 });
 

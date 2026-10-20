@@ -11,7 +11,7 @@ test('refresh list identifies company, origin and preserves distinct attempts',a
  try {
   await h.act(async()=>h.root.render(createElement(RefreshTable,{items:[item,{...item,id:'i2',source:'standalone'}],onOpen:i=>{selected=i.id;}})));
   assert.equal(document.querySelectorAll('tbody tr').length,2);
-  assert.match(document.body.textContent!,/该市场检索自动补全/);assert.match(document.body.textContent!,/企业单独复核/);
+  assert.match(document.body.textContent!,/市场更新自动补全/);assert.match(document.body.textContent!,/单家官网复核/);
   await h.act(async()=>([...document.querySelectorAll('button')].find(b=>b.textContent==='查看详情')!).click());
   assert.equal(selected,'i1');
   assert.equal(itemStatus({...item,state:'pending',run_status:'paused'}),'已暂停');
@@ -31,7 +31,7 @@ test('refresh detail is main content, not a header action or duplicate market li
   assert.match(document.querySelector('main')!.textContent!,/Supplier/);
   assert.equal(document.querySelector('.page-heading .panel'),null);
   assert.equal(document.querySelector('.metrics'),null);
-  assert.match(document.querySelector('h1')!.textContent!,/资料复核详情/);
+  assert.match(document.querySelector('h1')!.textContent!,/官网复核详情/);
  }finally{globalThis.fetch=oldFetch;await h.cleanup();}
 });
 test('refresh rows report deduplicated new entries, raw extraction labelled as such',async()=>{

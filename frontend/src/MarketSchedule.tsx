@@ -60,7 +60,7 @@ export function MarketSchedule({task, version = 0, archived = false}: {task: Tas
     </div>
     {archived && <p className="muted">已归档，恢复后可开启</p>}
     <p>{on ? `下次更新：${date(current!.next_due_at)}（${current!.timezone}）` : '未开启自动更新'}</p>
-    <p className="muted">仅在应用运行且电脑唤醒时执行；错过的周期恢复后最多补跑一次。每次更新按当前关键词执行 Maps 查询{initial ? `（预计首轮 ${initial} 次）` : ''}。</p>
+    <p className="muted">仅在应用运行且电脑唤醒时执行；错过的周期恢复后最多补跑一次。每次更新按当前关键词执行地图检索{initial ? `（预计首轮 ${initial} 次）` : ''}。</p>
     {notice && <p role="status">{notice}</p>}
     {(error || result.error) && <Alert>{error || result.error}</Alert>}
   </section>;

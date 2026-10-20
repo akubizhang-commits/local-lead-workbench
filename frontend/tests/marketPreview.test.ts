@@ -12,10 +12,10 @@ const catalogue={terms:['metal roofing supply'],query_terms:['metal roofing supp
  geometry:'catalogue' as const,initial_min:17,initial_max:17,max:421};
 
 test('preview text for the three geometries',()=>{
- assert.equal(estimateLines(catalogue),'预计 Maps 查询：首轮 17 次（每个检索词 1 次城市检索 + 16 个分区）。结果密集的分区会自动细分，最多约 421 次；按低速模式逐个执行，可随时暂停。');
+ assert.equal(estimateLines(catalogue),'预计地图检索：首轮 17 次（每个检索词 1 次城市检索 + 16 个分区）。结果密集的分区会自动细分，最多约 421 次；按低速模式逐个执行，可随时暂停。');
  assert.equal(estimateLines({...catalogue,geometry:'geocoder',initial_min:1,initial_max:17,max:null}),
-  '预计 Maps 查询：首轮 1–17 次（城市范围定位成功时 17 次，失败时只做 1 次文字检索）。');
- assert.equal(estimateLines({...catalogue,geometry:'text_only',initial_min:1,initial_max:1,max:1}),'预计 Maps 查询：1 次文字检索。');
+  '预计地图检索：首轮 1–17 次（城市范围定位成功时 17 次，失败时只做 1 次文字检索）。');
+ assert.equal(estimateLines({...catalogue,geometry:'text_only',initial_min:1,initial_max:1,max:1}),'预计地图检索：1 次文字检索。');
 });
 
 test('existing market hints for new and archived markets, and for the edit dialog',()=>{
@@ -30,11 +30,11 @@ test('existing market hints for new and archived markets, and for the edit dialo
 });
 
 test('start confirmation: with a maximum, without one, and a geocoder range',()=>{
- assert.equal(startConfirmText(catalogue),'本轮预计执行 17 次 Maps 查询（结果密集时最多约 421 次），按低速模式逐个执行，可随时暂停。开始吗？');
+ assert.equal(startConfirmText(catalogue),'本轮预计执行 17 次地图检索（结果密集时最多约 421 次），按低速模式逐个执行，可随时暂停。开始吗？');
  assert.equal(startConfirmText({...catalogue,geometry:'text_only',initial_min:2,initial_max:2,max:2}),
-  '本轮预计执行 2 次 Maps 查询，按低速模式逐个执行，可随时暂停。开始吗？');
+  '本轮预计执行 2 次地图检索，按低速模式逐个执行，可随时暂停。开始吗？');
  assert.equal(startConfirmText({...catalogue,geometry:'geocoder',initial_min:1,initial_max:17,max:null}),
-  '本轮预计执行 1–17 次 Maps 查询，按低速模式逐个执行，可随时暂停。开始吗？');
+  '本轮预计执行 1–17 次地图检索，按低速模式逐个执行，可随时暂停。开始吗？');
 });
 
 test('preset terms follow the selected company types, wholesale when none',()=>{
@@ -141,7 +141,7 @@ test('starting a round asks first; cancelling sends nothing',async()=>{
    openMarket:()=>{},openStandalone:()=>{},setModal:()=>{}} as never)));
   const start=[...document.querySelectorAll('button')].find(b=>b.textContent==='开始检索')!;
   await h.act(async()=>start.click());
-  assert.deepEqual(prompts,['本轮预计执行 17 次 Maps 查询（结果密集时最多约 421 次），按低速模式逐个执行，可随时暂停。开始吗？']);
+  assert.deepEqual(prompts,['本轮预计执行 17 次地图检索（结果密集时最多约 421 次），按低速模式逐个执行，可随时暂停。开始吗？']);
   assert.deepEqual(actions,[]);
   answer=true;
   await h.act(async()=>start.click());
@@ -152,8 +152,8 @@ test('built-in range note appears only for catalogue_fallback estimates',()=>{
  const base={terms:['metal roofing supply'],query_terms:['metal roofing supply in San Jose, California, US'],geometry:'catalogue' as const,initial_min:17,initial_max:17,max:421};
  const note='（上限按内置城市范围估算，实际以定位结果为准）';
  const fallback={...base,bounds_source:'catalogue_fallback' as const};
- assert.equal(estimateLines(fallback),`预计 Maps 查询：首轮 17 次（每个检索词 1 次城市检索 + 16 个分区）。结果密集的分区会自动细分，最多约 421 次${note}；按低速模式逐个执行，可随时暂停。`);
- assert.equal(startConfirmText(fallback),`本轮预计执行 17 次 Maps 查询（结果密集时最多约 421 次）${note}，按低速模式逐个执行，可随时暂停。开始吗？`);
+ assert.equal(estimateLines(fallback),`预计地图检索：首轮 17 次（每个检索词 1 次城市检索 + 16 个分区）。结果密集的分区会自动细分，最多约 421 次${note}；按低速模式逐个执行，可随时暂停。`);
+ assert.equal(startConfirmText(fallback),`本轮预计执行 17 次地图检索（结果密集时最多约 421 次）${note}，按低速模式逐个执行，可随时暂停。开始吗？`);
  for(const other of [base,{...base,bounds_source:'catalogue' as const},{...base,bounds_source:null}]){
   assert.ok(!estimateLines(other).includes(note));
   assert.ok(!startConfirmText(other).includes(note));

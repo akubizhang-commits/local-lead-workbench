@@ -106,7 +106,7 @@ test("empty list enables directly; no worker hint; form range validation", async
     await mount(h, { workerAlive: false });
     assert.match(text(), /目前没有需要清理的文件。/);
     assert.ok(button("启用自动清理"));
-    assert.match(text(), /后台采集未运行时不会自动清理/);
+    assert.match(text(), /后台未运行时不会自动清理/);
     const input = document.querySelector<HTMLInputElement>('input[min="7"]')!;
     assert.equal(input.getAttribute("max"), "365");
     assert.equal(input.closest("label")!.textContent!.startsWith("地图原始结果保留天数（7–365）"), true);

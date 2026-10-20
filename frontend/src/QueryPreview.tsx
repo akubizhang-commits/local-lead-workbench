@@ -24,19 +24,19 @@ const fallbackNote = (estimate: QueryEstimate) => estimate.bounds_source === 'ca
 
 /** Confirmation before a round starts (D9, design §8.4). */
 export function startConfirmText(estimate: QueryEstimate | undefined) {
-  if (!estimate) return '本轮将执行 Maps 查询，按低速模式逐个执行，可随时暂停。开始吗？';
+  if (!estimate) return '本轮将执行地图检索，按低速模式逐个执行，可随时暂停。开始吗？';
   const most = estimate.max != null && estimate.max !== estimate.initial_max ? `（结果密集时最多约 ${estimate.max} 次）${fallbackNote(estimate)}` : '';
-  return `本轮预计执行 ${initialText(estimate)} 次 Maps 查询${most}，按低速模式逐个执行，可随时暂停。开始吗？`;
+  return `本轮预计执行 ${initialText(estimate)} 次地图检索${most}，按低速模式逐个执行，可随时暂停。开始吗？`;
 }
 
 export function estimateLines(estimate: QueryEstimate): string {
   if (estimate.geometry === 'catalogue') {
-    return `预计 Maps 查询：首轮 ${estimate.initial_min} 次（每个检索词 1 次城市检索 + 16 个分区）。结果密集的分区会自动细分，最多约 ${estimate.max} 次${fallbackNote(estimate)}；按低速模式逐个执行，可随时暂停。`;
+    return `预计地图检索：首轮 ${estimate.initial_min} 次（每个检索词 1 次城市检索 + 16 个分区）。结果密集的分区会自动细分，最多约 ${estimate.max} 次${fallbackNote(estimate)}；按低速模式逐个执行，可随时暂停。`;
   }
   if (estimate.geometry === 'geocoder') {
-    return `预计 Maps 查询：首轮 ${estimate.initial_min}–${estimate.initial_max} 次（城市范围定位成功时 ${estimate.initial_max} 次，失败时只做 ${estimate.initial_min} 次文字检索）。`;
+    return `预计地图检索：首轮 ${estimate.initial_min}–${estimate.initial_max} 次（城市范围定位成功时 ${estimate.initial_max} 次，失败时只做 ${estimate.initial_min} 次文字检索）。`;
   }
-  return `预计 Maps 查询：${estimate.initial_min} 次文字检索。`;
+  return `预计地图检索：${estimate.initial_min} 次文字检索。`;
 }
 
 export function existingText(preview: QueryPreviewResult, mode: 'create' | 'edit') {

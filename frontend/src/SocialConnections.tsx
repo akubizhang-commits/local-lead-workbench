@@ -216,7 +216,7 @@ export function SocialConnections({
           打开登录浏览器，在浏览器窗口中手动登录 Instagram / Facebook /
           Twitter（X）。
         </li>
-        <li>登录完成后，点击下方“关闭并释放会话”，再运行发现任务。</li>
+        <li>登录完成后，点击下方“关闭并释放会话”，再开始查找。</li>
       </ol>
       <p className="muted">
         会话过期或读取时要求登录，请重新打开浏览器登录，再关闭并释放。打开、关闭状态不代表已登录或认证有效。这里不会发送私信或评论。
@@ -233,6 +233,8 @@ export function SocialConnections({
       )}
       {draft && data && (
         <>
+          <details className="advanced-settings">
+          <summary>高级设置：读取方式</summary>
           <form
             onSubmit={(event) => {
               event.preventDefault();
@@ -354,6 +356,7 @@ export function SocialConnections({
               所选读取方式的依赖不可用，请安装对应依赖或选择其他读取方式。
             </Alert>
           )}
+          </details>
           {(["instagram", "facebook", "x"] as const).map((platform) => (
             <article className="social-card" key={platform}>
               <div className="row between">
@@ -402,7 +405,7 @@ export function SocialConnections({
           ))}
           {open && (
             <p role="status">
-              登录浏览器仍打开，请点击“关闭并释放会话”后再保存配置或运行发现任务。
+              登录浏览器仍打开，请点击“关闭并释放会话”后再保存配置或开始查找。
             </p>
           )}
         </>

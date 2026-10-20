@@ -20,7 +20,7 @@ export function WorkflowWebsiteDetails({summary,processed,pending,running,ended}
 }) {
  const waiting=summary?.pending??pending,working=summary?.running??running;
  return <>
-  <p>本轮已处理 {summary?.processed??processed} 家企业{summary&&`；本轮官网任务共 ${summary.total} 家`}。</p>
+  <p>本轮已处理 {summary?.processed??processed} 家企业{summary&&`；本轮官网补全共 ${summary.total} 家`}。</p>
   {summary?<p><strong>{pageResults(summary)}</strong></p>:<p>网页读取企业数暂未统计。</p>}
   {(waiting>0||working>0)&&<div className="workflow-breakdown">
    {waiting>0&&<span>待处理 {waiting} 家</span>}

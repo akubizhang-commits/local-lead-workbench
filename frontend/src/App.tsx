@@ -5,7 +5,7 @@ import { api, resetSession } from "./api";
 import { CompanyForm, TaskForm } from "./forms";
 import { date, filtersQuery, type Filters } from "./helpers";
 import { useResource } from "./hooks";
-import { TaskActivityPage } from "./pages/TaskActivityPage";
+import { MarketHeadingActions, TaskActivityPage, marketSubline } from "./pages/TaskActivityPage";
 import { backFromRefreshDetail, defaultFilters, updateListFilters, type View } from "./navigation";
 import { ChangesPage } from "./pages/ChangesPage";
 import { CompaniesPage } from "./pages/CompaniesPage";
@@ -36,8 +36,8 @@ const navigation: [View, string, string][] = [
 const descriptions: Record<View, string> = {
   tasks: "按地区建立目标市场，持续发现新增企业、复核存量资料。",
   companies: "整理企业资料、查看来源，为下一次联系做好准备。",
-  detail: "让每一条资料，都有据可查。",
-  reviews: "对照来源做出判断，让自动采集与人工核验各司其职。",
+  detail: "",
+  reviews: "对照来源做出判断：自动采集给出建议，由你决定是否采用。",
   changes: "追踪资料变化，保留每一次判断的来龙去脉。",
   settings: "管理本地数据、来源能力与定时维护。",
 };
@@ -82,6 +82,8 @@ export default function App() {
       : null,
     version,
   );
+  const marketTask = view === "tasks" ? tasks.data?.find((t) => t.id === route.task) : undefined;
+  const marketTitle = route.task === "standalone" ? "单家官网复核" : marketTask?.name || "目标市场";
   function updateFilters(patch: Partial<Filters>) {
     navigate(updateListFilters(route, patch));
   }
@@ -199,7 +201,7 @@ export default function App() {
             <Icon name="shield" />
             <div>
               <strong>数据保存在本机</strong>
-              <small>公开来源 · 人工核验</small>
+              <small>公开来源 · 人工审核</small>
             </div>
           </div>
           <div className="profile">
@@ -219,7 +221,7 @@ export default function App() {
             <span>工作空间</span>
             <span className="slash" aria-hidden="true">/</span>
             {view === "tasks" && route.task ? (
-              <><button className="text-button" onClick={()=>setView("tasks")}>市场检索任务列表</button><span className="slash" aria-hidden="true">/</span><button className="text-button" onClick={()=>navigate(backFromRefreshDetail(route))}>资料复核列表</button>{route.item&&<><span className="slash" aria-hidden="true">/</span><span aria-current="page">资料复核详情</span></>}</>
+              <><button className="text-button" onClick={()=>setView("tasks")}>目标市场</button><span className="slash" aria-hidden="true">/</span>{route.item?<button className="text-button" title={marketTitle} onClick={()=>navigate(backFromRefreshDetail(route))}>{marketTitle}</button>:<span aria-current="page" title={marketTitle}>{marketTitle}</span>}{route.item&&<><span className="slash" aria-hidden="true">/</span><span aria-current="page">官网复核详情</span></>}</>
             ) : view === "detail" ? (
               <>
                 <button
@@ -257,10 +259,10 @@ export default function App() {
             <span className={`connection ${overview.error ? "offline" : ""}`}>
               <span className="dot" />
               {overview.error
-                ? "服务未连接"
+                ? "本地服务未连接"
                 : overview.loading
-                  ? "连接中"
-                  : "API 已连接"}
+                  ? "正在连接本地服务"
+                  : "本地服务已连接"}
             </span>
             <span
               className={`connection ${overview.data?.worker?.alive ? "" : "offline"}`}
@@ -280,12 +282,12 @@ export default function App() {
           </div>
         </header>
         <main>
-          <div className="page-heading">
+          <div className={`page-heading view-${view}`}>
             <div>
-              {view === "tasks" && route.task && <button className="text-button page-back" onClick={()=>route.item?navigate(backFromRefreshDetail(route)):setView("tasks")}>{route.item?"← 返回资料复核列表":"← 返回市场检索任务列表"}</button>}
+              {view === "tasks" && route.task && <button className="text-button page-back" onClick={()=>route.item?navigate(backFromRefreshDetail(route)):setView("tasks")}>{route.item?(route.task==="standalone"?"← 返回单家官网复核":"← 返回市场详情"):"← 返回目标市场"}</button>}
               {view === "detail" && <button className="text-button page-back" onClick={route.account?backToCompany:()=>setView("companies")}>{route.account?"← 返回企业详情":"← 返回企业库"}</button>}
               <h1>
-                {view === "tasks" && route.task ? (route.item ? "资料复核详情" : "资料复核任务") : view === "detail"
+                {view === "tasks" && route.task ? (route.item ? "官网复核详情" : marketTitle) : view === "detail"
                   ? route.account
                     ? route.account.startsWith("contact:")
                       ? "联系人详情"
@@ -293,9 +295,13 @@ export default function App() {
                     : "企业详情"
                   : navigation.find((n) => n[0] === view)?.[1]}
               </h1>
-              <p>{view==='tasks'&&route.task?(route.item?'查看本次复核结果、来源页面和历史尝试。':'查看市场企业的复核进度，筛选并处理未完成任务。'):descriptions[view]}</p>
+              {view==='tasks'&&route.task?(route.item?<p>查看这次官网复核读取了哪些网页、结果和历次尝试。</p>:marketTask&&<p>{marketSubline(marketTask)}</p>):descriptions[view]&&<p>{descriptions[view]}</p>}
             </div>
             <div className="actions">
+              {view === "tasks" && marketTask && !route.item && (
+                <MarketHeadingActions task={marketTask} version={version} busy={busy} act={act}
+                  openMarket={openMarket} onOpenMarket={(id) => navigate({ ...route, task: id, run: undefined, item: undefined, page: 1 })} />
+              )}
               {view === "tasks" && !route.task && !route.item && (
                 <button className="primary" onClick={() => setModal("task")}>
                   <Icon name="plus" size={17} />
@@ -325,13 +331,13 @@ export default function App() {
                           const run = result as Run;
                           return run?.already_queued
                             ? `已在「${runTitle(run, detail.data?.company.name)}」的复核队列中，无需重复发起`
-                            : "资料复核已加入队列，可在目标市场查看进度";
+                            : "官网复核已加入队列，可在“目标市场 › 单家官网复核”查看进度";
                         },
                       )
                     }
                   >
                     <Icon name="refresh" size={17} />
-                    复核官网资料
+                    复核官网
                   </button>
                 </>
               )}
@@ -462,7 +468,7 @@ export default function App() {
         >
           <div className="form-body">
             <Alert>
-              将用此备份替换当前业务数据。请确认已保存需要保留的最新资料，并停止活动任务。
+              将用此备份替换当前业务数据，恢复前会自动备份当前数据。有排队中或运行中的轮次时不能恢复：暂停或等待这些轮次结束即可，不需要取消。
             </Alert>
             <p>
               <strong>{restore.name}</strong>

@@ -169,10 +169,11 @@ export function RunCard({
             .join("；")}
         />
       )}
-      <small className="muted">
-        运行编号：{run.id}
-        {run.finished_at ? ` · 结束于 ${date(run.finished_at)}` : ""}
-      </small>
+      {run.finished_at && <small className="muted">结束于 {date(run.finished_at)}</small>}
+      <details className="diagnostics">
+        <summary>诊断信息</summary>
+        <small className="muted">运行编号：<code>{run.id}</code></small>
+      </details>
     </div>
   );
 }

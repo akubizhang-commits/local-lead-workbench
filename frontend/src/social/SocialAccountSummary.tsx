@@ -112,7 +112,7 @@ export function SocialAccountSummary({
                   </div>
                 ))
               : "尚无官网域名或电话一致的已采集证据"}
-            <small>匹配线索不代表归属已确认</small>
+            <small>匹配依据不代表归属已确认</small>
           </dd>
         </div>
         <div>
@@ -132,7 +132,7 @@ export function SocialAccountSummary({
       </dl>
       {!page && (
         <p className="muted">
-          目前仅发现账号线索。可在企业详情的“补充已有账号基础资料”中尝试补充简介和公开联系方式。
+          目前只发现了候选账号。可在企业详情的“补充已有账号基础资料”中尝试补充简介和公开联系入口。
         </p>
       )}
     </div>

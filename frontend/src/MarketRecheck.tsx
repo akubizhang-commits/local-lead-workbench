@@ -23,7 +23,7 @@ export function runTitle(run: Pick<Run, 'kind' | 'company_name'> & {snapshot?: R
   const snapshot = run.snapshot || {};
   if (snapshot.batch === 'website_recheck') return `批量官网复核 · ${(snapshot.company_ids as unknown[] | undefined)?.length ?? 0} 家`;
   if (run.kind === 'discovery') return String(snapshot.name || '市场检索');
-  return run.company_name || companyName || '企业单独复核';
+  return run.company_name || companyName || '单家官网复核';
 }
 
 /** Market page panel for batch website re-checks; polls every 5 s (design §6.4). */
@@ -55,7 +55,7 @@ export function MarketRecheck({marketId, archived = false, version = 0}: {market
     </> : <>
       {b && <p>上次批量复核：完成 {b.done} / {b.total} 家 · 结束于 {date(b.finished_at)} · 新增联系入口 {b.entries_added} 个（去重后）{b.skipped.length ? ` · 跳过 ${b.skipped.length} 家` : ''}</p>}
       {!!b?.skipped.length && <details><summary>查看跳过的企业</summary><ul>{b.skipped.map(s => <li key={s.company_id}>{s.name || s.company_id} · {s.reason}</li>)}</ul></details>}
-      <p className="muted">对市场内尚未读取过官网的企业批量复核，一次最多 {RECHECK_LIMIT} 家。读取失败或只读到部分页面的企业不会被重复选中，可在企业库勾选后单独复核。</p>
+      <p className="muted">对市场内尚未读取过官网的企业批量复核，一次最多 {RECHECK_LIMIT} 家。读取失败或只读到部分页面的企业不会被重复选中，可以在企业库勾选后复核官网。</p>
       <button disabled={busy || archived} onClick={() => {
         if (!window.confirm(recheckConfirm(`最多 ${RECHECK_LIMIT}`))) return;
         void run(async () => recheckQueued(await api<RecheckCreated>(`/tasks/${encodeURIComponent(marketId)}/website-recheck`, 'POST', {select: 'never_attempted'})));

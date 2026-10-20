@@ -8,7 +8,7 @@ import { actionMessage } from "./errors";
 
 /** Storage clean-up settings, first-run confirmation and history (P1-8, design §10.6). */
 export const RETENTION_CHANGED = "待清理文件已变化，请重新查看后确认";
-export const RETENTION_NO_WORKER = "后台采集未运行时不会自动清理";
+export const RETENTION_NO_WORKER = "后台未运行时不会自动清理";
 export const RETENTION_STRICTER = "新策略会删除更多文件，需要你重新确认后才会自动清理。";
 export const RETENTION_PENDING_LABEL = "存储清理待确认";
 const CATEGORY: Record<string, string> = { maps_raw: "地图原始结果", auto_backup: "自动备份", export: "导出文件" };

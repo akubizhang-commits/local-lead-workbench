@@ -39,7 +39,7 @@ export function SocialPagePreview({
             {
               browser: "浏览器读取",
               http: "公开网页读取",
-              instaloader: "Instaloader 读取",
+              instaloader: "增强读取",
               youtube_api: "YouTube API",
             } as Record<string, string>
           )[page.provider] || page.provider}

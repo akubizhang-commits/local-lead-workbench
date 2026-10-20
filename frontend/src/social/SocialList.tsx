@@ -44,7 +44,7 @@ export function SocialList({
   return (
     <section className="panel social-panel">
       <div className="section-title">
-        <h3>联系人 / 账号</h3>
+        <h3>联系人与账号</h3>
         <button
           disabled={busy || loading}
           onClick={() =>
@@ -87,7 +87,7 @@ export function SocialList({
             <Alert>此企业已标记拒绝联系，跟进录入已停用。</Alert>
           )}
           <p className="muted">
-            采购联系方式优先展示；其余为可尝试联系的入口，点击查看资料和来源。
+            采购联系人排在前面；其余为可尝试联系的入口，点击查看资料和来源。
           </p>
           <SocialAccountList
             entries={data.accounts}
@@ -101,7 +101,7 @@ export function SocialList({
                 补充联系页面（{contactGroups.supplementary.length}）
               </summary>
               <p className="muted">
-                只发现了页面链接，尚未确认存在可提交的联系表单，不作为直接联系方式展示。
+                只发现了页面链接，尚未确认存在可提交的联系表单，不作为直接联系入口展示。
               </p>
               <SocialAccountList
                 entries={[]}

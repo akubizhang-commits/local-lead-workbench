@@ -116,7 +116,7 @@ export function TaskForm({onDone,onCancel}:{onDone:(task:Task)=>void;onCancel:()
     <div className="form-body">
       <FormError id={errorId} error={error}/>
       <div className="form-grid">
-        <p className="hint wide">任务名称将根据地区、企业类型和关键词自动生成。</p>
+        <p className="hint wide">市场名称将根据地区、企业类型和关键词自动生成。</p>
         <RegionFields/>
         <fieldset className="wide" {...invalid(error,'company_types',errorId)}><legend>目标企业类型</legend><div className="checks">
           {[['wholesale','批发商'],['retail','零售商'],['import','进口贸易商']].map(([value,title])=>
@@ -126,7 +126,7 @@ export function TaskForm({onDone,onCancel}:{onDone:(task:Task)=>void;onCancel:()
           invalidProps={invalid(error,'keywords',errorId)}/>
         <QueryPreview body={watched.body} onReady={setReadyKey}/>
       </div>
-      <label className="check-line"><input type="checkbox" name="auto_enrich" defaultChecked/>发现后自动读取官网，补全公开联系方式</label>
+      <label className="check-line"><input type="checkbox" name="auto_enrich" defaultChecked/>发现后自动读取官网，补全公开联系入口</label>
       <MarketSocialOptions value={social} onChange={setSocial} disabled={busy}/>
       <div className="hint">关键词或预设行业至少选择一项。地区查询采用近似范围；检索完成不表示已覆盖全部企业。未再次找到的记录仍保留在市场中。</div>
     </div>

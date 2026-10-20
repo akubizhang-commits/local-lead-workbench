@@ -22,24 +22,24 @@ function stageInterrupted(stage:WorkflowStage,flow:Workflow) {
 }
 export function stageText(stage:WorkflowStage,flow:Workflow) {
  const errors=stage.partial+stage.failed+stage.blocked;
- if(stage.key==='refresh'&&!flow.auto_enrich&&!stage.total)return '未开启自动补全';
+ if(stage.key==='refresh'&&!flow.auto_enrich&&!stage.total)return '未开启';
  if(stageInterrupted(stage,flow))return label(flow.status);
  if(stage.key==='social'){
   if(stage.running)return '处理中';
   if(socialWaiting(flow.social))return '等待平台继续';
-  if(socialHasWork(flow.social))return '等待处理';
+  if(socialHasWork(flow.social))return '排队中';
  }
- if(!stage.total)return stage.key==='planning'?'暂无规划记录':'尚未产生任务';
+ if(!stage.total)return stage.key==='planning'?'暂无规划记录':'未开始';
  if(stage.running)return '处理中';
  if(stage.key==='discovery'&&stage.pending&&flow.maps_recovery?.manual_required)return '等待处理后恢复';
  if(stage.key==='discovery'&&stage.pending&&['cooldown','query_wait','probe'].includes(flow.maps_recovery?.phase||''))return '等待自动继续';
- if(stage.pending)return flow.status==='paused'?'已暂停':flow.status==='cancelled'?'已取消':errors?'有待处理异常':'等待处理';
+ if(stage.pending)return flow.status==='paused'?'已暂停':flow.status==='cancelled'?'已取消':errors?'需关注':'排队中';
  if(stage.key==='planning'&&stage.mode==='text_only'&&!stage.failed&&!stage.blocked)return '已生成文字检索方案';
  if(!errors)return '已完成';
  const hasResults=stage.key==='refresh'?
   (stage.website_summary?stage.website_summary.with_pages>0:stage.succeeded>0||flow.website_pages>0):
   stage.succeeded>0||stage.partial>0;
- return hasResults?'部分已完成':'未取得结果';
+ return hasResults?'部分完成':'未取得结果';
 }
 function duration(seconds:number){const mins=Math.floor(seconds/60);return mins>=60?`${Math.floor(mins/60)}小时${mins%60}分钟`:`${mins}分钟`;}
 function recoveryTime(recovery:MapsRecovery){
@@ -60,7 +60,7 @@ function StageRow({stage:s,index,flow,offline,busy,onOpenSettings,onSocialChange
  const interrupted=stageInterrupted(s,flow);
  const waiting=!!recovery&&(recovery.manual_required||!!recovery.reason)||social&&socialWaiting(flow.social);
  const complete=s.total>0&&s.processed>=s.total&&!remaining&&!issues&&!interrupted&&!(social&&socialHasWork(flow.social));
- const unit=s.key==='refresh'||social?'家企业':'项';
+ const unit=s.key==='refresh'||social?'家企业':s.key==='discovery'?'个查询':'项';
  const step=flow.social_only&&social?'3B':({planning:'1',discovery:'2',refresh:'3A',social:'3B'}[s.key]||String(index+1));
  const retry=s.retry_pending??0;
  const unattempted=s.unattempted??Math.max(0,s.pending-retry);
@@ -79,18 +79,18 @@ function StageRow({stage:s,index,flow,offline,busy,onOpenSettings,onSocialChange
    </div>
    <div className="workflow-stage-progress">
     {s.total>0?<>
-     <div className="workflow-progress-caption"><span><strong>{s.processed}</strong> / {s.total} <small>{unit}</small></span><small>执行结束</small></div>
+     <div className="workflow-progress-caption"><span>已处理 <strong>{s.processed}</strong> / {s.total} <small>{unit}</small></span></div>
      <div className="workflow-track">
       <progress className="sr-only" aria-label={`${s.title}已处理进度`} max={s.total} value={s.processed}
-       aria-valuetext={`执行结束 ${s.processed} / ${s.total}；成功 ${s.succeeded}，需关注 ${issues}，剩余 ${remaining}`}/>
+       aria-valuetext={`已处理 ${s.processed} / ${s.total} ${unit}；成功 ${s.succeeded}，需关注 ${issues}，剩余 ${remaining}`}/>
       <span className="workflow-track-success" aria-hidden="true" style={{width:`${s.succeeded/s.total*100}%`}}/>
       <span className="workflow-track-issues" aria-hidden="true" style={{width:`${issues/s.total*100}%`}}/>
      </div>
-    </>:<span className="workflow-no-total">{s.key==='refresh'&&!flow.auto_enrich?'—':'任务数待确定'}</span>}
+    </>:<span className="workflow-no-total">{s.key==='refresh'&&!flow.auto_enrich?'本市场未开启官网自动补全':'总数待确定'}</span>}
    </div>
    <div className="workflow-stage-next">
     <span>{interrupted?label(flow.status):offline&&remaining?'进度已保留':recovery?.manual_required?'需要手动恢复':
-     recovery?.next_attempt_at?recoveryTime(recovery):remaining?`剩余 ${remaining} ${unit}`:social&&socialHasWork(flow.social)?'仍有平台待处理':complete?'全部执行结束':s.total?'本阶段执行结束':'尚无待执行项'}</span>
+     recovery?.next_attempt_at?recoveryTime(recovery):remaining?`剩余 ${remaining} ${unit}`:social&&socialHasWork(flow.social)?'仍有平台待处理':s.total?'全部已处理':'—'}</span>
     <WorkflowHint label={detailLabel} tip={tip} expanded={open} controls={id} onToggle={()=>setOpen(!open)} warning={issues>0||retry>0||waiting}/>
    </div>
   </div>
@@ -132,28 +132,28 @@ export function TaskWorkflow({flow,worker,onResume,onViewCompanies,busy,onOpenSe
  const recovery=flow.social_only?null:flow.maps_recovery;
  const hasSocial=stages.some(s=>s.key==='social');
  const parallel=hasSocial&&!flow.social_only;
- return <section className="panel task-workflow" aria-label="任务流程与进度">
-  <div className="panel-heading"><h2>任务流程与进度</h2><span className="workflow-elapsed">已历时 {duration(flow.elapsed_seconds)}<small>含等待和暂停</small></span></div>
+ return <section className="panel task-workflow" aria-label="本轮进度">
+  <div className="panel-heading"><h2>本轮进度</h2><span className="workflow-elapsed">已历时 {duration(flow.elapsed_seconds)}<small>含等待和暂停</small></span></div>
   <dl className="workflow-results">
    <div><dt>{flow.social_only?'本轮补充企业':'已发现企业'}</dt><dd>{flow.companies_found.toLocaleString()} <small>家</small></dd></div>
    {flow.social_only?<><div><dt>社媒账号</dt><dd>{flow.social?.accounts_found.toLocaleString()??'—'} <small>个</small></dd></div>
     <div><dt>已读取帖子</dt><dd>{flow.social?.posts_found.toLocaleString()??'—'} <small>条</small></dd></div></>:<>
     <div><dt>官网已读取</dt><dd>{flow.website_pages.toLocaleString()} <small>页</small></dd></div>
-    <div><dt>提取联系记录</dt><dd>{flow.contacts_found.toLocaleString()} <small>条</small></dd><small className="workflow-result-note">原始记录，未去重</small></div>
+    <div><dt>原始提取</dt><dd>{flow.contacts_found.toLocaleString()} <small>条</small></dd><small className="workflow-result-note">未去重，不等于联系入口数</small></div>
    </>}
   </dl>
   {!flow.social_only&&flow.social&&<p className="workflow-social-results">社媒账号 <strong>{flow.social.accounts_found.toLocaleString()}</strong> 个 · 已读取帖子 <strong>{flow.social.posts_found.toLocaleString()}</strong> 条</p>}
   <div className={`workflow-current${offline?' is-offline':''}`} role="status">
    <span className="workflow-current-label">{offline?'等待后台':active?'当前进展':'本轮结果'}</span>
-   <div><strong>{offline?'后台离线，任务暂时无法推进':runMessage(flow.current)}</strong>
+   <div><strong>{offline?'后台离线，本轮暂时无法推进':runMessage(flow.current)}</strong>
    {offline&&<p>已保留进度，重新启动后台后可恢复处理。</p>}
    {!flow.social_only&&!recovery&&flow.maps_wait&&flow.maps_wait!==flow.current&&<p>{runMessage(flow.maps_wait)}</p>}
    </div>
   </div>
-  <div className="workflow-guide"><span>阶段进展{parallel?' · 3A 官网与 3B 社媒并行补全':flow.social_only?' · 仅社媒补充轮次':''}</span><span className="workflow-legend"><span><i className="workflow-track-success"/>成功</span><span><i className="workflow-track-issues"/>需关注</span><span><i/>待执行</span></span></div>
+  <div className="workflow-guide"><span>阶段进展{parallel?' · 3A 官网与 3B 社媒并行补全':flow.social_only?' · 社媒补充轮次':''}</span><span className="workflow-legend"><span><i className="workflow-track-success"/>成功</span><span><i className="workflow-track-issues"/>需关注</span><span><i/>待执行</span></span></div>
   <ol className="workflow-stages">{stages.map((s,i)=><StageRow key={`${flow.run_id}-${s.key}`} stage={s} index={i} flow={flow} offline={offline}
    busy={busy} onOpenSettings={onOpenSettings} onSocialChange={onSocialChange}/>)}
-   <li className="workflow-stage workflow-summary-row"><div className="workflow-stage-heading"><span className="workflow-step" aria-hidden="true">4</span><div><h3>结果汇总</h3><span className="workflow-stage-status">{offline?'进度已保留':active?'持续汇总中':flow.status==='completed'?(issue?'本轮执行结束 · 有需关注项':'本轮已结束'):flow.status==='partial'?'部分已完成':label(flow.status)}</span></div></div>
+   <li className="workflow-stage workflow-summary-row"><div className="workflow-stage-heading"><span className="workflow-step" aria-hidden="true">4</span><div><h3>结果汇总</h3><span className="workflow-stage-status">{offline?'进度已保留':active?'持续汇总中':flow.status==='completed'?(issue?'本轮已结束 · 有需关注项':'本轮已结束'):flow.status==='partial'?'部分完成':label(flow.status)}</span></div></div>
     <p><strong>{flow.companies_found.toLocaleString()}</strong> 家企业已保存<span>结果随采集保存</span></p>
     {onViewCompanies&&<button type="button" className="workflow-view-results" onClick={onViewCompanies}>查看企业 <span aria-hidden="true">→</span></button>}
    </li>
@@ -169,13 +169,13 @@ export function TaskWorkflow({flow,worker,onResume,onViewCompanies,busy,onOpenSe
     <td>{q.query}</td><td>{q.state==='pending'?'等待重试':q.state==='running'?'处理中':q.state==='succeeded'?'已恢复完成':'需要处理'}</td>
     <td>{q.attempts??'未记录'} 次 · 重试 {q.retries??'未记录'} 次</td>
     <td>{queryFailureBadge(q)&&<span className={`badge badge-${q.failure_kind}`}>{queryFailureBadge(q)}</span>}{mapsReasonText(q.reason,q.stop_reason)}{q.next_attempt_at&&<small>{q.failure_kind==='scraper_error'?'计划重试':'计划复核'}：{date(q.next_attempt_at)}</small>}
-     {!!q.history.length&&<details><summary>历次尝试</summary>{q.history.map((h,i)=><p key={i}>第{h.attempt}次 · {date(h.finished_at)} · {mapsReasonText(h.message,h.stop_reason)||label(h.stop_reason)||'执行结束'}</p>)}</details>}
+     {!!q.history.length&&<details><summary>历次尝试</summary>{q.history.map((h,i)=><p key={i}>第{h.attempt}次 · {date(h.finished_at)} · {mapsReasonText(h.message,h.stop_reason)||label(h.stop_reason)||'已结束'}</p>)}</details>}
     </td></tr>)}</tbody></table></div>
   </details>}
   <details className="workflow-method"><summary>进度与统计说明</summary>
-   <p>{flow.social_only?'本轮仅补充已有企业的社媒资料。':'查询会随区域细分增加，资料补全任务会随企业发现增加。'}进度条中绿色为成功，棕色为部分完成、失败或受阻；“执行结束”包含这两部分，不代表全部成功或覆盖了市场内全部企业。</p>
-   {!flow.social_only&&<p>官网还有 {flow.website_links_remaining.toLocaleString()} 个已发现链接待扫描。联系记录是提取数量，不等于去重后的有效联系人。</p>}
-   {hasSocial&&<p>社媒主进度按企业去重，正常无结果计入成功执行；没有找到结果不代表没有账号。登录、冷却与排队不计为执行结束，平台间的企业数不能相加。</p>}
+   <p>{flow.social_only?'本轮仅补充已有企业的社媒资料。':'查询会随区域细分增加，官网补全的企业数会随新发现的企业增加。'}进度条中绿色为成功，棕色为部分完成、失败或受阻；“已处理”包含成功和需关注两部分，不代表全部成功，也不代表覆盖了市场内全部企业。</p>
+   {!flow.social_only&&<p>官网还有 {flow.website_links_remaining.toLocaleString()} 个已发现链接待扫描。“原始提取”是从网页提取到的条数，不等于去重后的联系入口。</p>}
+   {hasSocial&&<p>社媒主进度按企业去重，正常无结果计入成功执行；没有找到结果不代表没有账号。登录、冷却与排队不计入“已处理”，平台间的企业数不能相加。</p>}
    <p>本轮开始：{date(flow.created_at)} · 数据刷新于 {date(flow.updated_at)}</p>
   </details>
   <span className="workflow-refresh-note">每5秒刷新</span>

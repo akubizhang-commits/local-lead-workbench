@@ -33,6 +33,7 @@ export function SocialSettings() {
   }
   return <section className="panel social-settings">
     <div className="section-title"><h3>社媒自动发现</h3><span className="badge">{settings.loading?'读取配置中':settings.error?'配置状态未知':settings.data?.configured?'已配置搜索服务':'搜索服务未配置'}</span></div>
+    <details className="advanced-settings"><summary>高级设置：本机搜索服务</summary>
     <p className="muted">配置本机 SearxNG 搜索服务，需开启 JSON 搜索响应。搜索只提供候选；平台公开页面是否可读会单独记录。</p>
     {settings.error&&<Alert>{settings.error}<button onClick={()=>setRevision(v=>v+1)}>重读配置</button></Alert>}
     {failure&&<Alert>{failure}</Alert>}{notice&&<p role="status">{notice}</p>}
@@ -44,6 +45,7 @@ export function SocialSettings() {
     </form>
     {settings.data&&<><p className="muted">{settings.data.message}</p><p className="muted">发现平台：{settings.data.platforms.join('、') || '尚未提供'}。平台列表不代表访问能力已验证。</p></>}
     {probe&&<div className={`social-probe social-state-${probe.status}`} role="status"><strong>连接测试：{socialStatus(probe.status)}</strong><p>{probe.message || '服务未返回详细说明'}</p></div>}
+    </details>
     <SocialConnections onBlockedChange={setConnectionsBlocked}/>
     <SocialDiscovery disabled={busy||settings.loading||!!settings.error||dirty||connectionsBlocked}/>
   </section>;

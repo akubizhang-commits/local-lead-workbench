@@ -41,7 +41,7 @@ test('people and channels are visible while other contacts start collapsed', () 
   const beforeOther = html.split('<details class="other-contacts">')[0];
   assert.ok(beforeOther.includes('Jane Buyer'));
   assert.ok(beforeOther.includes('采购部门 / 渠道'));
-  assert.ok(beforeOther.includes('企业 / 部门联系方式'));
+  assert.ok(beforeOther.includes('企业 / 部门联系入口'));
   assert.ok(!beforeOther.includes('Unknown role'));
   assert.ok(html.includes('Unknown role'));
   assert.doesNotMatch(html, /<details[^>]*\bopen/);

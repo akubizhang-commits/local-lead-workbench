@@ -133,11 +133,13 @@ async function activity(t:Record<string,unknown>,confirmAnswer=true){
  const prompts:string[]=[];
  h.dom.window.confirm=(text?:string)=>{prompts.push(String(text));return confirmAnswer;};
  globalThis.window.confirm=h.dom.window.confirm;
- const {TaskActivityPage}=await import('../src/pages/TaskActivityPage.tsx');
+ const {TaskActivityPage,MarketHeadingActions}=await import('../src/pages/TaskActivityPage.tsx');
+ const {Fragment}=await import('react');
  const actions:string[]=[];
- await h.act(async()=>h.root.render(createElement(TaskActivityPage,{route:{view:'tasks',selected:null,filters:{q:'',status:'',type:''},page:1,task:'m1'},
+ const act=(_w:unknown,m:unknown)=>{actions.push(String(m));};
+ await h.act(async()=>h.root.render(createElement(Fragment,null,createElement(MarketHeadingActions,{task:t,version:0,busy:false,act,openMarket:()=>{},onOpenMarket:()=>{}} as never),createElement(TaskActivityPage,{route:{view:'tasks',selected:null,filters:{q:'',status:'',type:''},page:1,task:'m1'},
   navigate:()=>{},tasks:[t],version:0,worker:undefined,busy:false,act:(_w:unknown,m:unknown)=>{actions.push(String(m));},
-  refresh:()=>{},openCompany:()=>{},openMarket:()=>{}} as never)));
+  refresh:()=>{},openCompany:()=>{},openMarket:()=>{}} as never))));
  await h.act(async()=>{await new Promise(r=>setTimeout(r,20));});
  return {...h,prompts,actions};
 }

@@ -70,8 +70,8 @@ export function ReviewsPage({
                       : "已采用新的联系人信息"
                     : r.kind === "contact"
                     ? decision === "reject"
-                      ? "已标记该联系信息为不采用"
-                      : "已确认联系信息"
+                      ? "已把这个联系入口标记为不采用"
+                      : "已确认联系入口"
                     : decision === "reject"
                       ? "已拒绝此次变更，保留原值"
                       : "审核决定已保存",

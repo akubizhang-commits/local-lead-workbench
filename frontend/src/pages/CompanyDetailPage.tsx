@@ -100,10 +100,7 @@ export function CompanyDetailPage({
             <div className="detail-grid">
               <section className="panel">
                 <div className="section-title">
-                  <h3>企业资料</h3>
-                  <span className="muted">
-                    修订 {detail.data.company.revision}
-                  </span>
+                  <h3>资料</h3>
                 </div>
                 <dl className="facts">
                   <dt>官方网站</dt>
@@ -150,9 +147,11 @@ export function CompanyDetailPage({
                   <dd className="pre-wrap">
                     {detail.data.company.notes || "尚无备注"}
                   </dd>
-                  <dt>企业编号</dt>
-                  <dd className="muted">{detail.data.company.id}</dd>
                 </dl>
+                <details className="diagnostics">
+                  <summary>诊断信息</summary>
+                  <p className="muted">企业编号 <code>{detail.data.company.id}</code> · 修订 {detail.data.company.revision}</p>
+                </details>
               </section>
               <Schedules companyId={selected} version={version} />
             </div>
@@ -214,7 +213,7 @@ export function CompanyDetailPage({
           </button>
         }
       >
-        从企业库打开记录，查看资料、联系人、证据与复核计划。
+        从企业库打开一家企业，查看资料、联系人、来源证据和定时计划。
       </Empty>
     </section>
   );

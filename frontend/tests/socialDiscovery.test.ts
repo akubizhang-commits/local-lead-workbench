@@ -603,7 +603,7 @@ test("account list has four columns and failed attempts do not advance update ti
     }),
   );
   assert.equal((html.match(/<th(?:>| )/g) || []).length, 4);
-  for (const label of ["联系人 / 账号", "联系渠道", "企业关系", "更新时间"])
+  for (const label of ["联系人与账号", "联系渠道", "企业关系", "更新时间"])
     assert.ok(html.includes(label));
   for (const label of ["已采集联系方式", "采集状态", "条已保存", "2026/09/23"])
     assert.ok(!html.includes(label));
