@@ -48,3 +48,30 @@ test('refresh detail back retains the original page, status and selected round',
  assert.equal(parseRoute('/?view=tasks&task=m&item=invalid').item,undefined);
  assert.equal(parseRoute('/?view=tasks&task=m&activityStatus=invalid').activityStatus,undefined);
 });
+test('section=contacts is parsed only for company detail and round-trips',()=>{
+ const detail=parseRoute('/?view=detail&company=c1&section=contacts');
+ assert.equal(detail.section,'contacts');
+ assert.deepEqual(parseRoute(routeUrl(detail)),detail);
+ assert.equal(parseRoute('/?view=detail&company=c1&section=evil').section,undefined);
+ assert.equal(parseRoute('/?view=companies&section=contacts').section,undefined);
+ assert.equal(parseRoute('/?view=tasks&task=t1&section=contacts').section,undefined);
+ assert.equal(new URL(routeUrl({...detail,section:undefined}),'http://x').searchParams.has('section'),false);
+});
+test('navigate(next,{replace:true}) replaces the history entry instead of pushing',async()=>{
+ const {setupDOM}=await import('./support/dom.ts');
+ const h=await setupDOM('http://localhost/?view=detail&company=c1&section=contacts');
+ try {
+  const {useNavigation}=await import('../src/useNavigation.ts');
+  const {createElement}=await import('react');
+  let nav:ReturnType<typeof useNavigation>|undefined;
+  function Probe(){nav=useNavigation();return null;}
+  await h.act(async()=>h.root.render(createElement(Probe)));
+  const before=window.history.length;
+  await h.act(async()=>nav!.navigate({...nav!.route,section:undefined},{replace:true}));
+  assert.equal(window.history.length,before);
+  assert.equal(new URL(window.location.href).searchParams.has('section'),false);
+  assert.equal(nav!.route.section,undefined);
+  await h.act(async()=>nav!.navigate({...nav!.route,page:2}));
+  assert.equal(window.history.length,before+1);
+ } finally {await h.cleanup();}
+});

@@ -4,7 +4,7 @@ import { runTitle } from "./MarketRecheck";
 import { api, resetSession } from "./api";
 import { CompanyForm, TaskForm } from "./forms";
 import { date, filtersQuery, type Filters } from "./helpers";
-import { useResource } from "./hooks";
+import { nextFrame, useResource } from "./hooks";
 import { MarketHeadingActions, TaskActivityPage, marketSubline } from "./pages/TaskActivityPage";
 import { backFromRefreshDetail, defaultFilters, updateListFilters, type View } from "./navigation";
 import { ChangesPage } from "./pages/ChangesPage";
@@ -41,6 +41,16 @@ const descriptions: Record<View, string> = {
   changes: "追踪资料变化，保留每一次判断的来龙去脉。",
   settings: "管理本地数据、来源能力与定时维护。",
 };
+/** After an action: put focus back on the control that started it, or on the nearest fallback heading. */
+export function restoreFocus(prev: HTMLElement | null) {
+  const active = document.activeElement;
+  if (active && active !== document.body) return;
+  if (prev && prev !== document.body && prev.isConnected && !(prev as HTMLButtonElement).disabled) {
+    prev.focus();
+    return;
+  }
+  document.querySelector<HTMLElement>("[data-focus-fallback]")?.focus();
+}
 export default function App() {
   const { route, navigate } = useNavigation();
   const { view, selected, filters, page } = route;
@@ -122,6 +132,8 @@ export default function App() {
     message: string | ((result: unknown) => string),
   ) {
     if (busy) return;
+    // Controls are disabled while busy, which moves focus to <body>; restore it afterwards (review R4).
+    const prev = document.activeElement as HTMLElement | null;
     setBusy(true);
     setActionError("");
     setNotice("");
@@ -137,6 +149,7 @@ export default function App() {
       }
     } finally {
       setBusy(false);
+      nextFrame(() => restoreFocus(prev));
     }
   }
   function quickStatus(company: Company, status: string) {

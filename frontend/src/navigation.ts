@@ -1,6 +1,6 @@
 import {filtersQuery,type Filters} from './helpers.ts';
 export type View='tasks'|'companies'|'detail'|'reviews'|'changes'|'settings';
-export interface Route {view:View;selected:string|null;filters:Filters;page:number;account?:string;task?:string;run?:string;item?:string;activityStatus?:string;listRun?:string}
+export interface Route {view:View;selected:string|null;filters:Filters;page:number;account?:string;task?:string;run?:string;item?:string;activityStatus?:string;listRun?:string;section?:'contacts'}
 export const defaultFilters=():Filters=>({q:'',status:'',type:'',market_id:'',run_id:'',segment:'',contact:'',sort:'newest',category:[],excluded:'',best_tier:'',actual_city:'',nearby:''});
 export function parseRoute(value:string):Route {
  const params=new URL(value,'http://local.invalid').searchParams;
@@ -21,13 +21,16 @@ export function parseRoute(value:string):Route {
  const activity = view==='tasks' ? Object.fromEntries(['task','run','item','activityStatus','listRun'].filter(key=>params.get(key)).map(key=>[key,params.get(key)!])) : {};
  if(!activity.run)delete activity.item;
  if(activity.activityStatus&&!['pending','running','succeeded','partial','failed','blocked'].includes(activity.activityStatus))delete activity.activityStatus;
- return {...activity,view,selected,filters,page:Number.isSafeInteger(page)&&page>0?page:1,...(view==='detail'&&params.get('account')?{account:params.get('account')!}:{})};
+ // section: whitelist, detail only (design §6.2); anything else is dropped.
+ const section=view==='detail'&&params.get('section')==='contacts'?{section:'contacts' as const}:{};
+ return {...activity,view,selected,filters,page:Number.isSafeInteger(page)&&page>0?page:1,...(view==='detail'&&params.get('account')?{account:params.get('account')!}:{}),...section};
 }
 export function routeUrl(route:Route){
  const query=new URLSearchParams(filtersQuery(route.filters));
  query.set('view',route.view);query.set('page',String(route.page));
  if(route.view==='detail'&&route.selected)query.set('company',route.selected);
  if(route.view==='detail'&&route.selected&&route.account)query.set('account',route.account);
+ if(route.view==='detail'&&route.selected&&route.section==='contacts')query.set('section','contacts');
  if(route.view==='tasks')for(const key of ['task','run','item','activityStatus','listRun'] as const)if(route[key])query.set(key,route[key]!);
  return `/?${query}`;
 }

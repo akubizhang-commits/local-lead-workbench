@@ -19,6 +19,7 @@ import { ExclusionRules } from '../ExclusionRules';
 import { MarketSocialSettings } from '../MarketSocialSettings';
 import { RunCard } from './RunCard';
 import { RunWarnings } from '../RunWarnings';
+import { RoundControls } from '../RoundControls';
 import type { Action } from './pageTypes';
 
 export interface RefreshItem {
@@ -82,7 +83,12 @@ export function TaskActivityPage({route,navigate,tasks,version,worker,busy,act,r
    </section><h3>所属轮次</h3><p className="muted">以下进度和控制针对整个轮次；一次市场更新可能包含多家企业。</p>
    <RunCard run={detail.data.run} worker={worker} busy={busy} act={act} openCompany={openCompany}/>
  </>}</Resource>;
+ const controlRun=task?.archived_at?undefined:route.run||(standalone?undefined:task?.latest_run?.id);
+ const workflow=list.data?.workflow;
+ const retryPending=workflow&&workflow.run_id===controlRun?workflow.stages.find(s=>s.key==='discovery')?.retry_pending??0:0;
  return <>
+  {controlRun&&<RoundControls key={controlRun} runId={controlRun} rounds={rounds} standalone={standalone} version={version} busy={busy} act={act}
+   retryPending={retryPending} onViewNew={task?run=>openMarket(task.id,{run_id:run.id,segment:'new'}):undefined}/>}
   {task?.archived_at&&<p className="alert" role="status">此市场已归档：不会开始新一轮，也不会按计划自动更新。企业和历史记录都已保留。</p>}
   {task&&!task.archived_at&&task.needs_keywords&&<p className="hint">这个市场创建时没有填写关键词，目前按旧规则使用服装行业默认检索词（{(task.legacy_terms||[]).join('、')}）。建议点“编辑市场”补充关键词或选择预设行业。</p>}
   {task&&<section className="panel activity-overview" aria-label="市场概况">
