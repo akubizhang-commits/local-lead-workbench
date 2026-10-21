@@ -1,7 +1,10 @@
 """Loopback-only API with per-start local token and same-origin checks."""
 from datetime import datetime, timezone
 import asyncio
+import hashlib
+import math
 import os
+import sqlite3
 from pathlib import Path
 import secrets
 from typing import Annotated, Literal
@@ -14,7 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 import json
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator, ConfigDict
+from pydantic import BaseModel, Field, ValidationError, ValidationInfo, field_validator, model_validator, ConfigDict
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from contextvars import ContextVar
 import logging
@@ -40,6 +43,19 @@ RESTORE_BUSY = "后台正在处理一项作业，请稍等片刻再恢复；也�
 log = logging.getLogger(__name__)
 CJK = re.compile(r"[\u3000-\u9fff\uff00-\uffef]")
 UNKNOWN_ENDPOINT = "接口不存在（界面与服务版本可能不一致，请刷新页面）"
+AUTH_PUBLIC = frozenset({"/healthz", "/api/session", "/api/auth/login"})
+AUTH_OPTIONAL = frozenset({"/api/auth/logout"})
+UNAUTHORIZED = "请先登录"
+CSRF_FAILED = "页面已过期，请刷新后重试"
+INVALID_CREDENTIALS = "用户名或密码错误"
+LOGIN_RATE_LIMITED = "登录尝试过多，请 {minutes} 分钟后再试"
+HOST_FORBIDDEN_SERVER = "不允许的访问地址"
+SERVER_READONLY = "服务器数据目录不可写，服务暂不可用，请联系管理员。"
+SERVER_UNAVAILABLE_DETAIL = {
+    "readonly_storage": SERVER_READONLY,
+    "disk_full": "服务器磁盘空间不足，服务暂不可用，请联系管理员。",
+    "storage_unavailable": "服务器数据库初始化失败，服务暂不可用，请联系管理员。",
+}
 UNAVAILABLE_DETAIL = {
     "readonly_storage": "数据目录不可写，本地服务无法读写数据：{path}。请检查权限或磁盘后重新启动。",
     "disk_full": "磁盘空间不足，本地服务无法初始化数据库：{path}。请清理磁盘空间后重新启动。",
@@ -80,6 +96,9 @@ def unavailable_state(exc, data_dir):
     return code, UNAVAILABLE_DETAIL[code].format(path=data_dir)
 class Input(BaseModel):
     model_config = ConfigDict(extra="forbid")
+class LoginInput(Input):
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=128)
 
 
 class SocialSettingsInput(Input):
@@ -555,7 +574,8 @@ def create_app(data_dir=None, *, allowed_hosts=None, config=None):
     if store is not None:
         jobs.list(1)  # reap jobs left running by an earlier API instance (§8.6)
     token = secrets.token_urlsafe(40)
-    logging_setup.hide_token(token)
+    if not cfg.server:
+        logging_setup.hide_token(token)  # server mode: per-session tokens are never log arguments
     hosts = allowed_hosts or set(cfg.allowed_hosts)
     from .maintenance import MaintenanceGate
     gate = app.state.gate = MaintenanceGate()
@@ -607,9 +627,14 @@ def create_app(data_dir=None, *, allowed_hosts=None, config=None):
                   "query_keys": sorted(set(request.query_params.keys()))}
         if code:
             fields["code"] = code
+        user = getattr(request.state, "user", None)
+        if user:
+            fields["user"] = user
         log.info("%s %s %s", request.method, route, response.status_code, extra=fields)
 
     async def boundary(request, call_next):
+        if cfg.auth:
+            return await auth_boundary(request, call_next)
         host = request.url.hostname
         if host not in hosts:
             return error_response(403, "forbidden", "仅允许本机访问")
@@ -651,6 +676,102 @@ def create_app(data_dir=None, *, allowed_hosts=None, config=None):
         response.headers["Cache-Control"] = "no-store"
         return response
 
+    from . import auth
+    from .login_limiter import LoginLimiter
+    limiter = app.state.login_limiter = LoginLimiter()
+    hash_slots = {"free": 2}  # at most two concurrent scrypt computations (§2.3)
+    resolve_log = {"at": 0.0, "suppressed": 0}
+
+    def unavailable_detail(code, detail):
+        return SERVER_UNAVAILABLE_DETAIL.get(code, detail) if cfg.server else detail
+
+    def note_resolve_failure(exc, code):
+        """WARNING auth_resolve_failed at most once a minute, with the suppressed count."""
+        moment = time.monotonic()
+        if moment - resolve_log["at"] < 60:
+            resolve_log["suppressed"] += 1
+            return
+        fields = {"event": "auth_resolve_failed", "error_type": type(exc).__name__, "code": code}
+        if resolve_log["suppressed"]:
+            fields["suppressed"] = resolve_log["suppressed"]
+        resolve_log["at"], resolve_log["suppressed"] = moment, 0
+        log.warning("session lookup failed", extra=fields)
+
+    async def resolve(request, cookie, *, touch=True):
+        """Session for the cookie, or an error response when the read itself failed (§2.6 step 5)."""
+        try:
+            session = await run_in_threadpool(auth.resolve_session, store, cookie, auth.utcnow(), cfg, touch=touch)
+        except (sqlite3.Error, OSError) as exc:
+            classified = classify_storage_error(exc, app.state.data_dir) or Busy()
+            if cfg.server and classified.code == "readonly_storage":
+                classified = DomainError(SERVER_READONLY, code="readonly_storage", status=classified.status)
+            note_resolve_failure(exc, classified.code)
+            return None, domain_response(classified)
+        return session, None
+
+    def secure(response, api, unavailable):
+        if api and unavailable:
+            response.headers["X-Lead-Unavailable"] = unavailable[0]
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'"
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    async def auth_boundary(request, call_next):
+        """Login sessions (LEAD_AUTH=on): default deny for /api/*, fail closed (design §2.6)."""
+        if request.url.hostname not in hosts:
+            return error_response(403, "forbidden", HOST_FORBIDDEN_SERVER if cfg.server else "仅允许本机访问")
+        origin = request.headers.get("origin")
+        if origin and origin != cfg.public_origin and urlsplit(origin).netloc != request.headers.get("host"):
+            return error_response(403, "forbidden", "拒绝跨来源请求")
+        if request.headers.get("sec-fetch-site") == "cross-site":
+            return error_response(403, "forbidden", "拒绝跨站请求")
+        length = request.headers.get("content-length", "0")
+        if not length.isdigit() or int(length) > 1_000_000:
+            return error_response(413, "payload_too_large", "请求过大")
+        path, method = request.url.path, request.method
+        api = path.startswith("/api/")
+        unavailable = app.state.unavailable
+        request.state.session = None
+        if api and unavailable and path != "/api/session":
+            return secure(error_response(503, unavailable[0], unavailable_detail(*unavailable)), api, unavailable)
+        cookie = request.cookies.get(cfg.cookie_name, "")
+        protected = api and path not in AUTH_PUBLIC and path not in AUTH_OPTIONAL
+        if protected and not cookie:
+            return secure(error_response(401, "unauthorized", UNAUTHORIZED), api, unavailable)
+
+        async def handle():
+            if cookie and store is not None:
+                session, failed = await resolve(request, cookie, touch=not probe)
+                if failed is not None:
+                    return failed
+                request.state.session = session
+            session = request.state.session
+            if session is None and protected:
+                return error_response(401, "unauthorized", UNAUTHORIZED)
+            if session is not None:
+                request.state.user = session.user_id
+                if method not in ("GET", "HEAD") and path not in AUTH_PUBLIC and not secrets.compare_digest(
+                        request.headers.get("x-local-token", ""), session.csrf_token):
+                    log.info("csrf token mismatch", extra={"event": "csrf_failed"})
+                    return error_response(403, "csrf_failed", CSRF_FAILED)
+            return await call_next(request)
+
+        probe = method == "POST" and path == "/api/social/probe"
+        try:
+            if api and not probe and not (path in AUTH_OPTIONAL and not cookie):
+                entry = gate.exclusive() if (method == "POST" and path == "/api/backups/restore") else gate.shared()
+                async with entry:
+                    response = await handle()
+            else:
+                response = await handle()
+        except DomainError as exc:
+            response = domain_response(exc)
+        except Exception as exc:
+            response = unhandled(exc)
+        return secure(response, api, unavailable)
+
     @app.exception_handler(RequestValidationError)
     async def validation_failed(request, exc):
         # User-correctable input: Chinese messages, no input/ctx echo, no log.
@@ -680,8 +801,94 @@ def create_app(data_dir=None, *, allowed_hosts=None, config=None):
         return unhandled(exc)
 
     @app.get("/api/session")
-    def session():
-        return {"token": token}
+    def session(request: Request):
+        if not cfg.auth:
+            return {"token": token, "mode": "local", "auth": False}
+        base = {"authenticated": False, "mode": cfg.mode, "auth": True}
+        if app.state.unavailable:
+            code, detail = app.state.unavailable
+            return {**base, "unavailable": {"code": code, "detail": unavailable_detail(code, detail)}}
+        current = request.state.session
+        if current is None:
+            return base
+        return {**base, "authenticated": True, "token": current.csrf_token, "user": {"username": current.username}}
+
+    if not cfg.auth:
+        @app.api_route("/api/auth/{rest:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+                       include_in_schema=False)
+        def auth_absent(rest: str):
+            raise HTTPException(404, UNKNOWN_ENDPOINT)
+
+    if cfg.auth:
+        @app.post("/api/auth/login")
+        async def auth_login(request: Request):
+            content_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
+            if content_type != "application/json":
+                return error_response(415, "unsupported_media_type", "请求格式不受支持")
+            try:
+                body = LoginInput.model_validate_json(await request.body())
+            except ValidationError as exc:
+                raise RequestValidationError(exc.errors()) from None
+            key = auth.normalize_username(body.username)
+            ip = request.client.host if request.client else ""
+            ip_hash8 = hashlib.sha256(ip.encode()).hexdigest()[:8]
+            retry = limiter.reserve(key, ip, time.monotonic())
+            if retry is not None:
+                return error_response(429, "login_rate_limited",
+                                      LOGIN_RATE_LIMITED.format(minutes=max(1, math.ceil(retry / 60))),
+                                      headers={"Retry-After": str(retry)})
+            outcome = False
+            try:
+                while hash_slots["free"] <= 0:
+                    await asyncio.sleep(0.01)
+                hash_slots["free"] -= 1
+                try:
+                    user = await run_in_threadpool(auth.verify_login, store, body.username, body.password)
+                finally:
+                    hash_slots["free"] += 1
+                outcome = user is not None
+            except (sqlite3.Error, OSError) as exc:
+                outcome = None
+                raise classify_storage_error(exc, app.state.data_dir) or Busy() from None
+            finally:
+                locked = limiter.finish(key, ip, outcome, time.monotonic())
+                for scope in locked:
+                    log.warning("login locked", extra={"event": "auth_login_locked", "scope": scope,
+                                                       "ip_hash8": ip_hash8})
+            if not outcome:
+                known = await run_in_threadpool(auth.user_known, store, body.username)
+                log.info("login failed", extra={"event": "auth_login_failed", "ip_hash8": ip_hash8,
+                                                "user_known": known})
+                return error_response(401, "invalid_credentials", INVALID_CREDENTIALS)
+            previous = request.state.session
+            cookie_value, csrf = await run_in_threadpool(
+                auth.create_session, store, user["id"], auth.utcnow(), cfg,
+                previous.id_hash if previous is not None else None)
+            request.state.user = user["id"]
+            response = JSONResponse({"user": {"username": user["username"]}, "token": csrf})
+            response.set_cookie(cfg.cookie_name, cookie_value, path="/", secure=cfg.cookie_secure,
+                                httponly=True, samesite="lax")
+            return response
+
+        @app.post("/api/auth/logout", status_code=204)
+        def auth_logout(request: Request):
+            current = request.state.session
+            if current is not None:
+                try:
+                    auth.delete_session(store, current.id_hash)
+                except (sqlite3.Error, OSError) as exc:
+                    log.warning("logout failed", extra={"event": "auth_logout_failed",
+                                                        "error_type": type(exc).__name__})
+                    raise classify_storage_error(exc, app.state.data_dir) or Busy() from None
+            response = Response(status_code=204)
+            response.delete_cookie(cfg.cookie_name, path="/", secure=cfg.cookie_secure, httponly=True,
+                                   samesite="lax")
+            return response
+
+        @app.get("/api/auth/me")
+        def auth_me(request: Request):
+            user = auth.user_by_id(store, request.state.session.user_id) or {}
+            return {"username": user.get("username"), "last_login_at": user.get("last_login_at")}
 
     @app.get("/api/overview")
     def overview():

@@ -29,7 +29,7 @@ OPTIONAL = ("duration_ms", "status", "code", "method", "route", "error_type", "q
             "action", "pgid", "pid_target", "trigger", "deleted", "freed_bytes", "errors", "phase", "processed",
             "total", "size_bytes", "format", "layout", "query_len", "query_sha8", "guard_pid", "where", "state",
             "stop_reason", "records", "records_count", "returncode", "members", "backoff_s", "sqlite_code",
-            "errno", "lane")
+            "errno", "lane", "user", "ip_hash8", "user_known", "scope", "suppressed")
 MAX_BYTES = 5_000_000
 BACKUPS = 5
 MARK = "_leadworkbench"
