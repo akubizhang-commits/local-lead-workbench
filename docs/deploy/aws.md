@@ -115,6 +115,8 @@ docker compose ps             # 等 api、worker 显示 healthy
 
 首次启动会做数据库迁移，期间网页显示 502 属正常。
 
+如果服务器所在网络无法访问 proxy.golang.org（例如部分中国大陆网络），构建时加 `--build-arg GOPROXY=https://goproxy.cn,direct`；AWS 东京、美东区域不需要。
+
 ## 7. 创建账号
 
 ```sh

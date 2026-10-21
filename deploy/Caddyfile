@@ -1,0 +1,37 @@
+# 寻迹线索工作台反向代理（AWS trial, design §3.5）。
+# LEAD_PUBLIC_HOST：访问主机名（例如 3-1-2-4.sslip.io）；LEAD_TLS：acme（Let's Encrypt，默认）或 internal（内部自签证书）。
+{
+	admin off
+	skip_install_trust
+	servers {
+		protocols h1 h2
+	}
+}
+
+(tls_acme) {
+	header Strict-Transport-Security "max-age=86400"
+}
+(tls_internal) {
+	tls internal
+}
+
+{$LEAD_PUBLIC_HOST} {
+	import tls_{$LEAD_TLS:acme}
+	header -Server
+	request_body {
+		max_size 2MB
+	}
+	encode gzip
+	reverse_proxy api:8000
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>headers>X-Local-Token delete
+				request>headers>Cookie delete
+				resp_headers>Set-Cookie delete
+			}
+		}
+	}
+}

@@ -1,0 +1,65 @@
+# 寻迹线索工作台：一台 EC2 上的服务器部署（AWS trial, design §3.4）。配置见 .env（由 .env.example 复制）。
+# 警告：生产环境不要执行 docker compose down -v，会删除数据卷。
+name: leadworkbench
+x-app: &app
+  image: leadworkbench:${LEAD_IMAGE_TAG:-local}
+  env_file: .env
+  environment:
+    LEAD_MODE: server
+    LEAD_PUBLIC_ORIGIN: https://${LEAD_PUBLIC_HOST:?请在 .env 中设置 LEAD_PUBLIC_HOST}${LEAD_PUBLIC_PORT_SUFFIX:-}
+  volumes: [lead_data:/data]
+  init: true                      # tini as PID 1 reaps Chromium children
+  restart: unless-stopped
+  user: "10001:10001"
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: ["/tmp:size=512m,mode=1777"]   # counts against container memory; Chromium writes here
+  logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+services:
+  api:
+    <<: *app
+    build: .                      # only api builds; worker reuses the same image
+    command: ["python", "-m", "leadworkbench.serve"]
+    expose: ["8000"]              # not published on the host, only reachable by caddy
+    stop_grace_period: 20s
+    healthcheck:
+      test: ["CMD", "python", "-m", "leadworkbench.healthcheck", "api"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 600s          # the first migration of a large database may take minutes
+  worker:
+    <<: *app
+    pull_policy: never
+    command: ["python", "-m", "leadworkbench.worker", "--data-dir", "/data"]
+    depends_on: {api: {condition: service_healthy}}   # api migrates first; degraded api keeps worker down
+    stop_grace_period: 30s        # Maps guard clean-up
+    shm_size: 1gb
+    healthcheck:
+      test: ["CMD", "python", "-m", "leadworkbench.healthcheck", "worker"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+  caddy:
+    image: caddy:2-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f
+    restart: unless-stopped
+    depends_on: {api: {condition: service_started}}  # pages (and the degraded notice) during migration
+    ports: ["${LEAD_HTTP_PORT:-80}:80", "${LEAD_HTTPS_PORT:-443}:443"]
+    environment:
+      LEAD_PUBLIC_HOST: ${LEAD_PUBLIC_HOST}
+      LEAD_TLS: ${LEAD_TLS:-acme}
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: ["/tmp:size=16m,mode=1777"]
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+volumes:
+  lead_data: {name: "${LEAD_VOLUME_NAME:-leadworkbench-data}"}
+  caddy_data: {name: "${LEAD_VOLUME_NAME:-leadworkbench-data}-caddy"}
+  caddy_config: {name: "${LEAD_VOLUME_NAME:-leadworkbench-data}-caddy-config"}
