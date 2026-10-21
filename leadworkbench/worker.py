@@ -247,10 +247,15 @@ async def open_store_with_retry(directory):
         return store
 
 
-async def serve(directory):
-    from . import worker_scheduler
+async def serve(directory, *, server=False):
+    from functools import partial
+    from . import maps_guard, worker_scheduler
+    from .sources import social_browser
     from .worker_scheduler import ParallelWorkScheduler
-    from .social_worker import process_social_item
+    from .social_worker import process_social_item as social_item
+    # Server deployments (AWS trial §3.3, §3.6, §4): server wording, no sandbox, no site search.
+    maps_guard.SERVER_MODE = social_browser.SERVER_MODE = server
+    process_social_item = partial(social_item, server=server) if server else social_item
 
     # worker-single.lock is held for the whole lifecycle (single instance and
     # health checks). worker.lock is held only while dispatching or running
@@ -352,7 +357,7 @@ def main():
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, task.cancel)
-        await serve(args.data_dir)
+        await serve(args.data_dir, server=cfg.server)
     try:
         asyncio.run(runner())
     except (KeyboardInterrupt, asyncio.CancelledError):

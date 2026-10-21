@@ -86,10 +86,21 @@ def parse_browser_document(html,url,max_posts=3):
  if posts and result['status']=='unreadable':result={'status':'preview_read','title':title[:300],'description':'','fields':[]}
  return {**result,'provider':'browser','source_url':url,'posts':posts,'message':result.get('message','')+'；仅保存实际加载的页面内容，帖子数量不代表全部历史'}
 
-async def browser_context(p,settings,headless):
+# Set by the worker in server mode (AWS trial §3.3): no Chromium sandbox in the container,
+# and sub-resource requests to non-global IP literals (e.g. 169.254.169.254) are aborted.
+SERVER_MODE=False
+def blocked_ip_literal(url):
+ """True when the URL host is an IP literal that is not a global address (no DNS lookup)."""
+ import ipaddress
+ try:host=urlsplit(url).hostname or ''
+ except ValueError:return True
+ try:return not ipaddress.ip_address(host).is_global
+ except ValueError:return False
+async def browser_context(p,settings,headless,*,server=None):
  from playwright.async_api import async_playwright
+ server=SERVER_MODE if server is None else server
  driver=await async_playwright().start()
- args={'headless':headless,'chromium_sandbox':True,'accept_downloads':False,'viewport':{'width':1280,'height':900}}
+ args={'headless':headless,'chromium_sandbox':not server,'accept_downloads':False,'viewport':{'width':1280,'height':900}}
  chrome=Path('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome')
  if chrome.exists():args['executable_path']=str(chrome)
  # X login uses ordinary Chrome and its OS credential store. Reads must use
@@ -143,6 +154,7 @@ async def _read_browser(url,directory,settings,*,_progress=None):
     async def guard(route):
      from .website import normalize_url
      try:
+      if SERVER_MODE and blocked_ip_literal(route.request.url):return await route.abort()
       normalize_url(route.request.url)
       host=urlsplit(route.request.url).hostname or ''
       if route.request.is_navigation_request() and route.request.frame==page.main_frame and not(host==platform+'.com' or host.endswith('.'+platform+'.com')):return await route.abort()

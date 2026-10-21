@@ -39,6 +39,18 @@ MAPS_ORPHAN = {"code": "maps_orphan",
                "message": "上次的地图采集进程无法自动结束，地图检索已暂停。请重启电脑，或手动结束 google-maps-scraper 进程"}
 
 
+MAPS_ORPHAN_SERVER = ("上次的地图采集进程无法自动结束，地图检索已暂停。"
+                      "请让管理员重启后台服务（docker compose restart worker）")
+SERVER_MODE = False  # set by the worker in server mode (AWS trial §3.6)
+
+
+def maps_orphan_problem(server=False):
+    problem = dict(MAPS_ORPHAN)
+    if server:
+        problem["message"] = MAPS_ORPHAN_SERVER
+    return problem
+
+
 def run_dir(data_dir) -> Path:
     return Path(data_dir) / "run"
 
@@ -280,7 +292,7 @@ def reclaim(data_dir, timeout=10, *, protect_pids=frozenset()):
                 fcntl.flock(fd, fcntl.LOCK_UN)
                 return {"action": "reclaimed", "problem": None}
         log.error("Maps lock still held after reclaim", extra={"event": "maps_reclaim", "action": "orphan"})
-        return {"action": "orphan", "problem": dict(MAPS_ORPHAN)}
+        return {"action": "orphan", "problem": maps_orphan_problem(SERVER_MODE)}
     finally:
         os.close(fd)
 

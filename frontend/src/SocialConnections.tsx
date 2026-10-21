@@ -14,7 +14,11 @@ type Connections = {
   sessions: Partial<
     Record<Platform, { state: "closed" | "open"; message?: string }>
   >;
+  /** false on server deployments: no login windows (AWS trial §4). */
+  login_supported?: boolean;
 };
+export const SERVER_LOGIN_NOTE = "服务器部署版暂不支持登录社媒账号读取，可使用公开资料读取。";
+const INSTALOADER_MISSING = "缺少可选依赖 Instaloader；请安装 instaloader 后启用此采集器。";
 type Draft = Pick<Connections, "reader" | "instagram_reader" | "proxy_url"> & {
   max_posts: string;
 };
@@ -266,9 +270,17 @@ export function SocialConnections({
                     }
                   >
                     <option value="browser">浏览器</option>
-                    <option value="instaloader">Instaloader</option>
+                    <option
+                      value="instaloader"
+                      disabled={data.login_supported === false && !data.dependencies.instaloader}
+                    >
+                      Instaloader
+                    </option>
                   </select>
                 </Field>
+                {data.login_supported === false && !data.dependencies.instaloader && (
+                  <p className="muted">{INSTALOADER_MISSING}</p>
+                )}
                 <Field label="本机代理 URL（可选）">
                   <input
                     value={draft.proxy_url}
@@ -357,12 +369,15 @@ export function SocialConnections({
             </Alert>
           )}
           </details>
+          {data.login_supported === false && <Alert>{SERVER_LOGIN_NOTE}</Alert>}
           {(["instagram", "facebook", "x"] as const).map((platform) => (
             <article className="social-card" key={platform}>
               <div className="row between">
                 <strong>{platformNames[platform]}</strong>
                 <span className="badge">
-                  {stale
+                  {data.login_supported === false
+                    ? "不支持登录"
+                    : stale
                     ? "会话状态待刷新"
                     : !data.sessions[platform]
                       ? "未提供会话状态"
@@ -371,10 +386,10 @@ export function SocialConnections({
                         : "浏览器已关闭"}
                 </span>
               </div>
-              {data.sessions[platform]?.message && (
+              {data.login_supported !== false && data.sessions[platform]?.message && (
                 <p>{data.sessions[platform]?.message}</p>
               )}
-              <div className="actions">
+              {data.login_supported !== false && <div className="actions">
                 <button
                   type="button"
                   disabled={
@@ -400,7 +415,7 @@ export function SocialConnections({
                 >
                   关闭并释放 {platformNames[platform]} 会话
                 </button>
-              </div>
+              </div>}
             </article>
           ))}
           {open && (

@@ -30,18 +30,20 @@ def load_connections(directory):
  p=Path(directory)/'social-connections.json'
  return {**DEFAULTS,**(json.loads(p.read_text()) if p.exists() else {})}
 
-def public_connections(directory):
+def public_connections(directory,server=False):
  from .sources.social_browser import session_status
  p=Path(directory)/'social-secrets.json'
  secret=json.loads(p.read_text()) if p.exists() else {}
  return {**load_connections(directory),'youtube_key_configured':bool(secret.get('youtube_api_key')),
  'dependencies':{k:importlib.util.find_spec(v) is not None for k,v in [('browser','playwright'),('instaloader','instaloader')]},
- 'sessions':{p:session_status(directory,p) for p in ('instagram','facebook','x')}}
+ 'sessions':{p:session_status(directory,p) for p in ('instagram','facebook','x')},
+ # Server deployments cannot open login windows (AWS trial §4).
+ 'login_supported':not server}
 
 _SAVE_LOCK=threading.Lock()
-def save_connections(directory,values):
- with _SAVE_LOCK:return _save_connections(directory,values)
-def _save_connections(directory,values):
+def save_connections(directory,values,server=False):
+ with _SAVE_LOCK:return _save_connections(directory,values,server)
+def _save_connections(directory,values,server=False):
  data=load_connections(directory)
  data.update({k:v for k,v in values.items() if k in DEFAULTS})
  data['proxy_url']=validate_proxy(data['proxy_url'])
@@ -50,4 +52,4 @@ def _save_connections(directory,values):
   p=Path(directory)/'social-secrets.json';secrets=json.loads(p.read_text()) if p.exists() else {}
   secrets['youtube_api_key']=values['youtube_api_key'].strip();private_write(p,secrets)
  private_write(Path(directory)/'social-connections.json',data)
- return public_connections(directory)
+ return public_connections(directory,server)

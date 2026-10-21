@@ -4,6 +4,8 @@ import {useResource} from './hooks';
 import {date} from './helpers';
 import {Alert, External, Field} from './ui';
 import {actionMessage} from './errors';
+import {useSession} from './session';
+import {SERVER_LOGIN_NOTE} from './SocialConnections';
 
 type PlatformGate = {state:string;reason:string;manual_required:boolean;next_attempt_at?:string|null};
 export type SocialRun = {
@@ -120,6 +122,7 @@ export function SocialDiscovery({companyId,onChange,disabled=false}:{companyId?:
 }
 
 function DiscoveryRuns({companyId,onChange,disabled}:{companyId?:string;onChange?:()=>void;disabled:boolean}) {
+  const server=useSession().mode==='server';
   const [revision,setRevision]=useState(0),[selected,setSelected]=useState('');
   const [busy,setBusy]=useState(false),[failure,setFailure]=useState(''),[notice,setNotice]=useState('');
   const list=useResource<SocialRun[]>(`/social/runs${companyId?`?company_id=${encodeURIComponent(companyId)}`:''}`,revision,true);
@@ -159,7 +162,7 @@ function DiscoveryRuns({companyId,onChange,disabled}:{companyId?:string;onChange
     <div className="section-title"><h4>{companyId?'自动发现社交账号':'20 家企业试点'}</h4><button className="primary" disabled={disabled||busy||list.loading||!!list.error||!!activeRun} onClick={()=>void act('start')}>{busy?'正在提交…':companyId?'开始单企发现':'启动 20 家试点'}</button></div>
     {companyId&&<button disabled={disabled||busy||list.loading||!!list.error||!!activeRun} onClick={()=>void act('profile')}>补充已有账号基础资料</button>}
     {companyId&&<button disabled={disabled||busy||list.loading||!!list.error||!!activeRun} onClick={()=>void act('read')}>读取已有账号与近期帖子</button>}
-    {companyId&&<><button disabled={disabled||busy||list.loading||!!list.error||!!activeRun} onClick={()=>void act('platform-search')}>按企业名称站内搜索</button><p className="muted">使用设置中保存的 Facebook / Instagram / Twitter（X）专用会话查找候选账号，并自动补充基础资料，不依赖官网或搜索引擎。请先关闭并释放登录窗口。候选不等于已确认联系人；帖子需另行读取。</p></>}
+    {companyId&&<><button disabled={server||disabled||busy||list.loading||!!list.error||!!activeRun} aria-describedby={server?'platform-search-reason':undefined} onClick={()=>void act('platform-search')}>按企业名称站内搜索</button>{server&&<small className="disabled-reason" id="platform-search-reason">{SERVER_LOGIN_NOTE}</small>}<p className="muted">使用设置中保存的 Facebook / Instagram / Twitter（X）专用会话查找候选账号，并自动补充基础资料，不依赖官网或搜索引擎。请先关闭并释放登录窗口。候选不等于已确认联系人；帖子需另行读取。</p></>}
     <p className="muted">{companyId?'已有账号可以直接读取，不用等待搜索；“开始单企发现”会从官网和搜索结果查找候选账号。':'由服务端选择最多20家企业，逐项记录发现、无结果与访问限制。'}按设置的读取方式获取简介和有限近期帖子，不代表完整历史；不会自动确认归属或发送消息。运行结束后点击页面顶部“刷新数据”查看新资料。</p>
     {activeRun&&<p role="status">这家企业已有一次查找在排队或进行中，每 5 秒更新；可以查看报告，或取消这次查找。</p>}
     {failure&&<Alert>{failure}</Alert>}{notice&&<p role="status">{notice}</p>}

@@ -50,6 +50,7 @@ CSRF_FAILED = "页面已过期，请刷新后重试"
 INVALID_CREDENTIALS = "用户名或密码错误"
 LOGIN_RATE_LIMITED = "登录尝试过多，请 {minutes} 分钟后再试"
 HOST_FORBIDDEN_SERVER = "不允许的访问地址"
+SOCIAL_LOGIN_UNSUPPORTED = "服务器部署版暂不支持登录社媒账号读取，可使用公开资料读取"
 SERVER_READONLY = "服务器数据目录不可写，服务暂不可用，请联系管理员。"
 SERVER_UNAVAILABLE_DETAIL = {
     "readonly_storage": SERVER_READONLY,
@@ -1102,10 +1103,13 @@ def create_app(data_dir=None, *, allowed_hosts=None, config=None):
     def social_settings():
         return store.social_settings()
 
+    def social_login_unsupported():
+        return DomainError(SOCIAL_LOGIN_UNSUPPORTED, code="social_login_unsupported", status=409)
+
     @app.get("/api/social/connections")
     def social_connections():
         from .social_connections import public_connections
-        return public_connections(store.directory)
+        return public_connections(store.directory, server=cfg.server)
 
     @app.put("/api/social/connections")
     def social_connections_save(body: SocialConnectionsInput):
@@ -1113,10 +1117,18 @@ def create_app(data_dir=None, *, allowed_hosts=None, config=None):
         from .sources.social_browser import session_status
         if any(session_status(store.directory,p)["state"]=="open" for p in ("instagram","facebook","x")):
             raise Conflict("请先关闭登录窗口，再修改连接配置")
-        return save_connections(store.directory, body.model_dump(exclude_unset=True, exclude_none=True))
+        if cfg.server and body.instagram_reader == "instaloader":
+            import importlib.util
+            if importlib.util.find_spec("instaloader") is None:
+                from .sources.social_optional import _MESSAGES
+                raise DomainError(_MESSAGES["dependency_missing"], code="dependency_missing", status=409)
+        return save_connections(store.directory, body.model_dump(exclude_unset=True, exclude_none=True),
+                                server=cfg.server)
 
     @app.post("/api/social/browser/{platform}/open")
     def social_browser_open(platform: Literal["instagram", "facebook", "x"]):
+        if cfg.server:  # no login windows on a server (AWS trial §4); never starts a process
+            raise social_login_unsupported()
         from .sources.social_browser import open_session
         try:
             return open_session(store.directory, platform)
@@ -1125,6 +1137,8 @@ def create_app(data_dir=None, *, allowed_hosts=None, config=None):
 
     @app.post("/api/social/browser/{platform}/close")
     def social_browser_close(platform: Literal["instagram", "facebook", "x"]):
+        if cfg.server:
+            return {"status": "closed", "message": "服务器部署版不打开登录窗口"}
         from .sources.social_browser import close_session
         return close_session(store.directory, platform)
 
@@ -1150,6 +1164,8 @@ def create_app(data_dir=None, *, allowed_hosts=None, config=None):
 
     @app.post("/api/social/runs")
     def social_run_create(body: SocialRunInput):
+        if cfg.server and body.platform_search:
+            raise social_login_unsupported()
         return store.create_social_run(body.company_ids, body.pilot, body.read_only, body.platform_search, body.profile_only)
 
     @app.get("/api/social/runs")

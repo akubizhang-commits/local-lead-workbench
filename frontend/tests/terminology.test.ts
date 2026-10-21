@@ -62,7 +62,7 @@ const EXCEPTIONS: { file: string; text: string; count: number }[] = [
   { file: "LoginPage.tsx", text: "寻迹线索工作台", count: 2 },
   { file: "AuthGate.tsx", text: "寻迹 · 线索工作台", count: 1 },
   { file: "SocialSettings.tsx", text: "SearxNG", count: 2 },
-  { file: "SocialConnections.tsx", text: "Instaloader", count: 3 },
+  { file: "SocialConnections.tsx", text: "Instaloader", count: 4 },
   { file: "SocialConnections.tsx", text: "YouTube API key", count: 2 },
   { file: "social/SocialPagePreview.tsx", text: "YouTube API", count: 1 },
   { file: "pages/CompanyDetailPage.tsx", text: "企业编号", count: 1 },

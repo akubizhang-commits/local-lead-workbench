@@ -2,10 +2,13 @@
 import asyncio
 from .sources.social_discovery import read_public,search_searx
 
-async def process_social_item(store,*,search=search_searx,read=read_public,platform_search=None):
+SERVER_SKIP={'status':'skipped','reason':'server_mode','message':'服务器部署版不支持站内搜索（需要登录社媒账号），已跳过'}
+async def process_social_item(store,*,search=search_searx,read=read_public,platform_search=None,server=False):
     item=store.claim_social_item()
     if not item:return False
     async def execute():
+        if item['stage']=='platform_search' and server:
+            return dict(SERVER_SKIP)  # needs a logged-in session; never opens a browser on a server
         if item['stage']=='platform_search':
             reader=platform_search
             if reader is None:
