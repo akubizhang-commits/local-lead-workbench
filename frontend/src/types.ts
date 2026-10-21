@@ -62,3 +62,6 @@ export interface RetentionView {policy:RetentionPolicy;state:'awaiting_confirmat
 
 export interface CompanyPage {items:Company[];total:number;page:number;page_size:number;excluded_total?:number}
 export interface ReviewPage {items:Review[];total:number;page:number;page_size:number}
+/** GET /api/session (AWS trial §2.6): local returns the start token; login mode adds the session state. */
+export interface SessionInfo {token?:string;mode?:'local'|'server';auth?:boolean;authenticated?:boolean;user?:{username:string};unavailable?:{code:string;detail:string}}
+export interface LoginResult {user:{username:string};token:string}

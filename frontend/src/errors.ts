@@ -1,3 +1,4 @@
+import {loginManaged} from './api';
 /** Error kinds for the UI: missing record, service error, storage, busy, offline (P1-6, design §5.7). */
 export type ErrorKind = 'offline' | 'not_found' | 'storage' | 'busy' | 'server' | 'client';
 export interface ErrorInfo {kind: ErrorKind; code?: string; requestId?: string; status: number}
@@ -49,6 +50,7 @@ export function isPlainClientError(e: unknown): boolean {
 export function actionMessage(e: unknown): string {
   const {status, code} = (e ?? {}) as Coded;
   const message = (e as Error | undefined)?.message || '';
+  if (code === 'unauthorized' && status === 401 && loginManaged()) return '';  // the login page takes over
   if (status === 0 || code === 'offline') return message || '无法连接本地服务，请确认已启动';
   if (isPlainClientError(e)) return `${CLIENT_PREFIX}${message}`;
   if (status === 409) return code === 'conflict' ? `${message}${CONFLICT_HINT}` : message;
