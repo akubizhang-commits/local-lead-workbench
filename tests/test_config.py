@@ -151,7 +151,7 @@ def test_session_limits():
 
 
 def test_errors_list_every_variable_without_values():
-    secretish = "AKIAEXAMPLEVALUE1234"
+    secretish = "zz-pasted-secret-value-1234"
     message = error({"LEAD_MODE": "server", "LEAD_PORT": secretish, "LEAD_BIND": secretish})
     for name in ("LEAD_PUBLIC_ORIGIN", "LEAD_PORT", "LEAD_BIND"):
         assert name in message
