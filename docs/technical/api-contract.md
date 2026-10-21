@@ -616,3 +616,29 @@ Run.progress 增加 `social_total/social_done/social_accounts`；仅社媒父轮
 | `plan_changed` | 409 | 待审核内容已变化，请重新预览后再确认清理。 |
 
 前端对 409、422 以外的其他 4xx 统一显示“请求未完成：<服务端提示>”。
+
+## 2026-10-21：AWS 体验版（服务器模式与登录）
+`LEAD_MODE=server`（或 `LEAD_AUTH=on`）时 `/api/*` 默认要求登录；本地模式（默认）接口与行为不变。部署说明见 [../deploy/aws.md](../deploy/aws.md)。
+### 新增接口
+| 方法 | 路径 | 登录 | 请求 | 响应与错误 |
+|---|---|---|---|---|
+| GET | `/healthz` | 否 | — | 200 `{"status":"ok"}`；降级 503 `{"status":"unavailable"}`；不访问数据库，仍检查 Host |
+| POST | `/api/auth/login` | 否 | JSON `{username(1–64), password(1–128)}`（extra=forbid） | 200 `{user:{username},token}` + `Set-Cookie`；401 `invalid_credentials`；422 `validation`（不计入限速）；415 `unsupported_media_type`；429 `login_rate_limited` + `Retry-After`；降级 503 |
+| POST | `/api/auth/logout` | 可选 | 有会话时需 `X-Local-Token` | 204 + 清除 Cookie；带有效会话但 CSRF 不符 403 `csrf_failed`；无 Cookie / 会话失效 204；删除失败 503/507 且不清 Cookie |
+| GET | `/api/auth/me` | 是 | — | `{username,last_login_at}` |
+| GET | `/api/backups/status` | 是 | — | `{daily_enabled,time,timezone,last_daily_at,last_daily_status,last_daily_error,next_due_at,retention_active,s3:{configured,last_status,last_at,error_code}}`；不含桶名、前缀、区域、键名 |
+
+本地模式（`LEAD_AUTH=off`）下 `/api/auth/*` 返回 404 `unknown_endpoint`。
+### 会话、Cookie 与 CSRF
+- Cookie：https 下 `__Host-lw_session`，http（仅测试 `LEAD_ALLOW_INSECURE_HTTP=1`，或本地 + `LEAD_AUTH=on`）下 `lw_session`；`HttpOnly; SameSite=Lax; Path=/`，无 `Domain`、无 `Max-Age`，https 下加 `Secure`。服务端只存 sha256；空闲 24 小时、最长 7 天（`LEAD_SESSION_IDLE_HOURS`、`LEAD_SESSION_MAX_DAYS`）。
+- CSRF：每个会话一个令牌，仍通过 `GET /api/session` 获取、放在 `X-Local-Token` 头；除 GET/HEAD 外必须相等，否则 403 `csrf_failed`“页面已过期，请刷新后重试”。Origin 必须等于 `LEAD_PUBLIC_ORIGIN` 或与 Host 同源。
+- `GET /api/session`：本地 `{token,mode:"local",auth:false}`；登录模式未登录 `{authenticated:false,mode,auth:true}`，已登录追加 `token`、`user:{username}`，降级追加 `unavailable:{code,detail}` 与 `X-Lead-Unavailable` 头。
+- 访问控制：没带会话 Cookie 的受保护请求直接 401 `unauthorized`“请先登录”（不进维护闸门）；会话读取失败按存储错误返回 503 `db_busy`（`Retry-After: 2`）/ 503 `readonly_storage` / 507 `disk_full`，不当作已登录也不返回 401；降级时除 `/healthz`、`/api/session` 外一律 503（诊断包也不放行），服务器模式文案不含路径。Host 不在允许列表：服务器模式“不允许的访问地址”，本地仍为“仅允许本机访问”。
+- 登录限速：账号 15 分钟失败 5 次锁 15 分钟；IP（IPv6 按 /64）15 分钟 20 次锁 15 分钟；全局每分钟 100 次，只针对 7 天内未成功登录过的 IP。先预占后哈希，并发哈希最多 2 个。
+### 错误码
+`unauthorized`（401）、`csrf_failed`（403）、`invalid_credentials`（401）、`login_rate_limited`（429）、`unsupported_media_type`（415）、`restore_auth_unreadable`（409，网页恢复时无法读取当前账号，改用命令行恢复）、`social_login_unsupported`（409，服务器模式下打开社媒登录窗口或创建站内搜索运行）、`dependency_missing`（409，服务器模式选 Instaloader 但未安装）。
+### 变更
+- `POST /api/backups/restore`：当前账号与会话写入待恢复副本后整库替换，账号不随备份回滚；`auth.lock` 等待超时 409 `restore_busy`。
+- `GET /api/backups`：每日备份 `auto-daily-*` 为 `kind:"auto", reason:"daily"`。保留策略把每日备份与其他自动备份分开计数，各保留最近 N 份（原因“超出最近 N 份每日备份”）。
+- `GET /api/social/connections` 新增 `login_supported`（服务器模式 false）；服务器模式下 `POST /api/social/browser/{platform}/open` 409、`close` 无副作用返回 closed、`POST /api/social/runs` 带 `platform_search:true` 409；worker 把站内搜索工作项记为 `skipped`、`reason:"server_mode"`。
+- `GET /api/settings` 新增 `mode`；诊断包新增账号数/会话数、S3“已配置/未配置”与新环境变量是否设置，不导出账号内容、会话值、桶名。

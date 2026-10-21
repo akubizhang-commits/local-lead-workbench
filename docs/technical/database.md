@@ -498,3 +498,14 @@ market_keys 是派生数据，由市场的地区和关键词算出；编辑关�
 - `target_keys`：目标城市名字集合 `company_cities.target_city_keys(companies.city, 首个市场的 official_name)`，对两个名字分别：1) 规范化原名；2) 去掉末尾 ` (balance)`；3) 去掉末尾一个 LSAD 词（unified/consolidated/metropolitan/metro government、urban county、city、town、village、cdp，不去 county）；4) 去掉开头 `urban `；5) `X (Y)` 时 X、Y 各并入；6) 按 `-` 或 `/` 切开取第一段。每一步结果都并入集合。
 - `target_scope`：`none`（companies.city 为空）、`municipality`（首次发现该企业的市场是南非整个自治市）、`city`（其余）。
 - 两种邻近口径：市场上下文按该市场的 target_city_keys 集合比较（自治市市场一律不标邻近）；全局企业库用刷新时算好的 `nearby_global = parsed=1 AND target_scope='city' AND target_keys 非空 AND city_key ∉ target_keys`。只比名称，不算距离。
+
+## 2026-10-21：AWS 体验版账号表（`aws_20261021_auth`）
+迁移 `aws_20261021_auth`（`leadworkbench/auth_migrations.py`，台账第 34 项，`once`）只新建两张表和两个索引，不改旧表，全部 `IF NOT EXISTS`，可在恢复副本上重复执行。
+| 表 | 说明 |
+|---|---|
+| `auth_users` | `id`、`username`（展示用）、`username_key`（NFKC + casefold，唯一）、`password_hash`（`scrypt$32768$8$1$<盐>$<哈希>`）、`disabled`、`tenant_id`（预留，可空，本次不读写）、`created_at`、`updated_at`、`password_changed_at`、`last_login_at` |
+| `auth_sessions` | `id_hash`（会话标识的 sha256，库里不存明文）、`user_id`（外键，级联删除）、`csrf_token`、`created_at`、`last_seen_at`、`expires_at`（`min(创建+最长有效期, 最近使用+空闲时长)`）、`tenant_id`（预留） |
+
+索引：`auth_sessions_user(user_id)`、`auth_sessions_expires(expires_at)`。过期或停用账号的会话只由 worker 每小时清理（持有 `worker.lock` 且拿到 `auth.lock` 时）。
+恢复备份时当前两张表的内容先写进待恢复副本再整库替换，所以账号不随备份回滚；`admin restore --accounts backup` 例外（使用备份里的账号，清空会话）。以后加“所属客户”时新增迁移建租户表、回填 `tenant_id` 并加索引即可。
+新增数据目录文件：`auth.lock`（恢复与管理员写操作串行）、`api.lock`（`serve.py` 持有，供离线恢复确认 API 已停止）、`backup-state.json`、`backup-upload-state.json`（0600，每日备份与 S3 上传状态，各只有一个写入者）。

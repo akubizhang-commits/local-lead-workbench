@@ -1,10 +1,10 @@
--- Generated 2026-10-20 from a temporary Store; no production DB opened.
--- Startup migrations (unified registry: 0001–0011, P0 ledger items, R01–R08, P1 batch 2 p1b_20261019_*); schema only, no data.
+-- Generated 2026-10-21 from a temporary Store; no production DB opened.
+-- Startup migrations (unified registry: 0001–0011, P0 ledger items, R01–R08, P1 batch 2 p1b_20261019_*, AWS trial aws_20261021_auth); schema only, no data.
 -- Not an upgrade migration; use only to inspect/reconstruct an empty schema.
--- SHA256 leadworkbench/api.py: 50b1f8004d47b0bf195f625143662230948cada17cccc6dcbd4bce7e9a75e124
--- SHA256 leadworkbench/db.py: e8635fc71304e465dbd4128dc2c6918c1025a4ef48b622fcf76951e6596f2d42
--- SHA256 leadworkbench/migrations.py: 70f862acfc5c996fb4adec545b799560f37f8074d7e31933585ae4cb039dec03
--- SHA256 leadworkbench/market_store.py: 08c6470af6b39d06e43783baff63954fa38762690e2bb2f68648312703f6494a
+-- SHA256 leadworkbench/api.py: cca4975bec4e9c78445dcaafed76e60f894fa175b32bf37e3abb3ae7cf8f93f0
+-- SHA256 leadworkbench/db.py: f07492dd92e0d7fc2679debd14b25bb0c758aea698b066c5e9f665ae99f4b999
+-- SHA256 leadworkbench/migrations.py: 4a4912ff74b6e7a0072c6f4c7240d656d1315c061fbdc9cbac79bc280f83ab9c
+-- SHA256 leadworkbench/market_store.py: d78ac762fd70c374e2f7d5def07e151c011e970ea4b1b5ce77c2650ea77404f8
 -- SHA256 leadworkbench/social_store.py: fed32f249f81063764318afe445fa596da5adf731017f936a7ed23738a2aa2f4
 -- SHA256 leadworkbench/social_discovery_store.py: 4f2319d01f227a9a8779e2507a4e63319abe6e246e7fd25b45bf7e33672cf8d5
 -- SHA256 leadworkbench/maps_policy.py: 3cefc797ace75cb7d59af5d0e23984bc95ef843b965fb3d83358ed15e2bdf3ac
@@ -14,8 +14,9 @@
 -- SHA256 leadworkbench/p0_migrations.py: 8041c759b99663d2e231630855276175e70cf440cd8f32cd1f6d571fa39eb806
 -- SHA256 leadworkbench/p1b_migrations.py: 74d25d1e98af1c820d077c71bbd557e4112f54267a5d21af5abb843614891f4e
 -- SHA256 leadworkbench/market_admin.py: f195dc4d01d0ad5b4108cea21438499dc84b2d885636849c64b2257da1f4117a
--- SHA256 leadworkbench/review_cleanup.py: 4754c2e7d500a59ae65f3ffe77b9f4628452c36c9123c2b94ea207064553048e
+-- SHA256 leadworkbench/review_cleanup.py: f0f58df152fee070630d0cd7f5cac7d4fb61afed4e9805a5e813272846a351a7
 -- SHA256 leadworkbench/company_cities.py: 104dd8c630bbd12a958ca56f7d1ded7d2e335825bee793c7b070a97098ece284
+-- SHA256 leadworkbench/auth_migrations.py: 7eafbec88221c69bf8688289c05043fc242b9924ac7ef202228bb7858f5ebe1b
 PRAGMA foreign_keys=ON;
 BEGIN TRANSACTION;
 CREATE TABLE schema_migrations(id TEXT PRIMARY KEY, applied_at TEXT NOT NULL);
@@ -202,6 +203,27 @@ CREATE TABLE company_cities(
         target_keys TEXT NOT NULL, target_scope TEXT NOT NULL, nearby_global INTEGER NOT NULL,
         parsed INTEGER NOT NULL);
 CREATE TABLE company_cities_dirty(company_id TEXT PRIMARY KEY);
+CREATE TABLE auth_users(
+  id TEXT PRIMARY KEY,
+  username TEXT NOT NULL,
+  username_key TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  disabled INTEGER NOT NULL DEFAULT 0,
+  tenant_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  password_changed_at TEXT NOT NULL,
+  last_login_at TEXT
+);
+CREATE TABLE auth_sessions(
+  id_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+  csrf_token TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  tenant_id TEXT
+);
 CREATE INDEX observations_company ON observations(company_id,observed_at);
 CREATE INDEX work_items_run ON work_items(run_id,state);
 CREATE INDEX market_membership_company ON market_memberships(company_id,market_id);
@@ -236,6 +258,8 @@ CREATE UNIQUE INDEX schedules_one_enabled_market
     ON schedules(task_id) WHERE enabled=1 AND task_id IS NOT NULL;
 CREATE INDEX market_round_summaries_market ON market_round_summaries(market_id, created_at);
 CREATE INDEX company_cities_key ON company_cities(city_key, company_id);
+CREATE INDEX auth_sessions_user ON auth_sessions(user_id);
+CREATE INDEX auth_sessions_expires ON auth_sessions(expires_at);
 CREATE TRIGGER contacts_facets_insert AFTER INSERT ON contacts
         BEGIN INSERT OR IGNORE INTO contact_facets_dirty(contact_id) VALUES(new.id); END;
 CREATE TRIGGER contacts_facets_update

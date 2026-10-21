@@ -176,3 +176,19 @@ worker 通过 `python -m leadworkbench.maps_guard` 启动 scraper：守护进程
 ### 诊断包的脱敏范围
 本机日志保持原样（排查时需要异常消息），只做令牌、密钥隐藏；生成诊断包时才额外去掉异常消息（只留帧行和异常类型）并把企业名、联系人姓名替换为 `<name>`，同时替换邮箱、网址、电话和主目录。诊断包只在用户点击时生成和下载，不会自动发送。
 
+
+## 2026-10-21：服务器模式拓扑（AWS 体验版）
+```mermaid
+flowchart LR
+    Browser[客户浏览器] -->|HTTPS 443；80 跳转| Caddy[caddy 容器\nLet's Encrypt 或内部证书]
+    Caddy -->|compose 内部网络| API[api 容器\nleadworkbench.serve :8000\n登录会话 + CSRF]
+    API --> Data[(数据卷 /data\nworkbench.sqlite3、备份、日志)]
+    Worker[worker 容器\n地图检索、官网复核、每日备份] --> Data
+    Worker -->|实例角色 IMDSv2| S3[(S3 桶\n每日备份，可选)]
+    Worker -->|HTTPS| Internet[Google Maps / 企业官网 / 社媒公开页]
+```
+- 一台 EC2（推荐 t4g.medium，arm64），Docker Compose 运行 api、worker、caddy；api 端口只 `expose` 给 caddy，不发布到宿主机；宿主机只开 80/443（与限本人 IP 的 22）。
+- api、worker 以 UID 10001 运行，`cap_drop: ALL`、`no-new-privileges`、`/tmp` 为 512 MiB tmpfs；caddy 只保留 `NET_BIND_SERVICE`、根文件系统只读、`admin off`、HTTP/3 关闭、删除 `Server` 头。
+- 两个容器共享同一个数据卷和内核，`worker.lock`、`worker-single.lock`、`maps.lock`、`migrate.lock`、`auth.lock`、`api.lock` 跨容器有效。
+- 服务器模式不打开社媒登录窗口，站内搜索跳过；社媒公开资料读取用无沙箱的 headless Chromium（隔离由容器承担），并拦截访问非全局 IP 字面量的子资源。
+- 部署、升级、备份恢复步骤见 [../deploy/aws.md](../deploy/aws.md)。

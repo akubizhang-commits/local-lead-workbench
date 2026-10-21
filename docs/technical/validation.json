@@ -1,15 +1,15 @@
 {
   "documentation_date": "2026-09-26",
   "scope": "Offline source, links, OpenAPI route set and in-memory DDL; no live DB, network or service changes",
-  "source_files": 154,
-  "local_links_checked": 106,
-  "api_business_operations": 76,
-  "openapi_operations_including_spa": 77,
-  "schema_tables": 55,
-  "explicit_indexes": 32,
+  "source_files": 172,
+  "local_links_checked": 108,
+  "api_business_operations": 80,
+  "openapi_operations_including_spa": 82,
+  "schema_tables": 57,
+  "explicit_indexes": 34,
   "schema_integrity": "ok",
   "foreign_key_errors": [],
-  "diagram_count": 22,
+  "diagram_count": 23,
   "diagrams": [
     {
       "file": "architecture.md",
@@ -52,6 +52,12 @@
       "number": 2,
       "kind": "sequenceDiagram",
       "line": 101
+    },
+    {
+      "file": "deployment-topology.md",
+      "number": 3,
+      "kind": "flowchart LR",
+      "line": 181
     },
     {
       "file": "maps-pacing.md",
