@@ -193,3 +193,30 @@ def test_name_redaction_timing(tmp_path):
     assert state["status"] in ("done", "partial")
     if state["status"] == "done":
         assert first == "<name> <name> <name> item 123 finished"
+
+
+def test_server_mode_bundle_has_no_bucket_session_or_username(tmp_path, monkeypatch):
+    import secrets as _secrets
+    from leadworkbench import auth
+    from leadworkbench.config import load
+    bucket = "zeta-private-backups"
+    monkeypatch.setenv("LEAD_BACKUP_S3_BUCKET", bucket)
+    monkeypatch.setenv("LEAD_BACKUP_S3_REGION", "ap-northeast-1")
+    cfg = load({"LEAD_MODE": "server", "LEAD_PUBLIC_ORIGIN": "https://lw.test",
+                "LEAD_BACKUP_S3_BUCKET": bucket, "LEAD_BACKUP_S3_REGION": "ap-northeast-1"})
+    app = create_app(tmp_path, config=cfg)
+    password = _secrets.token_urlsafe(18)
+    auth.create_user(app.state.store, "zetaadmin", password)
+    with TestClient(app, base_url="https://lw.test", raise_server_exceptions=False) as client:
+        token = client.post("/api/auth/login", json={"username": "zetaadmin", "password": password}).json()["token"]
+        cookie = client.cookies.get("__Host-lw_session")
+        logging.getLogger("leadworkbench.test").warning("leak %s %s %s", cookie, token, bucket)
+        files = unzip(client.get("/api/diagnostics/bundle"))
+    text = "\n".join(files.values())
+    for secret in (bucket, cookie, token, password, "zetaadmin"):
+        assert secret not in text, secret
+    config = json.loads(files["config.json"])
+    assert config["s3_backup"] == "已配置"
+    assert config["accounts"] == {"users": 1, "sessions": 1}
+    assert config["settings"]["mode"] == "server"
+    assert config["environment"]["LEAD_BACKUP_S3_BUCKET"] is True

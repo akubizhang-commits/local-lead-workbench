@@ -1232,13 +1232,16 @@ def create_app(data_dir=None, *, allowed_hosts=None, config=None):
 
     def settings_payload():
         return {"data_dir": str(app.state.data_dir), "version": "0.1.0", "network_mode": "direct-public",
-                "paid_services": False, "ai_enabled": False}
+                "paid_services": False, "ai_enabled": False, "mode": cfg.mode}
 
     @app.get("/api/diagnostics/bundle")
-    def diagnostics_bundle():
+    def diagnostics_bundle(request: Request):
         # Shared gate (middleware), thread pool (sync route), in memory only; works in degraded mode (§6.4).
         from . import diagnostics
-        content = diagnostics.build(app.state.data_dir, store, settings=settings_payload(), token=token)
+        current = getattr(request.state, "session", None)
+        extra = (request.cookies.get(cfg.cookie_name, ""), current.csrf_token if current else "") if cfg.auth else ()
+        content = diagnostics.build(app.state.data_dir, store, settings=settings_payload(),
+                                    token=None if cfg.auth else token, extra_secrets=extra)
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         return Response(content, media_type="application/zip",
                         headers={"Content-Disposition": f'attachment; filename="diagnostics-{stamp}.zip"'})

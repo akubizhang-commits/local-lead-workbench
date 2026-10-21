@@ -1607,23 +1607,7 @@ class Store(MarketAdminMixin, ReviewCleanupMixin, MarketSocialMixin, RunActivity
         prefix = "backup" if kind == "manual" else f"auto-{kind}"
         name = f"{prefix}-{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}-{uid()[:8]}.sqlite3"
         target = folder / name
-        try:
-            with self._backup_source() as source, closing(sqlite3.connect(target)) as dest:
-                source.backup(dest)
-                # Rollback-journal header: a lone file opens without -wal/-shm on every SQLite build.
-                dest.execute("PRAGMA journal_mode=DELETE")
-                dest.commit()
-        except (sqlite3.Error, OSError):
-            log.exception("backup failed: %s", name, extra={"event": "backup_failed"})
-            _remove_database_files(target)
-            raise
-        # SQLite 3.51.0 leaves an empty -shm behind even in DELETE mode; the connection is closed now.
-        try:
-            _remove_database_files(target, include_main=False)
-        except OSError:
-            log.warning("could not remove backup sidecar files for %s", name, exc_info=True,
-                        extra={"event": "backup_sidecar_failed"})
-        target.chmod(0o600)
+        _backup_file(self.path, target, source=self._backup_source())
         return {"name": name, "created_at": now()}
 
     def _backup_source(self):
@@ -1633,50 +1617,111 @@ class Store(MarketAdminMixin, ReviewCleanupMixin, MarketSocialMixin, RunActivity
         con.execute("PRAGMA busy_timeout=15000")
         return closing(con)
     def restore(self, name):
-        if Path(name).name != name or not name.endswith(".sqlite3"):
-            raise Invalid("无效备份名称")
-        file = self.directory / "backups" / name
-        if not file.is_file() or file.is_symlink():
-            raise Invalid("备份不存在")
-        # Validate a private copy: the original backup is only ever read, never opened for writing.
-        tmp = file.parent / f".restore-{uid()}.tmp"
+        tmp = _restore_copy(self.directory, name)
         try:
-            try:
-                shutil.copyfile(file, tmp)
-                tmp.chmod(0o600)
-            except OSError as exc:
-                log.warning("could not copy backup %s for restore", name, exc_info=True,
-                            extra={"event": "restore_copy_failed"})
-                raise Invalid("无法读取备份文件，请检查磁盘空间或文件权限") from exc
             with closing(sqlite3.connect(tmp)) as source:
-                try:
-                    source.execute("PRAGMA journal_mode=DELETE")
-                    version = source.execute("PRAGMA user_version").fetchone()[0]
-                    if source.execute("PRAGMA integrity_check").fetchone()[0] != "ok" or version not in {1, 2}:
-                        raise Invalid("备份损坏或版本不兼容")
-                    source.execute("SELECT id FROM companies LIMIT 1")
-                    source.execute("SELECT id FROM tasks LIMIT 1")
-                    if version == 2:
-                        source.execute("SELECT run_id FROM market_runs LIMIT 1")
-                        source.execute("SELECT company_id FROM market_memberships LIMIT 1")
-                        source.execute("SELECT company_id FROM run_companies LIMIT 1")
-                    from .migrations import is_known
-                    ledger = []
-                    if source.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
-                                      "AND name='schema_migrations'").fetchone():
-                        ledger = [row[0] for row in source.execute("SELECT id FROM schema_migrations")]
-                except sqlite3.DatabaseError as exc:
-                    raise Invalid("备份损坏或版本不兼容，请选择其他备份") from exc
-                if any(not is_known(id) for id in ledger):
-                    raise Invalid("该备份来自更新版本的应用，当前版本无法恢复")
+                _validate_restore_copy(source)
                 self.backup(kind="pre-restore")
-                with self.connect() as dest:
-                    source.backup(dest)
-                    dest.commit()
-                    # The same executor as start-up, including R05–R08 (inside migrate.lock).
-                    from .migrations import migrate
-                    migrate(self, dest)
+                # Accounts and sessions never roll back with a backup (AWS trial §2.1.1): the
+                # current ones are written into the private copy, which then replaces the database.
+                from . import auth
+                from .auth_migrations import _auth_ddl
+                with auth.auth_lock(self.directory, wait_seconds=RESTORE_AUTH_LOCK_SECONDS):
+                    try:
+                        with self.connect() as live:
+                            snap = auth.snapshot(live)
+                    except (sqlite3.Error, OSError) as exc:
+                        log.warning("could not read current accounts for restore",
+                                    extra={"event": "restore_auth_unreadable", "error_type": type(exc).__name__})
+                        raise Conflict(RESTORE_AUTH_UNREADABLE, code="restore_auth_unreadable") from exc
+                    _auth_ddl(None, source)
+                    source.execute("DELETE FROM auth_sessions")
+                    source.execute("DELETE FROM auth_users")
+                    auth.replace_all(source, snap)
+                    source.commit()
+                    with self.connect() as dest:
+                        source.backup(dest)
+                        dest.commit()
+                        # The same executor as start-up, including R05–R08 (inside migrate.lock).
+                        from .migrations import migrate
+                        migrate(self, dest)
         finally:
             _remove_database_files(tmp)
         self.recover()
         self.recover_social()
+
+
+RESTORE_AUTH_LOCK_SECONDS = 30
+RESTORE_AUTH_UNREADABLE = "无法读取当前账号，网页恢复已取消；请联系管理员用命令行恢复（见部署说明“备份与恢复”）"
+
+
+def _backup_file(src_path, dest_path, *, source=None):
+    """Consistent copy of a live database into a lone rollback-journal file (0600).
+
+    ``source`` defaults to a read-only URI connection (busy_timeout 15 s) on ``src_path``;
+    a connection holding BEGIN IMMEDIATE cannot be a source (backup_step stays BUSY)."""
+    dest_path = Path(dest_path)
+    if source is None:
+        con = sqlite3.connect(Path(src_path).as_uri() + "?mode=ro", uri=True, timeout=15)
+        con.execute("PRAGMA busy_timeout=15000")
+        source = closing(con)
+    try:
+        with source as reader, closing(sqlite3.connect(dest_path)) as dest:
+            reader.backup(dest)
+            # Rollback-journal header: a lone file opens without -wal/-shm on every SQLite build.
+            dest.execute("PRAGMA journal_mode=DELETE")
+            dest.commit()
+    except (sqlite3.Error, OSError):
+        log.exception("backup failed: %s", dest_path.name, extra={"event": "backup_failed"})
+        _remove_database_files(dest_path)
+        raise
+    # SQLite 3.51.0 leaves an empty -shm behind even in DELETE mode; the connection is closed now.
+    try:
+        _remove_database_files(dest_path, include_main=False)
+    except OSError:
+        log.warning("could not remove backup sidecar files for %s", dest_path.name, exc_info=True,
+                    extra={"event": "backup_sidecar_failed"})
+    dest_path.chmod(0o600)
+
+
+def _restore_copy(directory, name):
+    """Private copy of ``backups/<name>``; the original backup is only ever read."""
+    if Path(name).name != name or not name.endswith(".sqlite3"):
+        raise Invalid("无效备份名称")
+    file = Path(directory) / "backups" / name
+    if not file.is_file() or file.is_symlink():
+        raise Invalid("备份不存在")
+    tmp = file.parent / f".restore-{uid()}.tmp"
+    try:
+        shutil.copyfile(file, tmp)
+        tmp.chmod(0o600)
+    except OSError as exc:
+        _remove_database_files(tmp)
+        log.warning("could not copy backup %s for restore", name, exc_info=True,
+                    extra={"event": "restore_copy_failed"})
+        raise Invalid("无法读取备份文件，请检查磁盘空间或文件权限") from exc
+    return tmp
+
+
+def _validate_restore_copy(source):
+    """Integrity, user_version, required tables and known ledger ids (shared by both restores)."""
+    try:
+        source.execute("PRAGMA journal_mode=DELETE")
+        version = source.execute("PRAGMA user_version").fetchone()[0]
+        if source.execute("PRAGMA integrity_check").fetchone()[0] != "ok" or version not in {1, 2}:
+            raise Invalid("备份损坏或版本不兼容")
+        source.execute("SELECT id FROM companies LIMIT 1")
+        source.execute("SELECT id FROM tasks LIMIT 1")
+        if version == 2:
+            source.execute("SELECT run_id FROM market_runs LIMIT 1")
+            source.execute("SELECT company_id FROM market_memberships LIMIT 1")
+            source.execute("SELECT company_id FROM run_companies LIMIT 1")
+        from .migrations import is_known
+        ledger = []
+        if source.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                          "AND name='schema_migrations'").fetchone():
+            ledger = [row[0] for row in source.execute("SELECT id FROM schema_migrations")]
+    except sqlite3.DatabaseError as exc:
+        raise Invalid("备份损坏或版本不兼容，请选择其他备份") from exc
+    if any(not is_known(id) for id in ledger):
+        raise Invalid("该备份来自更新版本的应用，当前版本无法恢复")

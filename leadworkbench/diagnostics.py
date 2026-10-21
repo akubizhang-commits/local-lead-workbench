@@ -33,7 +33,9 @@ NOTE = "不含企业、联系人数据，不含令牌、密钥和登录信息"
 SKIPPED_NOTE = "数据库不可用，未做名称脱敏；日志中已去掉异常消息"
 PARTIAL_NOTE = "名称脱敏超过 10 秒，之后只扫描 WARNING 及以上的日志行"
 UNSTRUCTURED = "<非结构化日志已省略>"
-ENV_FLAGS = ("MAPS_SCRAPER_BIN", "PLAYWRIGHT_BROWSERS_PATH", "PLAYWRIGHT_DRIVER_PATH", "LEAD_PORT", "LEAD_LOG_LEVEL")
+ENV_FLAGS = ("MAPS_SCRAPER_BIN", "PLAYWRIGHT_BROWSERS_PATH", "PLAYWRIGHT_DRIVER_PATH", "LEAD_PORT", "LEAD_LOG_LEVEL",
+             "LEAD_MODE", "LEAD_AUTH", "LEAD_PUBLIC_ORIGIN", "LEAD_ALLOWED_HOSTS", "LEAD_BIND", "LEAD_BACKUP_DAILY",
+             "LEAD_BACKUP_S3_BUCKET", "LEAD_BACKUP_S3_REGION", "LEAD_BACKUP_S3_ENDPOINT", "LEAD_TIMEZONE")
 
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(\.[\w-]+)+")
 URL = re.compile(r"https?://\S+")
@@ -341,7 +343,25 @@ def _config(data_dir: Path, store, settings):
         },
         "environment": {name: name in os.environ for name in ENV_FLAGS},
         "retention": _retention(data_dir),
+        "s3_backup": "已配置" if os.environ.get("LEAD_BACKUP_S3_BUCKET") else "未配置",
+        "accounts": _accounts(store),
     }
+
+
+def _accounts(store):
+    """Counts only: never any auth_* row content."""
+    if store is None:
+        return None
+    from .auth import counts
+    with store.connect() as con:
+        return counts(con)
+
+
+def _usernames(con):
+    try:
+        return [row[0] for row in con.execute("SELECT username FROM auth_users")]
+    except sqlite3.OperationalError:
+        return []
 
 
 def _retention(data_dir):
@@ -395,6 +415,7 @@ def _names(con):
 
 def _secret_literals(data_dir: Path, token):
     literals = [token] if token else []
+    literals += [os.environ.get("LEAD_BACKUP_S3_BUCKET") or ""]  # never ship the bucket name
     try:
         path = Path(data_dir) / "social-secrets.json"
         if path.exists():
@@ -415,7 +436,7 @@ def _part(builder, data_dir):
         return {"error": classified.code if classified is not None else type(exc).__name__}
 
 
-def build(data_dir, store=None, *, settings=None, token=None, extra_config=None) -> bytes:
+def build(data_dir, store=None, *, settings=None, token=None, extra_config=None, extra_secrets=()) -> bytes:
     data_dir = Path(data_dir)
     names_state = {"status": "skipped"}
     with ExitStack() as stack:
@@ -423,11 +444,11 @@ def build(data_dir, store=None, *, settings=None, token=None, extra_config=None)
         if store is not None:
             try:
                 con = stack.enter_context(store.connect())
-                names = _names(con)
+                names = _names(con) + _usernames(con)
                 names_state["status"] = "done"
             except (sqlite3.Error, OSError):
                 con = names = None
-        redactor = Redactor(_secret_literals(data_dir, token), names)
+        redactor = Redactor(_secret_literals(data_dir, token) + [v for v in extra_secrets if v], names)
         files = {
             "environment.json": _part(lambda: _environment(data_dir, con), data_dir),
             "config.json": _part(lambda: {**_config(data_dir, store, settings), **(extra_config or {})}, data_dir),
