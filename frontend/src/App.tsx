@@ -28,6 +28,7 @@ import type {
 import { Alert, Icon, Modal } from "./ui";
 import { RestoreBlocked } from "./RestoreBlocked";
 import { useNavigation } from "./useNavigation";
+import { useSession } from "./session";
 import { workerStatus } from "./workerStatus";
 
 const navigation: [View, string, string][] = [
@@ -56,6 +57,8 @@ export function restoreFocus(prev: HTMLElement | null) {
   document.querySelector<HTMLElement>("[data-focus-fallback]")?.focus();
 }
 export default function App() {
+  const session = useSession();
+  const server = session.mode === "server";
   const { route, navigate } = useNavigation();
   const routeRef = useRef(route);
   routeRef.current = route;
@@ -253,19 +256,22 @@ export default function App() {
           <div className="local-note">
             <Icon name="shield" />
             <div>
-              <strong>数据保存在本机</strong>
+              <strong>{server ? "数据保存在服务器" : "数据保存在本机"}</strong>
               <small>公开来源 · 人工审核</small>
             </div>
           </div>
           <div className="profile">
-            <span aria-hidden="true">本</span>
+            <span aria-hidden="true">{server ? (session.username || "用").slice(0, 1).toUpperCase() : "本"}</span>
             <div>
-              本地工作空间<small>内部测试版</small>
+              {server ? session.username || "已登录" : "本地工作空间"}<small>内部测试版</small>
             </div>
             <span
               className={`dot ${overview.data && !overview.error ? "on" : ""}`}
             />
           </div>
+          {session.auth && session.logout && (
+            <button type="button" className="sign-out" onClick={session.logout}>退出登录</button>
+          )}
         </div>
       </aside>
       <div className="main-shell">

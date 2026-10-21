@@ -58,6 +58,9 @@ const FORBIDDEN: (string | RegExp)[] = [
 const EXCEPTIONS: { file: string; text: string; count: number }[] = [
   { file: "ExportJobs.tsx", text: "导出任务", count: 1 },
   { file: "App.tsx", text: "本地线索工作台", count: 2 },
+  // AWS trial: product name on the login page and the server-mode window title (design §2.9).
+  { file: "LoginPage.tsx", text: "寻迹线索工作台", count: 2 },
+  { file: "AuthGate.tsx", text: "寻迹 · 线索工作台", count: 1 },
   { file: "SocialSettings.tsx", text: "SearxNG", count: 2 },
   { file: "SocialConnections.tsx", text: "Instaloader", count: 3 },
   { file: "SocialConnections.tsx", text: "YouTube API key", count: 2 },
