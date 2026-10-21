@@ -98,8 +98,13 @@ npm run build
 
 官网采集默认使用直接公开网络连接，不继承环境代理。无法连接时会记录实际错误。地图来源受其可访问性与使用条件限制，内部测试不代表已获得数据永久保存或商业使用许可。
 
+## 服务器部署（AWS 体验版）
+
+同一套代码也可以部署到一台 AWS EC2 上，由客户通过浏览器访问：Docker Compose 运行 api、worker 和 Caddy（HTTPS），账号密码登录，每天自动备份并可上传 S3。本地模式（`scripts/start.sh`）行为不变、不需要登录。部署步骤、费用粗估和已知限制见 [docs/deploy/aws.md](docs/deploy/aws.md)。
+
 ## 文档
 
+- [部署到 AWS（首个客户体验版）](docs/deploy/aws.md)
 - [技术文档总览：架构、拓扑、模块、接口与数据库](docs/technical/README.md)
 - [产品文档总览：当前目标与实现边界](docs/product/README.md)
 - [海外企业获客 PRD](docs/product/overseas-lead-acquisition.prd.md)
