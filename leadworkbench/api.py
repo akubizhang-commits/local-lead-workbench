@@ -517,7 +517,7 @@ BestTier = Literal["", "named_procurement", "named_role", "named_unknown", "depa
                    "form_phone", "company_phone", "none"]
 
 
-def create_app(data_dir=None, *, allowed_hosts=None):
+def create_app(data_dir=None, *, allowed_hosts=None, config=None):
     from contextlib import asynccontextmanager
     @asynccontextmanager
     async def lifespan(application):
@@ -527,7 +527,10 @@ def create_app(data_dir=None, *, allowed_hosts=None):
         from .sources.social_browser import close_session
         for platform in ("instagram", "facebook", "x"):
             await asyncio.to_thread(close_session, application.state.data_dir, platform)
+    from . import config as config_module
+    cfg = config if config is not None else config_module.load()  # ConfigError is fatal
     app = FastAPI(title="本地销售线索工作台", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+    app.state.config = cfg
     app.state.data_dir = Path(data_dir or os.environ.get("LEAD_DATA_DIR", str(ROOT / "data"))).expanduser().resolve()
     app.state.unavailable = None
     try:
@@ -553,7 +556,7 @@ def create_app(data_dir=None, *, allowed_hosts=None):
         jobs.list(1)  # reap jobs left running by an earlier API instance (§8.6)
     token = secrets.token_urlsafe(40)
     logging_setup.hide_token(token)
-    hosts = allowed_hosts or {"127.0.0.1", "localhost", "::1"}
+    hosts = allowed_hosts or set(cfg.allowed_hosts)
     from .maintenance import MaintenanceGate
     gate = app.state.gate = MaintenanceGate()
     from . import retention
@@ -1123,6 +1126,13 @@ def create_app(data_dir=None, *, allowed_hosts=None):
     dist = ROOT / "frontend" / "dist"
     if (dist / "assets").is_dir():
         app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
+
+    @app.get("/healthz")
+    def healthz():
+        # Memory only: never touches the database, so it answers during a restore too.
+        if app.state.unavailable:
+            return JSONResponse({"status": "unavailable"}, status_code=503)
+        return {"status": "ok"}
 
     @app.get("/{path:path}")
     def frontend(path: str):

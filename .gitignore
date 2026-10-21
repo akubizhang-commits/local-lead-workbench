@@ -14,3 +14,4 @@ tools/bin/
 
 tools/searxng/
 .agents/
+.env

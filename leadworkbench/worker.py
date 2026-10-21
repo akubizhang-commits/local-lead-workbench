@@ -319,6 +319,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-dir", default=os.environ.get("LEAD_DATA_DIR", "data"))
     args = parser.parse_args()
+    from . import config
+    try:
+        cfg = config.load()
+    except config.ConfigError as exc:
+        print(exc, file=sys.stderr)
+        raise SystemExit(2) from None
     from .logging_setup import configure
     configure("worker", Path(args.data_dir).expanduser())
     async def runner():
