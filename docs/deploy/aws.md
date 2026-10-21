@@ -60,17 +60,23 @@ worker ──实例角色（IMDSv2）──▶ S3 桶（每日备份，可选）
       "Resource": "arn:aws:s3:::<你的桶名>/leadworkbench/*"
     },
     {
-      "Sid": "RestoreFromS3OnlyWhenNeeded",
+      "Sid": "RestoreReadOnlyWhenNeeded",
       "Effect": "Allow",
-      "Action": ["s3:GetObject", "s3:ListBucket"],
-      "Resource": ["arn:aws:s3:::<你的桶名>/leadworkbench/*", "arn:aws:s3:::<你的桶名>"],
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::<你的桶名>/leadworkbench/*"
+    },
+    {
+      "Sid": "RestoreListOnlyWhenNeeded",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::<你的桶名>",
       "Condition": {"StringLike": {"s3:prefix": ["leadworkbench/*"]}}
     }
   ]
 }
 ```
 
-第二条只在从 S3 拉回备份时需要，恢复完成后可以删掉。不要授予 `DeleteObject`、`PutBucket*`、`GetObjectVersion`。说明：`s3:prefix` 条件只作用于 `ListBucket`；如果控制台提示 `GetObject` 与该条件不匹配，把第二条拆成两条（`GetObject` 不带条件，`ListBucket` 带条件）。
+后两条只在从 S3 拉回备份时需要，恢复完成后可以删掉。不要授予 `DeleteObject`、`PutBucket*`、`GetObjectVersion`。`GetObject` 和 `ListBucket` 必须分成两条写：`s3:prefix` 条件键只出现在 List 请求里，和 `GetObject` 写在同一条时，这条就不会放行下载。
 
 ## 4. 登录服务器并安装 Docker
 
