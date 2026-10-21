@@ -57,7 +57,9 @@ const FORBIDDEN: (string | RegExp)[] = [
 // 精确例外：{file, text, count}；测试断言实际次数正好等于登记值，例外过期时会失败。
 const EXCEPTIONS: { file: string; text: string; count: number }[] = [
   { file: "ExportJobs.tsx", text: "导出任务", count: 1 },
-  { file: "App.tsx", text: "本地线索工作台", count: 2 },
+  { file: "App.tsx", text: "本地线索工作台", count: 1 },
+  // AWS trial: server-mode sidebar name; the raw count includes the one inside “本地线索工作台”.
+  { file: "App.tsx", text: "线索工作台", count: 2 },
   // AWS trial: product name on the login page and the server-mode window title (design §2.9).
   { file: "LoginPage.tsx", text: "寻迹线索工作台", count: 2 },
   { file: "AuthGate.tsx", text: "寻迹 · 线索工作台", count: 1 },

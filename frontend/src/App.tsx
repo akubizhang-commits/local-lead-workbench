@@ -46,6 +46,10 @@ const descriptions: Record<View, string> = {
   changes: "追踪资料变化，保留每一次判断的来龙去脉。",
   settings: "管理本地数据、来源能力与定时维护。",
 };
+/** Server deployments (LEAD_MODE=server) replace the wording written for a local install. */
+const serverDescriptions: Partial<Record<View, string>> = {
+  settings: "管理服务器数据、来源能力与定时维护。",
+};
 /** After an action: put focus back on the control that started it, or on the nearest fallback heading. */
 export function restoreFocus(prev: HTMLElement | null) {
   const active = document.activeElement;
@@ -59,6 +63,7 @@ export function restoreFocus(prev: HTMLElement | null) {
 export default function App() {
   const session = useSession();
   const server = session.mode === "server";
+  const brandName = server ? "线索工作台" : "本地线索工作台";
   const { route, navigate } = useNavigation();
   const routeRef = useRef(route);
   routeRef.current = route;
@@ -205,6 +210,11 @@ export default function App() {
       "客户匹配状态已保存",
     );
   }
+  // Header connection state; server deployments drop “本地” and use “无法连接服务” for the offline state.
+  const description = (server && serverDescriptions[view]) || descriptions[view];
+  const serviceText = server
+    ? overview.error ? "无法连接服务" : overview.loading ? "正在连接服务" : "服务已连接"
+    : overview.error ? "本地服务未连接" : overview.loading ? "正在连接本地服务" : "本地服务已连接";
   return (
     <div className="app">
       <a className="skip-link" href="#main" onClick={(e) => { e.preventDefault(); document.getElementById("main")?.focus(); }}>跳到主要内容</a>
@@ -221,7 +231,7 @@ export default function App() {
             <Icon name="search" size={25} />
           </span>
           <div>
-            寻迹<span>本地线索工作台</span>
+            寻迹<span>{brandName}</span>
           </div>
         </a>
         <nav aria-label="主导航">
@@ -316,14 +326,10 @@ export default function App() {
           </nav>
           <div className="row">
             <span className={`connection service ${overview.error ? "offline" : ""}`}
-              title={overview.error ? "本地服务未连接" : overview.loading ? "正在连接本地服务" : "本地服务已连接"}>
-              <span className="dot" role="img" aria-label={overview.error ? "本地服务未连接" : overview.loading ? "正在连接本地服务" : "本地服务已连接"} />
+              title={serviceText}>
+              <span className="dot" role="img" aria-label={serviceText} />
               <span className="connection-text" aria-hidden="true">
-              {overview.error
-                ? "本地服务未连接"
-                : overview.loading
-                  ? "正在连接本地服务"
-                  : "本地服务已连接"}
+              {serviceText}
               </span>
             </span>
             <span
@@ -365,7 +371,7 @@ export default function App() {
               {view === "detail" && !route.account && detail.data && (
                 <p className="detail-subline">{actualCityText(detail.data.company)} · 业务类型 {detail.data.company.business_types.map(label).join("、") || "待核实"}</p>
               )}
-              {view==='tasks'&&route.task?(route.item?<p>查看这次官网复核读取了哪些网页、结果和历次尝试。</p>:marketTask&&<p>{marketSubline(marketTask)}</p>):descriptions[view]&&<p>{descriptions[view]}</p>}
+              {view==='tasks'&&route.task?(route.item?<p>查看这次官网复核读取了哪些网页、结果和历次尝试。</p>:marketTask&&<p>{marketSubline(marketTask)}</p>):description&&<p>{description}</p>}
             </div>
             <div className="actions">
               {view === "tasks" && marketTask && !route.item && (
@@ -502,7 +508,7 @@ export default function App() {
             />
           )}
           <div className="page-footer">
-            <span>寻迹 · 本地线索工作台</span>
+            <span>寻迹 · {brandName}</span>
             <span>真实查询 / 可追溯证据 / 人工判断</span>
           </div>
         </main>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { Alert, Field } from "./ui";
 import { actionMessage } from "./errors";
+import { useSession } from "./session";
 
 type Platform = "instagram" | "facebook" | "x";
 type Connections = {
@@ -53,6 +54,7 @@ export function SocialConnections({
 }: {
   onBlockedChange?: (blocked: boolean) => void;
 }) {
+  const server = useSession().mode === "server";
   const [data, setData] = useState<Connections>();
   const [draft, setDraft] = useState<Draft>();
   const [key, setKey] = useState(""),
@@ -72,6 +74,7 @@ export function SocialConnections({
   const open =
     !!data &&
     Object.values(data.sessions).some((session) => session?.state === "open");
+  const noLogin = server || data?.login_supported === false;
   const blocked = !!busy || stale || !data || dirty || open;
   useEffect(() => {
     onBlockedChange?.(blocked);
@@ -214,17 +217,24 @@ export function SocialConnections({
           刷新连接状态
         </button>
       </div>
-      <ol>
-        <li>选择读取方式并保存配置。</li>
-        <li>
-          打开登录浏览器，在浏览器窗口中手动登录 Instagram / Facebook /
-          Twitter（X）。
-        </li>
-        <li>登录完成后，点击下方“关闭并释放会话”，再开始查找。</li>
-      </ol>
-      <p className="muted">
-        会话过期或读取时要求登录，请重新打开浏览器登录，再关闭并释放。打开、关闭状态不代表已登录或认证有效。这里不会发送私信或评论。
-      </p>
+      {/* Server deployments have no login windows: one note at the top replaces the login steps. */}
+      {noLogin ? (
+        <Alert>{SERVER_LOGIN_NOTE}</Alert>
+      ) : (
+        <>
+          <ol>
+            <li>选择读取方式并保存配置。</li>
+            <li>
+              打开登录浏览器，在浏览器窗口中手动登录 Instagram / Facebook /
+              Twitter（X）。
+            </li>
+            <li>登录完成后，点击下方“关闭并释放会话”，再开始查找。</li>
+          </ol>
+          <p className="muted">
+            会话过期或读取时要求登录，请重新打开浏览器登录，再关闭并释放。打开、关闭状态不代表已登录或认证有效。这里不会发送私信或评论。
+          </p>
+        </>
+      )}
       {busy && (
         <p role="status">
           {busy === "load" ? "正在读取连接配置…" : "正在处理连接请求…"}
@@ -281,7 +291,7 @@ export function SocialConnections({
                 {data.login_supported === false && !data.dependencies.instaloader && (
                   <p className="muted">{INSTALOADER_MISSING}</p>
                 )}
-                <Field label="本机代理 URL（可选）">
+                <Field label={server ? "服务器本机代理 URL（可选）" : "本机代理 URL（可选）"}>
                   <input
                     value={draft.proxy_url}
                     maxLength={4096}
@@ -352,7 +362,9 @@ export function SocialConnections({
           </form>
           {dirty && (
             <p className="muted">
-              有未保存修改，请先保存连接配置，再打开登录浏览器或运行发现。
+              {noLogin
+                ? "有未保存修改，请先保存连接配置，再运行发现。"
+                : "有未保存修改，请先保存连接配置，再打开登录浏览器或运行发现。"}
             </p>
           )}
           <p className="muted">
@@ -369,7 +381,6 @@ export function SocialConnections({
             </Alert>
           )}
           </details>
-          {data.login_supported === false && <Alert>{SERVER_LOGIN_NOTE}</Alert>}
           {(["instagram", "facebook", "x"] as const).map((platform) => (
             <article className="social-card" key={platform}>
               <div className="row between">

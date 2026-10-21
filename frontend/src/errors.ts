@@ -1,4 +1,4 @@
-import {loginManaged} from './api';
+import {SERVER_OFFLINE,isServerMode,loginManaged} from './api';
 /** Error kinds for the UI: missing record, service error, storage, busy, offline (P1-6, design §5.7). */
 export type ErrorKind = 'offline' | 'not_found' | 'storage' | 'busy' | 'server' | 'client';
 export interface ErrorInfo {kind: ErrorKind; code?: string; requestId?: string; status: number}
@@ -51,7 +51,7 @@ export function actionMessage(e: unknown): string {
   const {status, code} = (e ?? {}) as Coded;
   const message = (e as Error | undefined)?.message || '';
   if (code === 'unauthorized' && status === 401 && loginManaged()) return '';  // the login page takes over
-  if (status === 0 || code === 'offline') return message || '无法连接本地服务，请确认已启动';
+  if (status === 0 || code === 'offline') return message || (isServerMode() ? SERVER_OFFLINE : '无法连接本地服务，请确认已启动');
   if (isPlainClientError(e)) return `${CLIENT_PREFIX}${message}`;
   if (status === 409) return code === 'conflict' ? `${message}${CONFLICT_HINT}` : message;
   if (status === 422) return message;
@@ -60,14 +60,15 @@ export function actionMessage(e: unknown): string {
 }
 
 export function errorTitle(info: ErrorInfo): string {
+  const db = isServerMode() ? '数据库' : '本地数据库';
   if (info.kind === 'not_found') return '记录已更新或移除';
   if (info.kind === 'server') return '服务出错';
-  if (info.kind === 'busy') return info.code === 'maintenance' ? '正在恢复备份' : '本地数据库正忙';
+  if (info.kind === 'busy') return info.code === 'maintenance' ? '正在恢复备份' : `${db}正忙`;
   if (info.kind === 'storage') {
     if (info.code === 'readonly_storage') return '数据目录不可写';
     if (info.code === 'disk_full') return '磁盘空间不足';
-    if (info.code === 'db_corrupt') return '本地数据库文件损坏';
-    return '本地数据库不可用';
+    if (info.code === 'db_corrupt') return `${db}文件损坏`;
+    return `${db}不可用`;
   }
   return '暂时无法读取数据';
 }

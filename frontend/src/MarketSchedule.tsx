@@ -5,12 +5,15 @@ import {date} from './helpers';
 import {useResource} from './hooks';
 import {Alert} from './ui';
 import type {Schedule, Task} from './types';
+import {SCHEDULE_NOTE} from './Schedules';
+import {useSession} from './session';
 
 const PERIODS = [1, 2, 3, 6, 12];
 const browserZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai';
 
 /** The market page's always-visible "每月自动更新" switch (design §7.3). */
 export function MarketSchedule({task, version = 0, archived = false}: {task: Task; version?: number; archived?: boolean}) {
+  const scheduleNote = SCHEDULE_NOTE[useSession().mode];
   const [revision, setRevision] = useState(0);
   const result = useResource<Schedule[]>(`/schedules?task_id=${encodeURIComponent(task.id)}`, version + revision);
   const [busy, setBusy] = useState(false);
@@ -60,7 +63,7 @@ export function MarketSchedule({task, version = 0, archived = false}: {task: Tas
     </div>
     {archived && <p className="muted">已归档，恢复后可开启</p>}
     <p>{on ? `下次更新：${date(current!.next_due_at)}（${current!.timezone}）` : '未开启自动更新'}</p>
-    <p className="muted">仅在应用运行且电脑唤醒时执行；错过的周期恢复后最多补跑一次。每次更新按当前关键词执行地图检索{initial ? `（预计首轮 ${initial} 次）` : ''}。</p>
+    <p className="muted">{scheduleNote}每次更新按当前关键词执行地图检索{initial ? `（预计首轮 ${initial} 次）` : ''}。</p>
     {notice && <p role="status">{notice}</p>}
     {(error || result.error) && <Alert>{error || result.error}</Alert>}
   </section>;

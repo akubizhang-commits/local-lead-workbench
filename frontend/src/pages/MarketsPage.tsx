@@ -8,6 +8,7 @@ import { WorkerHealth } from "../WorkerHealth";
 
 import { Resource, type ResourceState } from "../Resource";
 import type { Action } from "./pageTypes";
+import { useSession } from "../session";
 
 const UNFINISHED = ["running", "queued", "paused"];
 const unfinished = (task: Task) => UNFINISHED.includes(task.latest_run?.status || "");
@@ -34,6 +35,7 @@ export function MarketsPage({
   openStandalone: () => void;
   setModal: (modal: "task") => void;
 }) {
+  const server = useSession().mode === "server";
   const active = (tasks.data || []).filter((task) => !task.archived_at);
   const archived = (tasks.data || []).filter((task) => !!task.archived_at);
   return (
@@ -55,7 +57,7 @@ export function MarketsPage({
       </section>}
       <div className="metrics">
         {[
-          ["企业", overview.data?.companies, "company", "本地保存的企业"],
+          ["企业", overview.data?.companies, "company", server ? "已保存的企业" : "本地保存的企业"],
           [
             "联系入口",
             overview.data?.contacts,

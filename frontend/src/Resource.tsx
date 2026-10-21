@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
 import { Icon } from "./ui";
+import { useSession } from "./session";
 import { CLIENT_PREFIX, errorTitle, isPlainClientError, type ErrorInfo } from "./errors";
 export function Loading() {
+  const server = useSession().mode === "server";
   return (
     <div className="loading" role="status">
       <span />
-      正在读取本地数据…
+      {server ? "正在读取数据…" : "正在读取本地数据…"}
     </div>
   );
 }
@@ -32,6 +34,7 @@ export function Resource({
   errorInfo?: ErrorInfo;
   notFoundAction?: NotFoundAction;
 }) {
+  const server = useSession().mode === "server";
   if (loading) return <Loading />;
   if (!error) return <>{children}</>;
   const kind = errorInfo?.kind;
@@ -76,7 +79,7 @@ export function Resource({
       <h3>暂时无法读取数据</h3>
       <p>{error}</p>
       <p className="muted">
-        请确认本地服务已启动，然后重新连接。此状态不代表没有业务记录。
+        {server ? "请检查网络后重新连接。" : "请确认本地服务已启动，然后重新连接。"}此状态不代表没有业务记录。
       </p>
       <button onClick={retry}>重新连接</button>
     </div>

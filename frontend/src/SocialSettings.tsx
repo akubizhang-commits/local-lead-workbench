@@ -5,11 +5,14 @@ import {Alert,Field} from './ui';
 import {SocialDiscovery,socialStatus} from './SocialDiscovery';
 import {SocialConnections} from './SocialConnections';
 import {actionMessage} from './errors';
+import {useSession} from './session';
 
 type Settings={searxng_url:string;configured:boolean;platforms:string[];message:string};
 type Probe={status:string;message:string};
 
 export function SocialSettings() {
+  const server=useSession().mode==='server';
+  const host=server?'服务器':'本机';
   const [revision,setRevision]=useState(0);
   const settings=useResource<Settings>('/social/settings',revision);
   const [url,setUrl]=useState(''),[busy,setBusy]=useState(false),[failure,setFailure]=useState(''),[notice,setNotice]=useState('');
@@ -33,12 +36,12 @@ export function SocialSettings() {
   }
   return <section className="panel social-settings">
     <div className="section-title"><h3>社媒自动发现</h3><span className="badge">{settings.loading?'读取配置中':settings.error?'配置状态未知':settings.data?.configured?'已配置搜索服务':'搜索服务未配置'}</span></div>
-    <details className="advanced-settings"><summary>高级设置：本机搜索服务</summary>
-    <p className="muted">配置本机 SearxNG 搜索服务，需开启 JSON 搜索响应。搜索只提供候选；平台公开页面是否可读会单独记录。</p>
+    <details className="advanced-settings"><summary>高级设置：{host}搜索服务</summary>
+    <p className="muted">配置{host} SearxNG 搜索服务，需开启 JSON 搜索响应。搜索只提供候选；平台公开页面是否可读会单独记录。</p>
     {settings.error&&<Alert>{settings.error}<button onClick={()=>setRevision(v=>v+1)}>重读配置</button></Alert>}
     {failure&&<Alert>{failure}</Alert>}{notice&&<p role="status">{notice}</p>}
     <form onSubmit={e=>{e.preventDefault();void save();}}>
-      <Field label="SearxNG 本机 URL"><input type="url" value={url} disabled={busy||settings.loading||!!settings.error} maxLength={4096} placeholder="http://127.0.0.1:8080" onChange={e=>{setUrl(e.target.value);setProbe(undefined);setNotice('');}}/></Field>
+      <Field label={`SearxNG ${server?"服务器本机":"本机"} URL`}><input type="url" value={url} disabled={busy||settings.loading||!!settings.error} maxLength={4096} placeholder="http://127.0.0.1:8080" onChange={e=>{setUrl(e.target.value);setProbe(undefined);setNotice('');}}/></Field>
       <p className="muted">留空可停用搜索服务；官网发现和公开预览的实际结果以运行报告为准。</p>
       <div className="actions"><button className="primary" disabled={busy||settings.loading||!!settings.error}>{busy?'处理中…':'保存配置'}</button><button type="button" disabled={busy||settings.loading||!!settings.error||dirty||!settings.data?.configured} onClick={()=>void testConnection()}>测试连接</button></div>
       {dirty&&<p className="muted">地址已修改，请先保存，再测试已保存的服务。</p>}

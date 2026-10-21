@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api, download } from "./api";
 import type { Filters } from "./helpers";
 import { actionMessage } from "./errors";
+import { useSession } from "./session";
 
 /** Background export job as returned by /api/export-jobs (P1-2, design §8.3). */
 export interface ExportJob {
@@ -163,6 +164,7 @@ export type ExportJobsState = ReturnType<typeof useExportJobs>;
 
 export function ExportJobsPanel({ state, exportDays = 7 }: { state: ExportJobsState; exportDays?: number }) {
   const { jobs, notice, error, cancelling } = state;
+  const server = useSession().mode === "server";
   if (!jobs.length && !notice && !error) return null;
   const announce = jobs[0] ? phaseText(jobs[0]) : "";
   return (
@@ -170,7 +172,7 @@ export function ExportJobsPanel({ state, exportDays = 7 }: { state: ExportJobsSt
       <div className="section-title">
         <h3 id="export-jobs-title">导出任务</h3>
       </div>
-      <p className="muted">导出在后台生成，期间可以继续使用其他页面；文件在本机保留 {exportDays} 天。</p>
+      <p className="muted">导出在后台生成，期间可以继续使用其他页面；{server ? `文件在服务器保留 ${exportDays} 天，请及时下载。` : `文件在本机保留 ${exportDays} 天。`}</p>
       <p className="sr-only" aria-live="polite">{announce}</p>
       {notice && <p className="export-notice" role="status">{notice}</p>}
       {error && <p className="alert" role="alert">{error}</p>}

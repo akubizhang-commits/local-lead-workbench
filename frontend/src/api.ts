@@ -15,6 +15,8 @@ const OFFLINE='无法连接本地服务，请确认已启动';
 export const SERVER_OFFLINE='无法连接服务，请检查网络后重试';
 /** Server deployments (LEAD_MODE=server) use network wording for the offline message. */
 export function setServerMode(on:boolean) {serverMode=on;}
+/** For plain helpers outside React (errors, worker status): true on server deployments. */
+export function isServerMode() {return serverMode;}
 /** Called when any request is answered 401 (session ended); AuthGate shows the login page. */
 export function setOnUnauthorized(handler?:()=>void) {unauthorizedHandler=handler;}
 /** True while AuthGate handles 401 by showing the login page (login mode only). */

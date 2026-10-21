@@ -1,4 +1,5 @@
-export function warningReasons(error: string): {reason:string;action:string}[] {
+/** server: wording for a server deployment (the network is the server's). */
+export function warningReasons(error: string, server = false): {reason:string;action:string}[] {
  const rules: [RegExp,string,string][] = [
   [/byte limit|body.*limit/i,'页面过大','已保留读取上限；优先读取联系、团队等相关页面。'],
   [/robots/i,'网站访问规则或规则文件读取受限','检查网站可访问性；明确禁止的页面不会继续抓取。'],
@@ -11,7 +12,7 @@ export function warningReasons(error: string): {reason:string;action:string}[] {
   [/depth limit|queue limit|request limit/i,'达到扫描范围或请求上限','保留当前结果，可核对是否遗漏重要联系页面。'],
   [/HTTP\s*404|HTTP\s*410/i,'网页已不存在','核对官网入口；重试不能保证恢复失效页面。'],
   [/HTTP\s*403|HTTP\s*429|captcha|access denied/i,'网站拒绝访问或限流','等待访问恢复；需要验证时由用户在平台处理。'],
-  [/ssl|certificate|tls/i,'网站证书或安全连接失败','核对网站证书及本地网络，修复后重试。'],
+  [/ssl|certificate|tls/i,'网站证书或安全连接失败',`核对网站证书及${server?'服务器':'本地'}网络，修复后重试。`],
   [/connection|connector|dns|network_error/i,'网络连接失败','检查网络或代理后重试。'],
   [/unsupported content type|application\/pdf/i,'文件格式未解析','PDF及非网页资源不能按普通网页提取，已读资料仍保留。'],
   [/provider_unavailable|searxng|source_paused/i,'搜索来源暂不可用','先恢复搜索服务，再继续受影响的轮次。'],

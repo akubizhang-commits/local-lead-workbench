@@ -1,4 +1,4 @@
-import { api, download } from "../api";
+import { api, download, isServerMode } from "../api";
 import { date } from "../helpers";
 import { useResource } from "../hooks";
 import { formatBytes } from "../ExportJobs";
@@ -10,6 +10,7 @@ import { Alert, Empty, Icon } from "../ui";
 import { WorkerHealth } from "../WorkerHealth";
 
 import { Loading, Resource, type ResourceState } from "../Resource";
+import { useSession } from "../session";
 import type { Action } from "./pageTypes";
 export function SettingsPage({
   version,
@@ -28,6 +29,7 @@ export function SettingsPage({
   setRestore: (backup: Backup) => void;
   setConfirmRestore: (confirmed: boolean) => void;
 }) {
+  const server = useSession().mode === "server";
   const settings = useResource<Settings>("/settings", version);
   const backups = useResource<Backup[]>("/backups", version);
   const backupStatus = useResource<BackupStatus>("/backups/status", version);
@@ -43,7 +45,7 @@ export function SettingsPage({
             <div className="section-title">
               <h3>
                 <Icon name="shield" />
-                本地运行环境
+                {server ? "服务器运行环境" : "本地运行环境"}
               </h3>
               <span className="badge">v{settings.data.version}</span>
             </div>
@@ -209,7 +211,7 @@ export function backupStatusLines(status: BackupStatus): string[] {
   if (!status.s3.configured) lines.push("未配置 S3 上传");
   else if (status.s3.last_status === "ok") lines.push(`已上传到 S3（${date(status.s3.last_at || "")}）`);
   else if (status.s3.last_status === "failed")
-    lines.push(`S3 上传失败（${status.s3.error_code || "upload_failed"}），已保留本地备份；请检查实例角色和存储桶设置`);
+    lines.push(`S3 上传失败（${status.s3.error_code || "upload_failed"}），已保留${isServerMode() ? "服务器上的" : "本地"}备份；请检查实例角色和存储桶设置`);
   else lines.push("S3 上传：等待下一份每日备份");
   return lines;
 }

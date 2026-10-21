@@ -6,6 +6,7 @@ import { RelocateNotice } from "../MarketSummary";
 import type { Overview, Run } from "../types";
 import { Badge } from "../ui";
 import { queueReason } from "../workerStatus";
+import { useSession } from "../session";
 
 import type { Action } from "./pageTypes";
 /** 取消本轮前的确认文案（决定 D13）。 */
@@ -29,6 +30,7 @@ export function RunCard({
   act: Action;
   openCompany?: (id: string) => void;
 }) {
+  const server = useSession().mode === "server";
   const progress = run.progress;
   const total =
       progress?.enrichment_total ??
@@ -68,8 +70,8 @@ export function RunCard({
             当前策略已达到覆盖能力边界，重复继续无法补齐；可定期更新已知市场资料
           </p>
         )}
-      {queueReason(run.status, worker) && (
-        <p className="queue-reason">{queueReason(run.status, worker)}</p>
+      {queueReason(run.status, worker, server) && (
+        <p className="queue-reason">{queueReason(run.status, worker, server)}</p>
       )}
       {run.kind!=="social"&&progress?.website_pages_checked !== undefined && (
         <p className="muted">
