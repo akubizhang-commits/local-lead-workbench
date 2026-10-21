@@ -17,6 +17,7 @@ from leadworkbench.market_store import MIGRATION
 from leadworkbench.maps_policy import DDL as MAPS_DDL
 from leadworkbench.p0_migrations import INDEXES, MIGRATIONS as P0
 from leadworkbench.p1b_migrations import MIGRATIONS as P1B
+from leadworkbench.auth_migrations import MIGRATIONS as AUTH
 from leadworkbench.social_discovery_store import SOCIAL_DISCOVERY_DDL
 from leadworkbench.social_policy import DDL as POLICY_DDL
 from leadworkbench.social_store import SOCIAL_DDL
@@ -27,16 +28,20 @@ from legacy_db import FIXTURES, UPGRADE_FIXTURES, dump_database, load_upgrade_fi
 EXPECTED_NEW_TABLES = {"market_exhausted_items",  # 0011 creates it at start-up instead of on demand
                        # P1 batch 2 side tables (design §2.1, §3)
                        "task_state", "market_changes", "market_recheck_runs", "market_round_baselines",
-                       "market_round_summaries", "review_resolutions", "company_cities", "company_cities_dirty"}
+                       "market_round_summaries", "review_resolutions", "company_cities", "company_cities_dirty",
+                       # AWS trial accounts and sessions (aws_20261021_auth)
+                       "auth_users", "auth_sessions"}
 EXPECTED_NEW_OBJECTS = {"market_changes_market", "market_recheck_market", "schedules_one_enabled_market",
                         "market_round_summaries_market", "company_cities_key", "companies_city_insert",
-                        "companies_city_update", "memberships_city_insert"}
+                        "companies_city_update", "memberships_city_insert",
+                        "auth_sessions_user", "auth_sessions_expires"}
 P1B_IDS = {id for id, _ in P1B}
+AUTH_IDS = {id for id, _ in AUTH}
 ONCE_IDS_0001_0011 = {
     "0001_base_v1", "0002_market_v2", "0003_maps_access_policy", "0004_website_host_gates",
     "0005_listing_aliases", "0006_audit_tables", "0007_social_tables", "0008_social_discovery_tables",
     "0009_social_legacy_links", "0010_market_social_tables", "0011_market_exhausted_items"}
-EXPECTED_NEW_LEDGER = ONCE_IDS_0001_0011 | P1B_IDS
+EXPECTED_NEW_LEDGER = ONCE_IDS_0001_0011 | P1B_IDS | AUTH_IDS
 # work_items is not listed: 0002 archives legacy capped discovery items into the run snapshot and
 # replaces them with one planning item (unchanged historical behaviour, covered by 0a).
 LEGACY_TABLES = ("companies", "contacts", "reviews", "observations", "listings", "tasks", "runs",
@@ -60,15 +65,16 @@ def counts(path, tables):
 
 def test_registry_shape():
     ids = [entry.id for entry in migrations.REGISTRY]
-    assert len(ids) == 33 and len(set(ids)) == 33
+    assert len(ids) == 34 and len(set(ids)) == 34
     assert [i for i in ids if i[0] == "R"] == [f"R0{n}" + i[3:] for n, i in
                                                enumerate((i for i in ids if i[0] == "R"), 1)]
-    assert set(migrations.ONCE_IDS) == ONCE_IDS_0001_0011 | {id for id, _ in P0} | P1B_IDS
+    assert set(migrations.ONCE_IDS) == ONCE_IDS_0001_0011 | {id for id, _ in P0} | P1B_IDS | AUTH_IDS
     p0_positions = [ids.index(id) for id, _ in P0]
     assert p0_positions == sorted(p0_positions)
     p1b_positions = [ids.index(id) for id, _ in P1B]
     assert p1b_positions == sorted(p1b_positions)
     assert min(p1b_positions) > ids.index("R08_resolve_duplicate_reviews")
+    assert ids[-1] == "aws_20261021_auth"
 
 
 @pytest.mark.parametrize("name", UPGRADE_FIXTURES)
@@ -183,7 +189,7 @@ def test_3_p0_database_only_gains_the_new_ledger_rows(tmp_path):
     Store(tmp_path)
     after = dict(ledger(path))
     assert {id: after[id] for id in p0_rows} == p0_rows  # P0 items did not run again
-    assert set(after) - set(p0_rows) == ONCE_IDS_0001_0011 | P1B_IDS
+    assert set(after) - set(p0_rows) == ONCE_IDS_0001_0011 | P1B_IDS | AUTH_IDS
     # Re-running the p1b entries is safe: no new audit rows, identical derived city rows.
     with closing(sqlite3.connect(path)) as con:
         assert con.execute("SELECT count(*) FROM market_changes").fetchone()[0] == changes

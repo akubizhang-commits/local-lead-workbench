@@ -137,6 +137,7 @@ class Entry:
 def _registry():
     from .p0_migrations import MIGRATIONS as P0
     from .p1b_migrations import MIGRATIONS as P1B
+    from .auth_migrations import MIGRATIONS as AUTH
     return (
         Entry("0001_base_v1", "once", _base_v1),
         Entry("0002_market_v2", "once", _market_v2),
@@ -159,6 +160,7 @@ def _registry():
         Entry("R07_resolve_format_reviews", "each", _method("_resolve_format_reviews_locked")),
         Entry("R08_resolve_duplicate_reviews", "each", _method("_resolve_duplicate_reviews_locked")),
         *(Entry(id, "once", step) for id, step in P1B),
+        *(Entry(id, "once", step) for id, step in AUTH),
     )
 
 
