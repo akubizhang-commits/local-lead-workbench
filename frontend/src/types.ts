@@ -52,7 +52,7 @@ export interface RegionConfig {
 }
 export interface Overview {maps_policy?:{manual_required:boolean;retry_after_seconds:number;message:string};companies:number;contacts:number;tasks:number;pending_reviews:number;running_runs:number;queued_runs?:number;worker?:{alive:boolean;last_seen:string|null;problem?:{code:string;message:string}};source_status:Record<'maps'|'website',{available:boolean;message:string}>;retention?:{state:'awaiting_confirmation'|'active';pending_files:number|null;pending_bytes:number|null;export_days?:number}}
 export interface Settings {data_dir:string;version:string;network_mode:string;paid_services:boolean;ai_enabled:boolean}
-export interface Backup {name:string;created_at:string;kind?:'manual'|'auto'|'other';reason?:'pre-restore'|'pre-repair'|null;size_bytes?:number}
+export interface Backup {name:string;created_at:string;kind?:'manual'|'auto'|'other';reason?:'pre-restore'|'pre-repair'|'daily'|null;size_bytes?:number}
 export interface RetentionPolicy {maps_raw_days:number;auto_backup_keep:number;export_days:number}
 export interface RetentionItem {category:'maps_raw'|'auto_backup'|'export';path:string;size_bytes:number;reason:string}
 export interface RetentionView {policy:RetentionPolicy;state:'awaiting_confirmation'|'active';confirmed_at:string|null;confirmed_policy:RetentionPolicy|null;
@@ -65,3 +65,5 @@ export interface ReviewPage {items:Review[];total:number;page:number;page_size:n
 /** GET /api/session (AWS trial §2.6): local returns the start token; login mode adds the session state. */
 export interface SessionInfo {token?:string;mode?:'local'|'server';auth?:boolean;authenticated?:boolean;user?:{username:string};unavailable?:{code:string;detail:string}}
 export interface LoginResult {user:{username:string};token:string}
+/** GET /api/backups/status (AWS trial §5.3): no bucket, prefix, region or key. */
+export interface BackupStatus {daily_enabled:boolean;time:string|null;timezone:string|null;last_daily_at:string|null;last_daily_status:'ok'|'failed'|null;last_daily_error:string|null;next_due_at:string|null;retention_active:boolean;s3:{configured:boolean;last_status:'ok'|'failed'|null;last_at:string|null;error_code:string|null}}

@@ -1272,6 +1272,24 @@ def create_app(data_dir=None, *, allowed_hosts=None, config=None):
                            "kind": kind, "reason": reason, "size_bytes": info.st_size})
         return result
 
+    @app.get("/api/backups/status")
+    def backups_status():
+        """Daily backup and S3 state for the settings page; never bucket, prefix, region or key (§5.3)."""
+        from . import daily_backup
+        local = daily_backup.read_state(app.state.data_dir, daily_backup.STATE)
+        upload = daily_backup.read_state(app.state.data_dir, daily_backup.UPLOAD_STATE)
+        enabled = cfg.backup_daily
+        return {
+            "daily_enabled": enabled, "time": cfg.backup_time if enabled else None,
+            "timezone": cfg.timezone if enabled else None,
+            "last_daily_at": local.get("last_daily_at"), "last_daily_status": local.get("last_daily_status"),
+            "last_daily_error": local.get("last_daily_error"),
+            "next_due_at": daily_backup.iso(daily_backup.next_due(local, daily_backup.utcnow(), cfg)) if enabled else None,
+            "retention_active": retention.peek(app.state.data_dir).get("state") == "active",
+            "s3": {"configured": bool(enabled and cfg.s3_bucket), "last_status": upload.get("status"),
+                   "last_at": upload.get("at"), "error_code": upload.get("error_code")},
+        }
+
     @app.get("/api/retention")
     def retention_view():
         summaries.invalidate()

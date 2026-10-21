@@ -5,7 +5,7 @@ import { formatBytes } from "../ExportJobs";
 import { RetentionPanel } from "../RetentionPanel";
 import { Schedules } from "../Schedules";
 import { SocialSettings } from "../SocialSettings";
-import type { Backup, Overview, Settings } from "../types";
+import type { Backup, BackupStatus, Overview, Settings } from "../types";
 import { Alert, Empty, Icon } from "../ui";
 import { WorkerHealth } from "../WorkerHealth";
 
@@ -30,6 +30,7 @@ export function SettingsPage({
 }) {
   const settings = useResource<Settings>("/settings", version);
   const backups = useResource<Backup[]>("/backups", version);
+  const backupStatus = useResource<BackupStatus>("/backups/status", version);
   return (
     <>
       <WorkerHealth
@@ -121,6 +122,7 @@ export function SettingsPage({
             创建备份
           </button>
         </div>
+        {backupStatus.data && <BackupStatusLines status={backupStatus.data} />}
         <p className="muted">
           恢复会替换当前业务数据，恢复前会自动备份当前数据。有排队中或运行中的轮次时不能恢复：暂停或等待结束即可；已暂停的轮次不阻止恢复，其进度会被备份内容覆盖。后台空闲时可以直接恢复，不需要关闭程序。恢复前须再次确认。
         </p>
@@ -191,7 +193,33 @@ export function DiagnosticsPanel({ busy, act }: { busy: boolean; act: Action }) 
 
 /** Backup category labels (§12); legacy backup-* files are manual (decision D3). */
 export function backupLabel(b: Backup) {
+  if (b.kind === "auto" && b.reason === "daily") return "自动备份（每日）";
   if (b.kind === "auto") return b.reason === "pre-repair" ? "自动备份（修复前）" : "自动备份（恢复前）";
   if (b.kind === "other") return "其他备份（不自动删除）";
   return "手动备份";
+}
+export const RETENTION_UNCONFIRMED = "存储保留策略尚未确认，自动备份不会被清理，请在下方确认";
+/** Status lines above the backup list (AWS trial §5.3); wording is fixed by the design. */
+export function backupStatusLines(status: BackupStatus): string[] {
+  if (!status.daily_enabled) return ["每日自动备份未开启"];
+  const lines =
+    status.last_daily_status === "failed"
+      ? [`上次每日备份失败（${status.last_daily_error || "backup_failed"}），1 小时后重试`]
+      : [`每日 ${status.time} 自动备份 · 上次：${status.last_daily_at ? date(status.last_daily_at) : "暂无"}`];
+  if (!status.s3.configured) lines.push("未配置 S3 上传");
+  else if (status.s3.last_status === "ok") lines.push(`已上传到 S3（${date(status.s3.last_at || "")}）`);
+  else if (status.s3.last_status === "failed")
+    lines.push(`S3 上传失败（${status.s3.error_code || "upload_failed"}），已保留本地备份；请检查实例角色和存储桶设置`);
+  else lines.push("S3 上传：等待下一份每日备份");
+  return lines;
+}
+export function BackupStatusLines({ status }: { status: BackupStatus }) {
+  return (
+    <>
+      {backupStatusLines(status).map((line) => (
+        <p className="backup-status" key={line}>{line}</p>
+      ))}
+      {status.daily_enabled && !status.retention_active && <Alert>{RETENTION_UNCONFIRMED}</Alert>}
+    </>
+  );
 }

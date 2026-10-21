@@ -440,3 +440,4 @@ td:has(>.company-link){min-width:240px}
 .login-notice{color:var(--info-fg);font-size:var(--fs-sm);margin:0}
 .login-foot{color:var(--muted);font-size:var(--fs-xs);margin:12px 0 0}
 .sign-out{margin:0 4px 16px;min-height:36px;font-size:var(--fs-sm)}
+.backup-status{margin:4px 0;font-size:var(--fs-sm);color:var(--text-2)}

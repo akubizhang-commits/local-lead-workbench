@@ -277,3 +277,52 @@ async def test_crashing_upload_is_logged_and_the_loop_continues(tmp_path, monkey
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
+
+
+# ---- GET /api/backups/status ----
+
+def status_client(tmp_path, cfg):
+    from fastapi.testclient import TestClient
+    from leadworkbench import auth
+    from leadworkbench.api import create_app
+    import secrets
+    app = create_app(tmp_path, config=cfg)
+    password = secrets.token_urlsafe(18)
+    auth.create_user(app.state.store, "alice", password)
+    client = TestClient(app, base_url="https://lw.test")
+    assert client.post("/api/auth/login", json={"username": "alice", "password": password}).status_code == 200
+    return app, client
+
+
+def test_status_endpoint_has_no_bucket_details(tmp_path):
+    app, client = status_client(tmp_path, UPLOAD_CFG)
+    body = client.get("/api/backups/status").json()
+    assert body["daily_enabled"] is True and body["time"] == "03:30" and body["timezone"] == "Asia/Shanghai"
+    assert body["last_daily_at"] is None and body["s3"] == {"configured": True, "last_status": None,
+                                                           "last_at": None, "error_code": None}
+    assert body["retention_active"] is False and body["next_due_at"]
+    daily.run_local(app.state.store, UPLOAD_CFG)
+    daily.upload_pending(tmp_path, UPLOAD_CFG, FakeUploader())
+    text = client.get("/api/backups/status").text
+    for secret in ("lw-backups", "ap-northeast-1", "leadworkbench/", "auto-daily-"):
+        assert secret not in text
+    body = json.loads(text)
+    assert body["last_daily_status"] == "ok" and body["s3"]["last_status"] == "ok"
+
+
+def test_status_with_damaged_state_files(tmp_path):
+    app, client = status_client(tmp_path, UPLOAD_CFG)
+    (tmp_path / daily.STATE).write_text("{bad")
+    (tmp_path / daily.UPLOAD_STATE).write_text("{bad")
+    body = client.get("/api/backups/status").json()
+    assert body["last_daily_at"] is None and body["last_daily_status"] is None
+    assert body["s3"]["last_status"] is None and body["s3"]["error_code"] is None
+
+
+def test_status_local_mode(tmp_path):
+    from fastapi.testclient import TestClient
+    from leadworkbench.api import create_app
+    client = TestClient(create_app(tmp_path, allowed_hosts={"testserver"}))
+    token = client.get("/api/session").json()["token"]
+    body = client.get("/api/backups/status", headers={"X-Local-Token": token}).json()
+    assert body["daily_enabled"] is False and body["s3"]["configured"] is False
