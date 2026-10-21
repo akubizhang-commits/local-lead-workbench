@@ -237,7 +237,7 @@ def user_known(store, username: str) -> bool:
     try:
         with store.connect() as con:
             return _user(con, username) is not None
-    except (sqlite3.Error, OSError, TypeError):
+    except (sqlite3.Error, OSError, TypeError, ValueError):
         return False
 
 

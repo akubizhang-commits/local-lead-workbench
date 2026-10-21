@@ -271,6 +271,8 @@ async def test_crashing_upload_is_logged_and_the_loop_continues(tmp_path, monkey
     task = asyncio.create_task(worker.serve(tmp_path, cfg=UPLOAD_CFG))
     try:
         assert await _until(lambda: any(getattr(r, "event", "") == "backup_upload_crashed" for r in caplog.records))
+        crashed = [r for r in caplog.records if getattr(r, "event", "") == "backup_upload_crashed"]
+        assert all(r.exc_info is None and r.error_type == "RuntimeError" for r in crashed)
         before = len(dispatched)
         assert await _until(lambda: len(dispatched) > before)
         assert not task.done()

@@ -369,6 +369,50 @@ def test_login_storage_error_is_503_and_not_counted(server, password, monkeypatc
     login(client, password)
 
 
+def test_non_ascii_csrf_header_is_403(server, password, tmp_path):
+    _, client = server
+    login(client, password)
+    response = client.post("/api/backups", headers={"X-Local-Token": "\xff\xff\xff".encode("latin-1")})
+    assert response.status_code == 403 and response.json()["code"] == "csrf_failed"
+    assert "ERROR" not in logs(tmp_path)
+
+
+def test_lone_surrogate_username_is_401(server):
+    _, client = server
+    body = json.dumps({"username": "\ud800alice", "password": "wrong"})
+    response = client.post("/api/auth/login", content=body, headers={"Content-Type": "application/json"})
+    assert response.status_code in (401, 422), response.text
+
+
+@pytest.mark.parametrize("message,code", [("database is locked", "db_busy"),
+                                          ("attempt to write a readonly database", "readonly_storage")])
+def test_create_session_failure_is_503(server, password, monkeypatch, tmp_path, message, code):
+    _, client = server
+    def fail(*args, **kwargs):
+        raise sqlite3.OperationalError(message)
+    monkeypatch.setattr(auth, "create_session", fail)
+    response = client.post("/api/auth/login", json={"username": "alice", "password": password})
+    assert response.status_code == 503 and response.json()["code"] == code
+    assert str(tmp_path) not in response.text
+
+
+def test_logout_readonly_detail_has_no_path(server, password, monkeypatch, tmp_path):
+    _, client = server
+    token = login(client, password).json()["token"]
+    def fail(*args, **kwargs):
+        raise sqlite3.OperationalError("attempt to write a readonly database")
+    monkeypatch.setattr(auth, "delete_session", fail)
+    response = client.post("/api/auth/logout", headers={"X-Local-Token": token})
+    assert response.status_code == 503 and response.json()["code"] == "readonly_storage"
+    assert response.json()["detail"] == "服务器数据目录不可写，服务暂不可用，请联系管理员。"
+
+
+def test_dummy_hash_is_ready_at_startup(tmp_path, monkeypatch):
+    monkeypatch.setattr(auth, "_DUMMY", [])
+    make(tmp_path)
+    assert len(auth._DUMMY) == 1
+
+
 def test_auth_routes_absent_in_local_mode(tmp_path):
     client = TestClient(create_app(tmp_path, allowed_hosts={"testserver"}))
     token = client.get("/api/session").json()["token"]

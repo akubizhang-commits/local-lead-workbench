@@ -184,7 +184,8 @@ def _upload_finished(task):
         return
     exc = task.exception()
     if exc is not None:
-        log.error("backup upload crashed", exc_info=exc,
+        # error_type only (§8): an unexpected exception's message may carry the bucket or key.
+        log.error("backup upload crashed",
                   extra={"event": "backup_upload_crashed", "error_type": type(exc).__name__})
 
 

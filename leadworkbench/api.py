@@ -74,6 +74,11 @@ def _note_code(code):
         holder["code"] = code
 
 
+def token_matches(given, expected):
+    """Constant-time token check on bytes; non-ASCII header values just fail to match."""
+    return secrets.compare_digest(given.encode("utf-8", "replace"), expected.encode("utf-8", "replace"))
+
+
 def error_response(status, code, detail, headers=None):
     """Every non-2xx /api/* body: {detail, code, request_id} (design §5.4)."""
     _note_code(code)
@@ -646,7 +651,7 @@ def create_app(data_dir=None, *, allowed_hosts=None, config=None):
             return error_response(403, "forbidden", "拒绝跨站请求")
         api = request.url.path.startswith("/api/")
         if api and request.url.path != "/api/session":
-            if not secrets.compare_digest(request.headers.get("x-local-token", ""), token):
+            if not token_matches(request.headers.get("x-local-token", ""), token):
                 return error_response(401, "unauthorized", "缺少本地访问令牌")
         length = request.headers.get("content-length", "0")
         if not length.isdigit() or int(length) > 1_000_000:
@@ -681,6 +686,8 @@ def create_app(data_dir=None, *, allowed_hosts=None, config=None):
     from .login_limiter import LoginLimiter
     limiter = app.state.login_limiter = LoginLimiter()
     hash_slots = {"free": 2}  # at most two concurrent scrypt computations (§2.3)
+    if cfg.auth:
+        auth._dummy_hash()  # generated at process start so the first unknown-user miss costs one scrypt
     resolve_log = {"at": 0.0, "suppressed": 0}
 
     def unavailable_detail(code, detail):
@@ -698,14 +705,19 @@ def create_app(data_dir=None, *, allowed_hosts=None, config=None):
         resolve_log["at"], resolve_log["suppressed"] = moment, 0
         log.warning("session lookup failed", extra=fields)
 
+    def auth_storage_error(exc):
+        """Storage failure on the auth path: 503, with the no-path wording in server mode."""
+        classified = classify_storage_error(exc, app.state.data_dir) or Busy()
+        if cfg.server and classified.code == "readonly_storage":
+            classified = DomainError(SERVER_READONLY, code="readonly_storage", status=classified.status)
+        return classified
+
     async def resolve(request, cookie, *, touch=True):
         """Session for the cookie, or an error response when the read itself failed (§2.6 step 5)."""
         try:
             session = await run_in_threadpool(auth.resolve_session, store, cookie, auth.utcnow(), cfg, touch=touch)
         except (sqlite3.Error, OSError) as exc:
-            classified = classify_storage_error(exc, app.state.data_dir) or Busy()
-            if cfg.server and classified.code == "readonly_storage":
-                classified = DomainError(SERVER_READONLY, code="readonly_storage", status=classified.status)
+            classified = auth_storage_error(exc)
             note_resolve_failure(exc, classified.code)
             return None, domain_response(classified)
         return session, None
@@ -753,7 +765,7 @@ def create_app(data_dir=None, *, allowed_hosts=None, config=None):
                 return error_response(401, "unauthorized", UNAUTHORIZED)
             if session is not None:
                 request.state.user = session.user_id
-                if method not in ("GET", "HEAD") and path not in AUTH_PUBLIC and not secrets.compare_digest(
+                if method not in ("GET", "HEAD") and path not in AUTH_PUBLIC and not token_matches(
                         request.headers.get("x-local-token", ""), session.csrf_token):
                     log.info("csrf token mismatch", extra={"event": "csrf_failed"})
                     return error_response(403, "csrf_failed", CSRF_FAILED)
@@ -850,7 +862,7 @@ def create_app(data_dir=None, *, allowed_hosts=None, config=None):
                 outcome = user is not None
             except (sqlite3.Error, OSError) as exc:
                 outcome = None
-                raise classify_storage_error(exc, app.state.data_dir) or Busy() from None
+                raise auth_storage_error(exc) from None
             finally:
                 locked = limiter.finish(key, ip, outcome, time.monotonic())
                 for scope in locked:
@@ -862,9 +874,12 @@ def create_app(data_dir=None, *, allowed_hosts=None, config=None):
                                                 "user_known": known})
                 return error_response(401, "invalid_credentials", INVALID_CREDENTIALS)
             previous = request.state.session
-            cookie_value, csrf = await run_in_threadpool(
-                auth.create_session, store, user["id"], auth.utcnow(), cfg,
-                previous.id_hash if previous is not None else None)
+            try:
+                cookie_value, csrf = await run_in_threadpool(
+                    auth.create_session, store, user["id"], auth.utcnow(), cfg,
+                    previous.id_hash if previous is not None else None)
+            except (sqlite3.Error, OSError) as exc:
+                raise auth_storage_error(exc) from None
             request.state.user = user["id"]
             response = JSONResponse({"user": {"username": user["username"]}, "token": csrf})
             response.set_cookie(cfg.cookie_name, cookie_value, path="/", secure=cfg.cookie_secure,
@@ -880,7 +895,7 @@ def create_app(data_dir=None, *, allowed_hosts=None, config=None):
                 except (sqlite3.Error, OSError) as exc:
                     log.warning("logout failed", extra={"event": "auth_logout_failed",
                                                         "error_type": type(exc).__name__})
-                    raise classify_storage_error(exc, app.state.data_dir) or Busy() from None
+                    raise auth_storage_error(exc) from None
             response = Response(status_code=204)
             response.delete_cookie(cfg.cookie_name, path="/", secure=cfg.cookie_secure, httponly=True,
                                    samesite="lax")
