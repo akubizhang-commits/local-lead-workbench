@@ -1,5 +1,6 @@
 """AWS trial D5: scheduled daily backups (design §5.1–5.3, §10.1 test_daily_backup)."""
 from datetime import UTC, datetime, timedelta
+import json
 import logging
 import os
 import sqlite3
@@ -84,3 +85,195 @@ def test_corrupt_state_reads_empty(tmp_path, caplog, name):
     assert any(getattr(r, "event", "") == "backup_state_invalid" and r.kind == name for r in caplog.records)
     (tmp_path / name).write_text("[1, 2]")
     assert daily.read_state(tmp_path, name) == {}
+
+
+# ---- S3 upload (FakeUploader) ----
+import asyncio  # noqa: E402
+import threading  # noqa: E402
+import time  # noqa: E402
+
+UPLOAD_CFG = load({"LEAD_MODE": "server", "LEAD_PUBLIC_ORIGIN": "https://lw.test",
+                   "LEAD_BACKUP_S3_BUCKET": "lw-backups", "LEAD_BACKUP_S3_REGION": "ap-northeast-1"})
+
+
+class FakeUploader:
+    def __init__(self, error=None, gate=None):
+        self.calls, self.error, self.gate = [], error, gate
+
+    def upload(self, fileobj, name):
+        self.calls.append(name)
+        if self.gate is not None:
+            self.gate.wait(10)
+        data = fileobj.read()
+        if self.error is not None:
+            raise self.error
+        self.data = data
+        return f"leadworkbench/2026/10/{name}"
+
+
+def client_error(code):
+    ClientError = pytest.importorskip("botocore.exceptions").ClientError
+    return ClientError({"Error": {"Code": code, "Message": "secret bucket name lw-backups"}}, "PutObject")
+
+
+def test_upload_due_rules():
+    now = at("2026-10-21T05:00")
+    ok = {"last_daily_status": "ok", "last_daily_name": "auto-daily-b.sqlite3"}
+    assert not daily.upload_due({}, {}, now)
+    assert not daily.upload_due({}, {**ok, "last_daily_status": "failed"}, now)
+    assert daily.upload_due({}, ok, now)
+    assert daily.upload_due({"name": "auto-daily-a.sqlite3", "status": "ok"}, ok, now)
+    assert not daily.upload_due({"name": "auto-daily-b.sqlite3", "status": "ok"}, ok, now)
+    failed = {"name": "auto-daily-b.sqlite3", "status": "failed", "attempts": 1, "next_at": daily.iso(now)}
+    assert daily.upload_due(failed, ok, now)
+    assert not daily.upload_due({**failed, "next_at": daily.iso(now + timedelta(minutes=1))}, ok, now)
+    assert not daily.upload_due({**failed, "attempts": 3}, ok, now)
+
+
+def test_upload_success_and_failures(tmp_path):
+    store = Store(tmp_path)
+    local = daily.run_local(store, UPLOAD_CFG)
+    fake = FakeUploader()
+    state = daily.upload_pending(tmp_path, UPLOAD_CFG, fake)
+    assert state["status"] == "ok" and fake.calls == [local["last_daily_name"]]
+    assert fake.data == (tmp_path / "backups" / local["last_daily_name"]).read_bytes()
+    assert (os.stat(tmp_path / daily.UPLOAD_STATE).st_mode & 0o777) == 0o600
+    assert daily.upload_pending(tmp_path, UPLOAD_CFG, fake)["status"] == "ok" and len(fake.calls) == 1
+
+
+def test_upload_retries_three_times_at_most(tmp_path):
+    store = Store(tmp_path)
+    daily.run_local(store, UPLOAD_CFG)
+    fake = FakeUploader(error=client_error("AccessDenied"))
+    now = daily.utcnow()
+    for attempt in range(1, 4):
+        state = daily.upload_pending(tmp_path, UPLOAD_CFG, fake, now=now)
+        assert (state["status"], state["error_code"], state["attempts"]) == ("failed", "AccessDenied", attempt)
+        assert "lw-backups" not in json.dumps(state)
+        now += timedelta(hours=1)
+    assert daily.upload_pending(tmp_path, UPLOAD_CFG, fake, now=now)["attempts"] == 3
+    assert len(fake.calls) == 3
+
+
+def test_upload_error_code_is_sanitised(tmp_path):
+    store = Store(tmp_path)
+    daily.run_local(store, UPLOAD_CFG)
+    state = daily.upload_pending(tmp_path, UPLOAD_CFG, FakeUploader(error=client_error("Bad Code<script>" + "x" * 99)))
+    assert state["error_code"] == ("BadCodescript" + "x" * 99)[:64]
+    EndpointConnectionError = pytest.importorskip("botocore.exceptions").EndpointConnectionError
+    (tmp_path / daily.UPLOAD_STATE).unlink()
+    state = daily.upload_pending(tmp_path, UPLOAD_CFG, FakeUploader(error=EndpointConnectionError(endpoint_url="u")))
+    assert state["error_code"] == "EndpointConnectionError"
+
+
+def test_missing_or_symlinked_backup(tmp_path):
+    store = Store(tmp_path)
+    local = daily.run_local(store, UPLOAD_CFG)
+    path = tmp_path / "backups" / local["last_daily_name"]
+    moved = tmp_path / "elsewhere.sqlite3"
+    path.rename(moved)
+    state = daily.upload_pending(tmp_path, UPLOAD_CFG, FakeUploader())
+    assert (state["error_code"], state["attempts"]) == ("local_file_missing", 3)
+    (tmp_path / daily.UPLOAD_STATE).unlink()
+    path.symlink_to(moved)
+    state = daily.upload_pending(tmp_path, UPLOAD_CFG, FakeUploader())
+    assert (state["error_code"], state["attempts"]) == ("local_file_missing", 3)
+
+
+def test_deleted_after_open_still_uploads(tmp_path):
+    store = Store(tmp_path)
+    local = daily.run_local(store, UPLOAD_CFG)
+    path = tmp_path / "backups" / local["last_daily_name"]
+    expected = path.read_bytes()
+    class Deleting(FakeUploader):
+        def upload(self, fileobj, name):
+            path.unlink()  # retention removes it while the upload runs
+            return super().upload(fileobj, name)
+    fake = Deleting()
+    assert daily.upload_pending(tmp_path, UPLOAD_CFG, fake)["status"] == "ok"
+    assert fake.data == expected
+
+
+def test_boto3_missing(tmp_path, monkeypatch):
+    store = Store(tmp_path)
+    daily.run_local(store, UPLOAD_CFG)
+    class Missing(FakeUploader):
+        def upload(self, fileobj, name):
+            raise ModuleNotFoundError("No module named 'boto3'")
+    assert daily.upload_pending(tmp_path, UPLOAD_CFG, Missing())["error_code"] == "boto3_missing"
+
+
+async def _until(predicate, timeout=5.0):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        await asyncio.sleep(0.02)
+    return False
+
+
+async def _quiet_social(store, **kwargs):
+    return False
+
+
+async def test_blocked_upload_never_delays_a_restore(tmp_path, monkeypatch, caplog):
+    from leadworkbench import backup_upload, social_worker, worker
+    from leadworkbench.worker import worker_lock
+    store = Store(tmp_path)
+    daily.run_local(store, UPLOAD_CFG)  # today's backup exists: no new local backup is due
+    gate = threading.Event()
+    fake = FakeUploader(gate=gate)
+    monkeypatch.setattr(backup_upload, "from_config", lambda cfg: fake)
+    monkeypatch.setattr(daily, "STARTUP_DELAY_SECONDS", 0)
+    monkeypatch.setattr(daily, "CHECK_SECONDS", 0.05)
+    monkeypatch.setattr(social_worker, "process_social_item", _quiet_social)
+    dispatched = []
+    original = Store.dispatch_due
+    monkeypatch.setattr(Store, "dispatch_due", lambda self: (dispatched.append(1), original(self))[1])
+    task = asyncio.create_task(worker.serve(tmp_path, cfg=UPLOAD_CFG))
+    try:
+        assert await _until(lambda: fake.calls)
+        got = await asyncio.to_thread(lambda: _lock_within(tmp_path, worker_lock, 5))
+        assert got  # worker.lock is free while the upload thread is blocked
+        before = len(dispatched)
+        assert await _until(lambda: len(dispatched) > before)
+        await asyncio.sleep(0.3)
+        assert len(fake.calls) == 1  # only one upload at a time
+        gate.set()
+        assert await _until(lambda: daily.read_state(tmp_path, daily.UPLOAD_STATE).get("status") == "ok")
+    finally:
+        gate.set()
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+def _lock_within(directory, worker_lock, seconds):
+    with worker_lock(directory, wait_seconds=seconds):
+        return True
+
+
+async def test_crashing_upload_is_logged_and_the_loop_continues(tmp_path, monkeypatch, caplog):
+    from leadworkbench import backup_upload, social_worker, worker
+    store = Store(tmp_path)
+    daily.run_local(store, UPLOAD_CFG)
+    class Crash(FakeUploader):
+        def upload(self, fileobj, name):
+            self.calls.append(name)
+            raise RuntimeError("unexpected")
+    fake = Crash()
+    monkeypatch.setattr(backup_upload, "from_config", lambda cfg: fake)
+    monkeypatch.setattr(daily, "STARTUP_DELAY_SECONDS", 0)
+    monkeypatch.setattr(daily, "CHECK_SECONDS", 0.05)
+    monkeypatch.setattr(social_worker, "process_social_item", _quiet_social)
+    dispatched = []
+    original = Store.dispatch_due
+    monkeypatch.setattr(Store, "dispatch_due", lambda self: (dispatched.append(1), original(self))[1])
+    task = asyncio.create_task(worker.serve(tmp_path, cfg=UPLOAD_CFG))
+    try:
+        assert await _until(lambda: any(getattr(r, "event", "") == "backup_upload_crashed" for r in caplog.records))
+        before = len(dispatched)
+        assert await _until(lambda: len(dispatched) > before)
+        assert not task.done()
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)

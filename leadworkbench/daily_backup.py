@@ -123,3 +123,79 @@ def run_local(store, cfg, now=None) -> dict:
         log.warning("could not write backup state", exc_info=True,
                     extra={"event": "backup_state_write_failed", "kind": STATE})
     return state
+
+
+# ---- S3 upload (§5.2): background thread, never holds worker.lock ----
+
+def upload_due(upload_state, daily_state, now) -> bool:
+    name = daily_state.get("last_daily_name")
+    if daily_state.get("last_daily_status") != "ok" or not name:
+        return False
+    if upload_state.get("name") != name:
+        return True
+    if upload_state.get("status") != "failed" or int(upload_state.get("attempts") or 0) >= UPLOAD_ATTEMPTS:
+        return False
+    retry = _parse(upload_state.get("next_at"))
+    return retry is None or now >= retry
+
+
+def _error_code(exc):
+    import re
+    code = None
+    response = getattr(exc, "response", None)
+    if isinstance(response, dict):
+        code = (response.get("Error") or {}).get("Code")
+    code = re.sub(r"[^A-Za-z0-9_.-]", "", str(code or type(exc).__name__))[:64]
+    return code or "upload_failed"
+
+
+def _upload_errors():
+    errors = [OSError]
+    try:
+        from botocore.exceptions import BotoCoreError, ClientError
+        errors += [BotoCoreError, ClientError]
+    except ImportError:
+        pass
+    return tuple(errors)
+
+
+def upload_pending(directory, cfg, uploader, now=None) -> dict:
+    """Upload the newest daily backup if due; writes backup-upload-state.json only.
+    Unexpected exceptions propagate (the worker logs ``backup_upload_crashed``)."""
+    import errno
+    now = now or utcnow()
+    daily_state = read_state(directory, STATE)
+    state = read_state(directory, UPLOAD_STATE)
+    if uploader is None or not upload_due(state, daily_state, now):
+        return state
+    name = daily_state["last_daily_name"]
+    attempts = int(state.get("attempts") or 0) + 1 if state.get("name") == name else 1
+    failed = {"name": name, "status": "failed", "at": iso(now), "key": None, "attempts": attempts,
+              "next_at": iso(now + RETRY_AFTER)}
+    path = Path(directory) / "backups" / name
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError as exc:
+        if isinstance(exc, FileNotFoundError) or exc.errno == errno.ELOOP:
+            state = {**failed, "error_code": "local_file_missing", "attempts": UPLOAD_ATTEMPTS}
+        else:
+            state = {**failed, "error_code": _error_code(exc)}
+        log.warning("backup upload failed", extra={"event": "backup_upload_failed", "error_type": type(exc).__name__,
+                                                   "code": state["error_code"]})
+        write_state(directory, UPLOAD_STATE, state)
+        return state
+    try:
+        with os.fdopen(fd, "rb") as handle:
+            key = uploader.upload(handle, name)
+        state = {"name": name, "status": "ok", "at": iso(now), "key": key, "error_code": None,
+                 "attempts": attempts, "next_at": None}
+    except ImportError as exc:
+        state = {**failed, "error_code": "boto3_missing"}
+        log.warning("backup upload failed", extra={"event": "backup_upload_failed", "error_type": type(exc).__name__,
+                                                   "code": "boto3_missing"})
+    except _upload_errors() as exc:
+        state = {**failed, "error_code": _error_code(exc)}
+        log.warning("backup upload failed", extra={"event": "backup_upload_failed", "error_type": type(exc).__name__,
+                                                   "code": state["error_code"]})
+    write_state(directory, UPLOAD_STATE, state)
+    return state

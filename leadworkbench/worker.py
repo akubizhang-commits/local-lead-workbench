@@ -179,6 +179,29 @@ AUTH_PURGE_FIRST_DELAY = 300
 AUTH_PURGE_INTERVAL = 3600
 
 
+def _upload_finished(task):
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        log.error("backup upload crashed", exc_info=exc,
+                  extra={"event": "backup_upload_crashed", "error_type": type(exc).__name__})
+
+
+def start_upload(task, directory, cfg, uploader):
+    """At most one upload at a time; returns the current task."""
+    from . import daily_backup
+    if task is not None and not task.done():
+        return task
+    if not daily_backup.upload_due(daily_backup.read_state(directory, daily_backup.UPLOAD_STATE),
+                                   daily_backup.read_state(directory, daily_backup.STATE), daily_backup.utcnow()):
+        return task
+    task = asyncio.create_task(asyncio.to_thread(daily_backup.upload_pending, directory, cfg, uploader),
+                               name="worker-backup-upload")
+    task.add_done_callback(_upload_finished)
+    return task
+
+
 def run_auth_purge(store):
     from . import auth
     try:
@@ -267,6 +290,7 @@ async def serve(directory, *, server=False, cfg=None):
         pulse = asyncio.create_task(heartbeat(directory))
         scheduler = ParallelWorkScheduler()
         op = None
+        upload_task = None
         try:
             # Step 2 (P1-4): reclaim Maps processes left by a previous worker,
             # before recover() requeues their queries. ps/lsof/waits run in a thread.
@@ -286,8 +310,15 @@ async def serve(directory, *, server=False, cfg=None):
             from . import daily_backup
             daily = cfg if cfg is not None and cfg.backup_daily else None
             backup_check = time.monotonic() + daily_backup.STARTUP_DELAY_SECONDS
+            from . import backup_upload
+            uploader = backup_upload.from_config(daily) if daily else None
+            upload_check = time.monotonic() + daily_backup.STARTUP_DELAY_SECONDS
             while True:
                 try:
+                    # S3 upload runs in its own thread without worker.lock, so it never delays a restore.
+                    if uploader is not None and time.monotonic() >= upload_check:
+                        upload_check = time.monotonic() + daily_backup.CHECK_SECONDS
+                        upload_task = start_upload(upload_task, directory, daily, uploader)
                     if not op.held and not op.try_acquire():
                         await asyncio.sleep(1)  # Restore in progress: no dispatch, no database writes.
                         continue
@@ -330,6 +361,8 @@ async def serve(directory, *, server=False, cfg=None):
                     set_problem(directory)
                 await asyncio.sleep(1)
         finally:
+            if upload_task is not None and not upload_task.done():
+                await asyncio.wait({upload_task}, timeout=10)  # a thread cannot be cancelled
             pulse.cancel()
             cleanup = asyncio.gather(scheduler.aclose(), pulse, return_exceptions=True)
             interrupted = False

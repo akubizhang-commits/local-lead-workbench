@@ -20,6 +20,8 @@ dependencies = [
 dev = ["pytest>=8,<10", "pytest-asyncio>=0.24,<2"]
 social = ["playwright>=1.55,<2", "instaloader>=4.14,<5"]
 geography = ["shapely>=2,<3"]
+# Server deployments (AWS trial): exact pins, installed from requirements-server.lock with hashes.
+server = ["playwright==1.63.0", "boto3==1.43.116"]
 
 [tool.setuptools.packages.find]
 include = ["leadworkbench*"]
