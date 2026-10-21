@@ -173,6 +173,22 @@ def run_retention(directory):
     except Exception:  # never let clean-up stop the worker
         log.warning("retention run failed", exc_info=True, extra={"event": "retention_failed"})
         return None
+# Expired sessions (AWS trial §2.4): first purge 5 minutes after start, then hourly, only while
+# worker.lock is held and auth.lock is free (a restore holds it).
+AUTH_PURGE_FIRST_DELAY = 300
+AUTH_PURGE_INTERVAL = 3600
+
+
+def run_auth_purge(store):
+    from . import auth
+    try:
+        with auth.auth_lock(store.directory, wait_seconds=0):
+            return auth.purge_expired(store, auth.utcnow())
+    except LockTimeout:
+        return None
+    except Exception as exc:  # never let clean-up stop the worker
+        log.warning("session purge failed", extra={"event": "auth_purge_failed", "error_type": type(exc).__name__})
+        return None
 STARTING = {"code": "starting", "message": "后台采集等待数据库初始化…"}
 
 
@@ -260,6 +276,7 @@ async def serve(directory):
             store.recover_social()
             failures = 0
             retention_due = time.monotonic() + RETENTION_FIRST_DELAY
+            purge_due = time.monotonic() + AUTH_PURGE_FIRST_DELAY
             while True:
                 try:
                     if not op.held and not op.try_acquire():
@@ -272,6 +289,9 @@ async def serve(directory):
                     if time.monotonic() >= retention_due:
                         retention_due = time.monotonic() + RETENTION_INTERVAL
                         await asyncio.to_thread(run_retention, directory)
+                    if time.monotonic() >= purge_due:
+                        purge_due = time.monotonic() + AUTH_PURGE_INTERVAL
+                        await asyncio.to_thread(run_auth_purge, store)
                     if await scheduler.idle(grace=worker_scheduler.IDLE_GRACE_SECONDS):
                         op.release()
                 except Exception as exc:

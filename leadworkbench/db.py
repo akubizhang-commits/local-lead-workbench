@@ -7,6 +7,7 @@ import calendar
 import hashlib
 import json
 import logging
+import os
 import re
 from pathlib import Path
 import shutil
@@ -1701,6 +1702,65 @@ def _restore_copy(directory, name):
                     extra={"event": "restore_copy_failed"})
         raise Invalid("无法读取备份文件，请检查磁盘空间或文件权限") from exc
     return tmp
+
+
+class RestoreSaveFailed(RuntimeError):
+    """The current database could neither be backed up nor copied aside."""
+
+
+def restore_offline(directory, name):
+    """``admin restore --accounts backup`` (AWS trial §2.8.1): replace the database while every
+    process is stopped, using the backup's own accounts. Does not open the current database as a
+    Store (it may be unreadable). Deliberately skips the queued/running round check of the web
+    restore: with api and worker stopped nothing can run, and a broken database cannot be queried."""
+    from .auth_migrations import _auth_ddl
+    directory = Path(directory).expanduser().resolve()
+    live = directory / "workbench.sqlite3"
+    tmp = _restore_copy(directory, name)
+    try:
+        with closing(sqlite3.connect(tmp)) as source:
+            _validate_restore_copy(source)
+            if live.exists():
+                _save_current(directory, live)
+            _auth_ddl(None, source)
+            source.execute("DELETE FROM auth_sessions")  # sessions in a backup are always void
+            source.commit()
+            users = source.execute("SELECT count(*) FROM auth_users").fetchone()[0]
+        _remove_database_files(live, include_main=False)
+        os.replace(tmp, live)
+        live.chmod(0o600)
+        fd = os.open(directory, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    finally:
+        _remove_database_files(tmp)
+    store = Store(directory)
+    store.recover()
+    store.recover_social()
+    return {"users": users}
+
+
+def _save_current(directory, live):
+    folder = directory / "backups"
+    stamp = datetime.now(UTC).strftime('%Y%m%dT%H%M%S')
+    try:
+        _backup_file(live, folder / f"auto-pre-restore-{stamp}-{uid()[:8]}.sqlite3")
+        return
+    except (sqlite3.Error, OSError):
+        pass
+    damaged = folder / f"damaged-{stamp}"
+    try:
+        damaged.mkdir(mode=0o700)
+        for suffix in ("", "-wal", "-shm"):
+            source = Path(f"{live}{suffix}")
+            if source.exists():
+                target = damaged / source.name
+                shutil.copyfile(source, target)
+                target.chmod(0o600)
+    except OSError as exc:
+        raise RestoreSaveFailed("无法保存当前数据库，恢复已取消") from exc
 
 
 def _validate_restore_copy(source):
