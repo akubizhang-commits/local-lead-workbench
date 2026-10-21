@@ -286,8 +286,14 @@ def _backup_candidates(data_dir: Path, keep):
             info = os.lstat(path)
             autos.append((info.st_mtime_ns, name, path, info.st_size))
     autos.sort(reverse=True)
-    return [_item("auto_backup", data_dir, path, size, mtime_ns, f"超出最近 {keep} 份")
-            for mtime_ns, _name, path, size in autos[keep:]]
+    # Two groups, each keeps its newest N (AWS trial §5.1): daily backups never push out
+    # the pre-restore / pre-repair safety copies. The non-daily group is unchanged.
+    daily = [entry for entry in autos if entry[1].startswith("auto-daily-")]
+    other = [entry for entry in autos if not entry[1].startswith("auto-daily-")]
+    return ([_item("auto_backup", data_dir, path, size, mtime_ns, f"超出最近 {keep} 份")
+             for mtime_ns, _name, path, size in other[keep:]]
+            + [_item("auto_backup", data_dir, path, size, mtime_ns, f"超出最近 {keep} 份每日备份")
+               for mtime_ns, _name, path, size in daily[keep:]])
 
 
 def _export_candidates(data_dir: Path, days, at):

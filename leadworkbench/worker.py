@@ -247,7 +247,7 @@ async def open_store_with_retry(directory):
         return store
 
 
-async def serve(directory, *, server=False):
+async def serve(directory, *, server=False, cfg=None):
     from functools import partial
     from . import maps_guard, worker_scheduler
     from .sources import social_browser
@@ -282,6 +282,10 @@ async def serve(directory, *, server=False):
             failures = 0
             retention_due = time.monotonic() + RETENTION_FIRST_DELAY
             purge_due = time.monotonic() + AUTH_PURGE_FIRST_DELAY
+            # Daily backup (AWS trial §5.1): first check 120 s after start (catches a missed time).
+            from . import daily_backup
+            daily = cfg if cfg is not None and cfg.backup_daily else None
+            backup_check = time.monotonic() + daily_backup.STARTUP_DELAY_SECONDS
             while True:
                 try:
                     if not op.held and not op.try_acquire():
@@ -297,6 +301,11 @@ async def serve(directory, *, server=False):
                     if time.monotonic() >= purge_due:
                         purge_due = time.monotonic() + AUTH_PURGE_INTERVAL
                         await asyncio.to_thread(run_auth_purge, store)
+                    if daily and time.monotonic() >= backup_check:
+                        backup_check = time.monotonic() + daily_backup.CHECK_SECONDS
+                        if daily_backup.due(daily_backup.read_state(directory, daily_backup.STATE),
+                                            daily_backup.utcnow(), daily):
+                            await asyncio.to_thread(daily_backup.run_local, store, daily)
                     if await scheduler.idle(grace=worker_scheduler.IDLE_GRACE_SECONDS):
                         op.release()
                 except Exception as exc:
@@ -357,7 +366,7 @@ def main():
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, task.cancel)
-        await serve(args.data_dir, server=cfg.server)
+        await serve(args.data_dir, server=cfg.server, cfg=cfg)
     try:
         asyncio.run(runner())
     except (KeyboardInterrupt, asyncio.CancelledError):

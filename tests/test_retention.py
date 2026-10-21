@@ -296,3 +296,61 @@ def test_diagnostics_bundle_has_retention_config_and_log(world):
     assert config["state"] == "active" and config["policy"] == retention.DEFAULT_POLICY
     assert "logs/retention.log" in files and '"action": "deleted"' in files["logs/retention.log"]
     assert all("RAW-RESULT-MARKER" not in text for text in files.values())
+
+
+def test_daily_backups_are_counted_separately(tmp_path):
+    """AWS trial §5.1: auto-daily-* and the other auto-* each keep their newest N."""
+    root = tmp_path / "data"
+    create_app(root, allowed_hosts={"testserver"})
+    backups = root / "backups"
+    backups.mkdir(exist_ok=True)
+    others, dailies = [], []
+    for index in range(12):
+        other = backups / f"auto-pre-restore-202610{index:02d}T000000-{index:08x}.sqlite3"
+        daily = backups / f"auto-daily-202610{index:02d}T000000-{index:08x}.sqlite3"
+        for path, group in ((other, others), (daily, dailies)):
+            path.write_bytes(b"b" * 10)
+            os.utime(path, (ago(30 - index), ago(30 - index)))
+            group.append(path)
+    items = retention._backup_candidates(root, 10)
+    reasons = {item["path"]: item["reason"] for item in items}
+    assert {f"backups/{p.name}" for p in others[:2]} | {f"backups/{p.name}" for p in dailies[:2]} == set(reasons)
+    assert {reasons[f"backups/{p.name}"] for p in others[:2]} == {"超出最近 10 份"}
+    assert {reasons[f"backups/{p.name}"] for p in dailies[:2]} == {"超出最近 10 份每日备份"}
+
+
+def test_daily_backups_alone_leave_other_group_unchanged(tmp_path):
+    root = tmp_path / "data"
+    create_app(root, allowed_hosts={"testserver"})
+    backups = root / "backups"
+    backups.mkdir(exist_ok=True)
+    for index in range(3):
+        path = backups / f"auto-pre-repair-202610{index:02d}T000000-{index:08x}.sqlite3"
+        path.write_bytes(b"b")
+    for index in range(15):
+        path = backups / f"auto-daily-202610{index:02d}T000000-{index:08x}.sqlite3"
+        path.write_bytes(b"b")
+        os.utime(path, (ago(30 - index), ago(30 - index)))
+    items = retention._backup_candidates(root, 10)
+    assert len(items) == 5 and all("每日备份" in item["reason"] for item in items)
+
+
+def test_unconfirmed_policy_deletes_no_daily_backup(tmp_path):
+    root = tmp_path / "data"
+    create_app(root, allowed_hosts={"testserver"})
+    backups = root / "backups"
+    backups.mkdir(exist_ok=True)
+    for index in range(15):
+        (backups / f"auto-daily-202610{index:02d}T000000-{index:08x}.sqlite3").write_bytes(b"b")
+    assert retention.run(root, "auto") is None
+    assert len(list(backups.glob("auto-daily-*"))) == 15
+
+
+def test_daily_backup_kind(tmp_path):
+    app = create_app(tmp_path, allowed_hosts={"testserver"})
+    name = app.state.store.backup(kind="daily")["name"]
+    assert name.startswith("auto-daily-")
+    client = TestClient(app)
+    client.headers["X-Local-Token"] = client.get("/api/session").json()["token"]
+    listed = {b["name"]: b for b in client.get("/api/backups").json()}
+    assert (listed[name]["kind"], listed[name]["reason"]) == ("auto", "daily")

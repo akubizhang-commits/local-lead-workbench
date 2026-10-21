@@ -448,7 +448,7 @@ class ReviewCleanupConfirm(Input):
 
 def backup_kind(name):
     """manual / auto (with reason) / other; legacy backup-* are manual (decision D3)."""
-    match = re.fullmatch(r"auto-(pre-restore|pre-repair)-.+\.sqlite3", name)
+    match = re.fullmatch(r"auto-(pre-restore|pre-repair|daily)-.+\.sqlite3", name)
     if match:
         return "auto", match.group(1)
     return ("manual" if name.startswith("backup-") else "other"), None

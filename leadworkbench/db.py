@@ -26,7 +26,7 @@ from .company_comparison import website_key, brief, distinct_branches, branch_id
 from . import review_policy
 
 UTC = timezone.utc
-BACKUP_KINDS = ("manual", "pre-restore", "pre-repair")
+BACKUP_KINDS = ("manual", "pre-restore", "pre-repair", "daily")
 log = logging.getLogger(__name__)
 
 
