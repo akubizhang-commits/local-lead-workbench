@@ -34,7 +34,7 @@ worker ──实例角色（IMDSv2）──▶ S3 桶（每日备份，可选）
 
 ## 3. 创建云资源（控制台或 CLI，由你执行）
 
-1. **区域**：东京 `ap-northeast-1` 或美东 `us-east-1`。客户在亚洲选东京延迟更低；美东价格通常最低。
+1. **区域**：新加坡 `ap-southeast-1`、东京 `ap-northeast-1` 或美东 `us-east-1`。客户在亚洲选新加坡或东京延迟更低；美东价格通常最低。三个区域的步骤相同，下文出现的区域名按你选的替换。
 2. **EC2 实例**：Amazon Linux 2023（arm64），类型 `t4g.medium`（x86 备选 `t3.medium`，选 x86 AMI）。
    - 根卷：gp3，40 GiB，**加密**，**DeleteOnTermination=false**（实例被终止时磁盘保留）。
    - 元数据：**IMDSv2 必需**（HttpTokens=required），**跳数上限 2**（容器要多经一跳才能拿到实例角色凭据）。
@@ -121,7 +121,9 @@ docker compose ps             # 等 api、worker 显示 healthy
 
 首次启动会做数据库迁移，期间网页显示 502 属正常。
 
-如果服务器所在网络无法访问 proxy.golang.org（例如部分中国大陆网络），构建时加 `--build-arg GOPROXY=https://goproxy.cn,direct`；AWS 东京、美东区域不需要。
+如果服务器所在网络无法访问 proxy.golang.org（例如部分中国大陆网络），构建时加 `--build-arg GOPROXY=https://goproxy.cn,direct`；AWS 新加坡、东京、美东区域不需要。
+
+启动后运行 `sh deploy/verify.sh` 做部署后检查（全部 PASS 才算部署完成）。由 AI 助手（例如 kiro-cli）在服务器上执行部署时，让它按 `deploy/AGENT_RUNBOOK.md` 操作。
 
 ## 7. 创建账号
 
