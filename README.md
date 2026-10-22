@@ -102,6 +102,13 @@ npm run build
 
 同一套代码也可以部署到一台 AWS EC2 上，由客户通过浏览器访问：Docker Compose 运行 api、worker 和 Caddy（HTTPS），账号密码登录，每天自动备份并可上传 S3。本地模式（`scripts/start.sh`）行为不变、不需要登录。部署步骤、费用粗估和已知限制见 [docs/deploy/aws.md](docs/deploy/aws.md)。
 
+### 部署与架构文档
+
+- [系统架构设计](docs/architecture.md)：当前部署架构、模块、数据、安全、并发、已知限制，以及规划中的目标架构
+- [新加坡区域部署手册（ap-southeast-1，逐步操作）](docs/deploy/aws-singapore.md)：从建 S3、IAM、EC2 到 kiro-cli 部署、验证、阶段 0 实测和日常运维
+- [部署到 AWS（参考说明）](docs/deploy/aws.md)
+- [服务器部署手册（给 AI 部署助手）](deploy/AGENT_RUNBOOK.md)
+
 ## 文档
 
 - [部署到 AWS（首个客户体验版）](docs/deploy/aws.md)
