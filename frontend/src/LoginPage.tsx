@@ -43,6 +43,7 @@ export function LoginPage({notice,unavailable,initialError,onLogin}:{notice?:str
    <input id="login-password" ref={passwordRef} name="password" type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} disabled={submitting}/>
    <button type="submit" className="primary" disabled={submitting||!!unavailable}>{submitting?'正在登录…':'登录'}</button>
    <p className="login-foot">忘记密码请联系管理员重置。</p>
+   <p className="login-foot"><a href="/about">了解产品 · 合作伙伴介绍</a></p>
   </form>
  </main>;
 }
