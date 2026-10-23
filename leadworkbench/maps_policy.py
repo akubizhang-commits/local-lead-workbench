@@ -5,8 +5,12 @@ import random
 import time
 from datetime import datetime, timezone
 
-QUERY_GAP_SECONDS = (60, 120)
-BACKOFF_SECONDS = (600, 1800, 7200)
+QUERY_GAP_SECONDS = (120, 240)
+# Transient (chiefly time-budget) backoff. Timeouts here are usually benign — a
+# dense tile that returns results but can't finish in one pass — so the backoff is
+# kept short; the per-query subdivision (market_worker) converges faster this way.
+# Genuine platform throttling has its own path (RESTRICTIONS -> manual cooldown).
+BACKOFF_SECONDS = (120, 300, 900)
 MANUAL_COOLDOWN_SECONDS = 1800
 RESTRICTIONS = {'captcha', 'rate_limited', 'access_denied'}
 TRANSIENT = {'timeout', 'nonzero_exit', 'adapter_error', 'inactivity_timeout'}
@@ -64,6 +68,15 @@ def observe(con, result, at=None, *, query_failures=0):
         manual, delay = True, MANUAL_COOLDOWN_SECONDS
         explanation = {'captcha':'检测到验证码或异常流量', 'rate_limited':'平台限制访问频率',
                        'access_denied':'平台拒绝访问'}[reason]
+    elif reason in {'timeout', 'inactivity_timeout'} and (result.get('records') or []):
+        # A timeout that still returned results is Maps' normal "too many results
+        # to finish in one pass" — a benign partial, not installation throttling.
+        # It keeps the ordinary inter-query gap and does NOT raise the global
+        # failure counter, so a dense query can never, by timing out while
+        # producing data, drive the whole installation into cooldown/manual stop.
+        # The per-tile subdivision (market_worker) handles coverage instead.
+        failures = 0
+        retry = False
     elif reason in TRANSIENT:
         failures = max(failures+1, query_failures)
         if failures <= len(BACKOFF_SECONDS):

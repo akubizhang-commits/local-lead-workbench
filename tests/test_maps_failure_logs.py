@@ -177,7 +177,7 @@ async def test_time_budget_warning_is_scraper_error(tmp_path, monkeypatch):
     fake(tmp_path, monkeypatch, "time.sleep(20)\n")
     result = await maps.discover_maps("fixture", tmp_path, timeout_seconds=0.2)
     assert result["stop_reason"] == "timeout"
-    assert result["warnings"][0] == "采集程序异常：单次查询达到 180 秒时间上限后停止，结果不完整"
+    assert result["warnings"][0] == "采集程序异常：单次查询达到 300 秒时间上限后停止，结果不完整"
 
 
 async def test_final_output_read_failure_has_chinese_prefix(tmp_path, monkeypatch):

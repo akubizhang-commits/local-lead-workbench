@@ -109,6 +109,49 @@ async def test_dense_query_subdivides_and_does_not_finish_at_batch_cap(tmp_path)
 
 
 @pytest.mark.asyncio
+async def test_dense_timeout_with_records_subdivides(tmp_path):
+    # A tile that times out while still returning records is too dense to finish
+    # in one pass: it must subdivide (not just keep re-running the same big tile).
+    store = Store(tmp_path)
+    task = market(store)
+    async def dense_plan(config, directory):
+        return dict(jobs=[{**job("root"), "bbox": [34, 35, -119, -118]}],
+                    coverage={"scope_label": "Fixture"}, status="completed", warnings=[])
+    calls = []
+    async def discover(query, *args, **kwargs):
+        calls.append(kwargs["geo"])
+        # Root times out with results; children finish cleanly.
+        if len(calls) == 1:
+            return dict(status="partial", records=[record(1)], warnings=[], stop_reason="timeout")
+        return dict(status="completed", records=[record(len(calls))], warnings=[], stop_reason="finished")
+    run = store.start_task(task["id"])
+    await process_run(store, run["id"], planner=dense_plan, discover=discover)
+    # Root (1) subdivided into 4 children => 5 jobs total.
+    assert store.count_market_jobs(run["id"]) == 5
+    assert len(calls) == 5
+    assert store.run(run["id"])["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_empty_timeout_does_not_subdivide(tmp_path):
+    # A tile that times out with zero records is a stuck/empty tile, not density:
+    # it must NOT subdivide (that was the old over-gridding failure mode).
+    store = Store(tmp_path)
+    task = market(store)
+    async def dense_plan(config, directory):
+        return dict(jobs=[{**job("root"), "bbox": [34, 35, -119, -118]}],
+                    coverage={"scope_label": "Fixture"}, status="completed", warnings=[])
+    calls = []
+    async def discover(query, *args, **kwargs):
+        calls.append(kwargs["geo"])
+        return dict(status="partial", records=[], warnings=[], stop_reason="timeout")
+    run = store.start_task(task["id"])
+    await process_run(store, run["id"], planner=dense_plan, discover=discover)
+    # No subdivision: only the single root job ever exists.
+    assert store.count_market_jobs(run["id"]) == 1
+
+
+@pytest.mark.asyncio
 async def test_saturated_leaf_remains_explicitly_unresolved(tmp_path):
     store = Store(tmp_path)
     task = market(store)

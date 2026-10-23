@@ -1428,7 +1428,15 @@ class Store(MarketAdminMixin, ReviewCleanupMixin, MarketSocialMixin, RunActivity
                 access = status(con)
                 skip_maps = not access['allowed']
                 if skip_maps:
-                    con.execute("UPDATE runs SET message=? WHERE id=?", (access['message'], run_id))
+                    wait_message = access['message']
+                    # During a cooldown a market round should still show what it has
+                    # achieved, so the wait does not look like a stall.
+                    if self._market_run(con, run_id):
+                        prog = run["progress"] if isinstance(run["progress"], dict) else {}
+                        total = con.execute("SELECT count(*) c FROM work_items WHERE run_id=? AND stage='discovery'", (run_id,)).fetchone()["c"]
+                        done = con.execute("SELECT count(*) c FROM work_items WHERE run_id=? AND stage='discovery' AND state='succeeded'", (run_id,)).fetchone()["c"]
+                        wait_message = f"{access['message']}（已发现 {prog.get('discovered', 0)} 家，区域 {done}/{total}）"
+                    con.execute("UPDATE runs SET message=? WHERE id=?", (wait_message, run_id))
             stage_sql = " AND stage IN (" + ",".join("?" for _ in stages) + ")" if stages else ""
             row = con.execute("""SELECT * FROM work_items WHERE run_id=? AND state='pending'
                 AND (stage!='discovery' OR ?=0)
@@ -1443,6 +1451,10 @@ class Store(MarketAdminMixin, ReviewCleanupMixin, MarketSocialMixin, RunActivity
                 payload = claimed(payload)
             con.execute("UPDATE work_items SET state='running',result=? WHERE id=?", (encode(payload),row["id"]))
             message = f"处理中：{row['target']}"
+            if row["stage"] == "refresh":
+                company = con.execute("SELECT name FROM companies WHERE id=?", (row["target"],)).fetchone()
+                name = (company["name"] if company and company["name"] else "企业").strip()
+                message = f"官网复核：{name[:120]}"
             if self._market_run(con, run_id):
                 if row["stage"] == "planning":
                     message = "规划目标市场检索范围"
@@ -1451,7 +1463,14 @@ class Store(MarketAdminMixin, ReviewCleanupMixin, MarketSocialMixin, RunActivity
                         job = json.loads(row["target"])
                     except ValueError:
                         job = {}
-                    message = "检索市场：" + str(job.get("query", "") if isinstance(job, dict) else job)[:240]
+                    query = str(job.get("query", "") if isinstance(job, dict) else job)[:200]
+                    # Show subdivision progress so a long dense round reads as progress,
+                    # not a stuck query: tiles done / total and companies found so far.
+                    prog = run["progress"] if isinstance(run["progress"], dict) else {}
+                    total = con.execute("SELECT count(*) c FROM work_items WHERE run_id=? AND stage='discovery'", (run_id,)).fetchone()["c"]
+                    done = con.execute("SELECT count(*) c FROM work_items WHERE run_id=? AND stage='discovery' AND state='succeeded'", (run_id,)).fetchone()["c"]
+                    found = prog.get("discovered", 0)
+                    message = f"检索市场（区域 {done}/{total}，已发现 {found} 家）：{query}"
             con.execute("UPDATE runs SET status='running',message=? WHERE id=?", (message, run_id))
             result = dict(row)
             result["state"] = "running"

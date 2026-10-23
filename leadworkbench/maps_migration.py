@@ -40,7 +40,7 @@ def repair_legacy_maps(con, directory, at=None):
                     cycle_attempts=3 if reason=='timeout' else 1,
                     transient_failures=3 if reason=='timeout' else 0,
                     empty_attempts=1 if reason=='empty_output' else 0,
-                    next_attempt_at=at+(7200 if reason=='timeout' else 600))
+                    next_attempt_at=at+(maps_policy.BACKOFF_SECONDS[-1] if reason=='timeout' else 600))
                 summary['attempted_requeued'] += 1
             else:
                 continue
@@ -54,5 +54,5 @@ def repair_legacy_maps(con, directory, at=None):
     if summary['runs'] and prior['manual_required'] and prior['reason']=='连续三次地图访问失败':
         con.execute("""UPDATE maps_access_policy SET manual_required=0,failures=3,
             not_before=?,reason='历史查询超时，冷却后再进行一次自动恢复尝试' WHERE id=1""",
-            (max(prior['not_before'],at+7200),))
+            (max(prior['not_before'],at+maps_policy.BACKOFF_SECONDS[-1]),))
     return summary

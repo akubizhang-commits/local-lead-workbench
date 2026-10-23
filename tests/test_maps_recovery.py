@@ -19,7 +19,7 @@ def test_long_backoff_has_three_probes_and_then_stops(tmp_path,monkeypatch):
         policy.observe(con,{'status':'completed'},at=100)
         assert policy.status(con,at=189)['retry_after_seconds']==1
         now=190
-        for delay in [600,1800,7200]:
+        for delay in policy.BACKOFF_SECONDS:
             result=policy.observe(con,{'status':'blocked','stop_reason':'timeout'},at=now)
             assert result['auto_retry'] and not result['manual_required']
             assert result['retry_after_seconds']==delay
@@ -166,7 +166,7 @@ def test_legacy_queue_repair_preserves_success_and_pauses_and_is_idempotent(tmp_
         con.execute("UPDATE maps_access_policy SET manual_required=1,failures=3,reason='连续三次地图访问失败'")
         summary=repair_legacy_maps(con,tmp_path,at=100)
         assert summary['unattempted_restored']==1 and summary['attempted_requeued']==2
-        assert policy.status(con,100)['retry_after_seconds']==7200
+        assert policy.status(con,100)['retry_after_seconds']==policy.BACKOFF_SECONDS[-1]
         assert not policy.status(con,100)['manual_required']
         assert repair_legacy_maps(con,tmp_path,at=200)['runs']==[]
     states={r['target']:r['state'] for r in queries(store,run['id'])}
@@ -210,7 +210,7 @@ async def test_empty_checks_do_not_consume_timeout_retry_budget(tmp_path,monkeyp
     await process_run_item(store,run['id'],planner=planner)
     for t in [100,700,2500]:clock[0]=t;await process_run_item(store,run['id'])
     with store.connect() as con:
-        assert policy.status(con)['retry_after_seconds']==600
+        assert policy.status(con)['retry_after_seconds']==policy.BACKOFF_SECONDS[0]
         assert policy.status(con)['failures']==1
     meta=json.loads(queries(store,run['id'])[0]['result'])['maps']
     assert meta['transient_failures']==1 and meta['empty_attempts']==2

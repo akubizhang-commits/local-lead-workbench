@@ -112,7 +112,7 @@ async def _execute_claimed(store, run, run_id, item, *, pace_maps, discover, enr
             else:
                 result = await discover(
                     item["target"], store.directory / "runs" / run_id / item["id"],
-                    limit=config["limit"], timeout_seconds=180, data_dir=store.directory,
+                    limit=config["limit"], timeout_seconds=300, data_dir=store.directory,
                     should_stop=lambda: store.run(run_id)["status"] not in {"queued", "running"})
             observe_source(result)
             seen = store.run_source_keys(run_id)

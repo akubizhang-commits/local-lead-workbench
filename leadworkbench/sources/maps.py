@@ -27,7 +27,7 @@ BINARY = ROOT / "tools/bin/google-maps-scraper"
 # Fixed texts for an early stop (reason is only cancelled or timeout here).
 STOPPED_MESSAGES = {
     "cancelled": "已暂停：采集按用户操作停止，已取得的结果会保留",
-    "timeout": "采集程序异常：单次查询达到 180 秒时间上限后停止，结果不完整",
+    "timeout": "采集程序异常：单次查询达到 300 秒时间上限后停止，结果不完整",
 }
 
 

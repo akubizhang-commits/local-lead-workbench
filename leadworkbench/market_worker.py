@@ -15,7 +15,7 @@ async def discover_market_item(store, run, item, discover, *, on_result=None):
     job = json.loads(item["target"])
     result = await discover(
         job["query"], store.directory / "runs" / run["id"] / item["id"],
-        limit=BATCH_RECORDS, timeout_seconds=180, geo=job.get("geo"),
+        limit=BATCH_RECORDS, timeout_seconds=300, geo=job.get("geo"),
         zoom=job.get("zoom", 15), depth=job.get("depth", 10), data_dir=store.directory,
         should_stop=lambda: store.run(run["id"])["status"] not in {"queued", "running"})
     if on_result:
@@ -27,13 +27,27 @@ async def discover_market_item(store, run, item, discover, *, on_result=None):
             # The store prioritizes discovery work over refresh work. A company
             # encountered in several tiles still gets one website job per round.
             store.add_enrichment(run["id"], company["id"])
-    saturated = result.get("saturated") or result.get("stop_reason") == "company_limit"
+    # A tile that saturates the batch, or that times out while still returning
+    # records, is too dense to finish in one pass: subdivide it (split_job has a
+    # size/level floor, so this cannot recurse forever). A timeout with zero
+    # records is a stuck/empty tile, not density — never split it (that was the
+    # old over-gridding failure mode).
+    dense_timeout = (result.get("stop_reason") in ("timeout", "inactivity_timeout")
+                     and len(result.get("records") or []) > 0)
+    saturated = (result.get("saturated") or result.get("stop_reason") == "company_limit"
+                 or dense_timeout)
     if saturated and result.get("status") != "blocked":
         children = split_job(job)
         if children and store.count_market_jobs(run["id"]) + len(children) <= MAX_DISCOVERY_JOBS:
             store.append_market_jobs(run["id"], children)
             result = {**result, "status": "completed",
                       "warnings": [], "stop_reason": "已拆分为更小区域继续检索"}
+        elif not children and dense_timeout:
+            # Already at the finest cell but still timing out with results: keep
+            # the partial result and stop retrying this leaf (no global stop).
+            result = {**result, "status": "partial", "retryable": False,
+                      "stop_reason": "capability_exhausted",
+                      "warnings": [*result.get("warnings", []), exhaustion_reason(job)]}
         else:
             reason = exhaustion_reason(job, job_budget=bool(children))
             store.record_market_exhausted(run["id"], item["id"], reason)

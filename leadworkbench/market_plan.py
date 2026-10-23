@@ -31,7 +31,7 @@ MAX_BODY_BYTES = 256_000
 MAX_LEVEL = 3
 MIN_CELL_KM = 0.5
 INTERNAL_JOB_LIMIT = 120
-JOB_TIMEOUT_SECONDS = 180
+JOB_TIMEOUT_SECONDS = 300
 ATTRIBUTION = '© OpenStreetMap contributors; city geocoding by Nominatim (ODbL)'
 # P0-5: a text-only plan is always reported as incomplete; the prefix identifies the reason.
 INCOMPLETE_PREFIX = '结果不完整：'
@@ -356,6 +356,31 @@ def _grid(job, count, level):
     return children
 
 
+# Smallest city span (km) that justifies an up-front 4x4 grid. Below this, a
+# small town is covered by its single root query; the worker still subdivides
+# adaptively (split_job) only if that root actually saturates. This stops tiny
+# places (e.g. a village a few km across) from being carved into ~16 sparse
+# cells that each run out the time budget and time out one after another.
+MIN_GRID_SPAN_KM = 8.0
+
+
+def _bbox_span_km(bbox):
+    """(height_km, width_km) of a [s,n,w,e] box, matching split_job's metric."""
+    s, n, w, e = _bbox(bbox)
+    height = (n - s) * 111.32
+    width = (e - w) * 111.32 * math.cos(math.radians((s + n) / 2))
+    return height, width
+
+
+def _should_grid(bbox):
+    """A city large enough that an initial 4x4 split is worthwhile."""
+    try:
+        return min(_bbox_span_km(bbox)) >= MIN_GRID_SPAN_KM
+    except ValueError:
+        return False
+
+
+
 def exhaustion_reason(job, *, job_budget=False):
     if job_budget:
         limit = "本轮检索任务预算已用尽"
@@ -479,11 +504,12 @@ async def plan_market(config, data_dir: Path) -> dict:
     incomplete = bool(warnings)
     warnings.extend(geo_warnings)
     jobs = []
+    grid_city = bool(geometry) and _should_grid(geometry['bbox'])
     for term in sorted(terms):
         root = _job(f'{term} in {location}', geometry['geo'] if geometry else None,
                     geometry['bbox'] if geometry else None, 0)
         jobs.append(root)
-        if geometry:
+        if grid_city:
             jobs.extend(_grid(root, 4, 1))
     scope_label = '自治市' if (config.get('geography') or {}).get('scope') == 'whole_municipality' else '城市'
     plan = dict(jobs=jobs, coverage={
@@ -527,10 +553,12 @@ def _estimate_cached(terms: tuple, location: str, place_id, bbox, scope):
         bounds = list(bbox)
         geo = [round((bounds[0] + bounds[1]) / 2, 10), round((bounds[2] + bounds[3]) / 2, 10)]
         jobs = []
+        grid_city = _should_grid(bounds)
         for query in query_terms:
             root = _job(query, geo, bounds, 0)
             jobs.append(root)
-            jobs.extend(_grid(root, 4, 1))
+            if grid_city:
+                jobs.extend(_grid(root, 4, 1))
         seen = {job['key'] for job in jobs}
         queue = deque(jobs)
         while queue:
@@ -540,7 +568,8 @@ def _estimate_cached(terms: tuple, location: str, place_id, bbox, scope):
                     if child['key'] not in seen:
                         seen.add(child['key'])
                         queue.append(child)
-        return 'catalogue', 17 * count, 17 * count, len(seen), query_terms
+        initial = (17 if grid_city else 1) * count
+        return 'catalogue', initial, initial, len(seen), query_terms
     if scope == 'whole_municipality':
         return 'text_only', count, count, count, query_terms
     return 'geocoder', count, 17 * count, None, query_terms
