@@ -109,7 +109,7 @@ docker compose exec -T api python -m leadworkbench.admin create-user <用户名>
 sh deploy/verify.sh
 ```
 
-必须全部 PASS。它检查：`.env` 权限和没有 AWS 密钥、`api`/`worker` healthy、`caddy` 运行、Maps 程序带稳定性补丁、`https://<host>/healthz` 返回 200、未登录访问 `/api/overview` 返回 401、http 跳转 https、已有登录账号。脚本不打印任何密码或凭据。
+必须全部 PASS。它检查：`.env` 权限和没有 AWS 密钥、`api`/`worker` healthy、`caddy` 运行、Maps 程序带稳定性补丁、`https://<host>/healthz` 返回 200、未登录访问 `/api/overview` 返回 401、公开介绍页 `/about` 返回 200 且 `/about/` 下其他路径不泄露文件、http 跳转 https、已有登录账号。脚本不打印任何密码或凭据。
 
 有 FAIL 时按提示处理；处理不了就把输出和相关日志（`docker compose logs --tail 200 <服务>`）交给管理员。
 
@@ -132,6 +132,8 @@ docker compose build
 docker compose up -d
 sh deploy/verify.sh
 ```
+
+`/about` 是公开（免登录）的合作伙伴介绍页，Caddy 直接返回只读挂载的 `docs/partner/index.html`；`git pull` 后该文件有变化时执行 `docker compose up -d --force-recreate caddy` 才会生效，不要为此改应用的登录代码（见 `docs/deploy/aws-singapore.md` 第 12 步）。
 
 数据库迁移只能向前。需要回退时切回旧代码，再用升级前的备份恢复（`docs/deploy/aws.md` 第 11 节）。
 

@@ -374,6 +374,8 @@ sh deploy/verify.sh
 | `Maps 程序已带稳定性补丁` | 镜像里的 Maps 程序自检失败：重新 `docker compose build` 并 `docker compose up -d`，仍失败把 `docker compose exec worker /app/tools/bin/google-maps-scraper -local-stability-info` 的输出交给开发者 |
 | `https://<主机名>/healthz 返回 200` | 外网访问不到：检查安全组 80/443、弹性 IP 是否关联在这台实例、主机名是否与弹性 IP 一致、`docker compose logs caddy` 里的证书错误 |
 | `未登录访问 /api/overview 返回 401` | 返回其他值说明访问控制异常，不要继续使用，把输出交给开发者 |
+| `未登录访问 /about 返回 200` | 公开介绍页没生效：见第 12 步“公开介绍页 /about” |
+| `/about/x 返回 404` / `/about 下的路径穿越不会返回仓库文件` | Caddy 的 `/about` 配置被改动过：恢复仓库里的 `deploy/Caddyfile`，`docker compose up -d --force-recreate caddy`；仍失败先删掉该段停用页面，再交给开发者 |
 | `http:// 跳转到 https://` | 80 端口不通或 Caddy 未正常启动：检查安全组 80 |
 | `已有可用的登录账号` | 还没建账号或账号都被停用：执行第 8 步 |
 
@@ -425,6 +427,14 @@ sh deploy/verify.sh
 ```
 
 数据库迁移只能向前，不能降级。需要回退时，切回旧代码（`git checkout <旧版本>`，重新 build、up），再用升级前的那份备份恢复（第 13 步）。
+
+### 公开介绍页 /about
+
+- `https://<主机名>/about` 是给合作伙伴看的产品与架构简介（功能说明、使用流程、系统架构、规划与当前状态），**不需要登录，任何拿到链接的人都能打开**。页面内容就是仓库里的 `docs/partner/index.html`，不含客户数据、账号或密钥；页面和响应头都标记了 `noindex`，不希望被搜索引擎收录。
+- 这个页面由 Caddy 直接返回，请求不经过应用；Caddy 只挂载这一个文件（只读）。`/about/` 跳转到 `/about`，`/about/` 下的其他路径一律 404。网站其余部分仍然必须登录。
+- 更新内容：修改 `docs/partner/index.html` 并提交，在服务器上 `git pull`，再执行 `docker compose up -d --force-recreate caddy`（单文件挂载在 `git pull` 后不会自动换成新文件，必须重建 caddy 容器；只重建 caddy，不影响登录会话和数据）。
+- 打开返回 404：确认文件所有人可读（`ls -l docs/partner/index.html` 应为 `-rw-r--r--`，否则 `chmod 644 docs/partner/index.html`），再重建 caddy。
+- 停用：删除 `deploy/Caddyfile` 里 `@about` 那一段（保留 `handle { reverse_proxy api:8000 }`），删除 `docker-compose.yml` 里 caddy 的 `./docs/partner/index.html:/srv/about/index.html:ro` 一行，执行 `docker compose up -d --force-recreate caddy`。之后 `/about` 显示登录页；`deploy/verify.sh` 里的三项 `/about` 检查也要一并删掉。
 
 ### 查看状态与日志
 

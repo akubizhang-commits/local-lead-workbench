@@ -196,6 +196,7 @@ flowchart LR
 - `api`、`worker`：用户 `10001:10001`，`cap_drop: [ALL]`，`no-new-privileges`，`init: true`（tini 回收 Chromium 子进程），`/tmp` 为 512 MiB tmpfs，`worker` 的共享内存 1 GiB。
 - `caddy`：镜像固定 digest，只保留 `NET_BIND_SERVICE`，根文件系统只读，`admin off`，只启用 HTTP/1.1 与 HTTP/2，删除 `Server` 头，gzip。
 - 应用响应头：`Content-Security-Policy`（`default-src 'self'`、`frame-ancestors 'none'` 等）、`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`Cache-Control: no-store`。
+- 公开介绍页 `/about`：Caddy 在转发给应用之前直接返回只读挂载的单个文件 `docs/partner/index.html`（无需登录，任何人可访问，不经过应用，因此不在 `AUTH_PUBLIC` 里）；`/about/` 跳转到 `/about`，`/about/` 下其他路径 404，不列目录。响应头：`default-src 'none'` 的 CSP（只允许内联样式和 data: 图片）、`X-Robots-Tag: noindex, nofollow`、`nosniff`、`no-referrer`、`Cache-Control: public, max-age=300`。前端只使用 `/?view=…` 查询参数路由，没有 `/about` 路由，不冲突。
 - HSTS：只在 `LEAD_TLS=acme` 时发送，`max-age=86400`（1 天），这样临时切到 internal 证书后，浏览器最多 1 天就能“继续访问”。
 
 ### 6.7 凭据与日志

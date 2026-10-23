@@ -57,6 +57,7 @@ services:
     logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./docs/partner/index.html:/srv/about/index.html:ro   # public /about page (only this file)
       - caddy_data:/data
       - caddy_config:/config
 volumes:

@@ -67,6 +67,26 @@ case "${HOST}" in
     fi
     code=$(curl ${k} -s -o /dev/null -w '%{http_code}' --max-time 15 "https://${HOST}${SUFFIX}/api/overview" 2>/dev/null)
     [ "${code}" = 401 ] && pass "未登录访问 /api/overview 返回 401" || bad "未登录访问 /api/overview 返回 ${code:-无响应}，应为 401"
+    # Public partner page /about (served by caddy from docs/partner/index.html, no login).
+    hdrs=$(curl ${k} -s -D - -o /dev/null --max-time 15 "https://${HOST}${SUFFIX}/about" 2>/dev/null | tr -d '\r')
+    code=$(printf '%s\n' "${hdrs}" | sed -n '1s/^HTTP[^ ]* \([0-9]*\).*/\1/p')
+    if [ "${code}" = 200 ] && printf '%s\n' "${hdrs}" | grep -qi '^x-robots-tag:.*noindex'; then
+      pass "未登录访问 /about 返回 200，带 X-Robots-Tag: noindex"
+    else
+      bad "未登录访问 /about 返回 ${code:-无响应}（应为 200 且带 X-Robots-Tag: noindex；检查 deploy/Caddyfile 与 caddy 的 /srv/about 挂载，然后 docker compose up -d --force-recreate caddy）"
+    fi
+    # Other paths under /about must never expose files: /about/x is 404; traversal attempts end up
+    # at /about or the app's login page, never at raw repository content such as .env.
+    code=$(curl ${k} -s -o /dev/null -w '%{http_code}' --max-time 15 "https://${HOST}${SUFFIX}/about/x" 2>/dev/null)
+    [ "${code}" = 404 ] && pass "/about/x 返回 404" || bad "/about/x 返回 ${code:-无响应}，应为 404"
+    leak=""
+    for p in /about/../.env /about/%2e%2e/.env /about/..%2f.env /about/index.html%2f.. /about/../docker-compose.yml; do
+      body=$(curl ${k} -s --path-as-is --max-time 15 "https://${HOST}${SUFFIX}${p}" 2>/dev/null | head -c 4096)
+      case "${body}" in
+        *LEAD_*|*services:*|*"PRIVATE KEY"*) leak="${leak} ${p}" ;;
+      esac
+    done
+    [ -z "${leak}" ] && pass "/about 下的路径穿越不会返回仓库文件" || bad "这些路径返回了仓库文件内容:${leak}"
     if [ -z "${SUFFIX}" ]; then
       code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "http://${HOST}/" 2>/dev/null)
       case "${code}" in

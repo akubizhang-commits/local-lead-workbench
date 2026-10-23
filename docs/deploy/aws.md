@@ -163,6 +163,13 @@ docker compose up -d
 
 数据库迁移只能向前，不能降级。需要回退版本时，切回旧代码后用升级前的备份恢复。
 
+### 公开介绍页 /about
+
+- `https://<host>/about` 是给合作伙伴看的产品与架构简介（功能、流程、架构、规划与当前状态），**不需要登录，任何拿到链接的人都能打开**。内容就是 `docs/partner/index.html`，不含客户数据、账号或密钥，带 `noindex`。
+- Caddy 直接返回这个只读挂载的单个文件，请求不经过应用；`/about/` 跳转到 `/about`，`/about/` 下其他路径 404，其余页面和接口仍需登录。`deploy/verify.sh` 会检查这几点。
+- 更新：改 `docs/partner/index.html` 并提交，服务器上 `git pull`，然后 `docker compose up -d --force-recreate caddy`（单文件挂载必须重建容器才会换成新文件）。返回 404 时检查文件权限应为 644。
+- 停用：删除 `deploy/Caddyfile` 的 `@about` 段和 `docker-compose.yml` 里 caddy 的 `/srv/about` 挂载（以及 `verify.sh` 的 `/about` 检查），再 `docker compose up -d --force-recreate caddy`。详见 `docs/deploy/aws-singapore.md` 第 12 步。
+
 ## 11. 备份与恢复
 
 - 每日备份：`LEAD_BACKUP_TIME`（默认 03:30，`LEAD_TIMEZONE`）由 worker 自动创建，文件名 `auto-daily-…sqlite3`；错过时间（例如当时在重启）会在 worker 启动 2 分钟后补做；失败 1 小时后重试。配置了桶时上传到 `s3://<桶>/leadworkbench/<年>/<月>/<文件名>`，同一份最多尝试 3 次。设置页显示最近一次备份与上传结果。

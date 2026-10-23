@@ -22,7 +22,29 @@
 		max_size 2MB
 	}
 	encode gzip
-	reverse_proxy api:8000
+	# 公开的合作伙伴介绍页（不需要登录，请求不经过应用）：只提供 docker-compose.yml 挂载的
+	# 单个文件 docs/partner/index.html。/about/ 跳转到 /about；/about/ 下其他任何路径一律 404，
+	# 不落到应用，也不列目录。停用：删除本段和 caddy 的 /srv/about 挂载，然后 docker compose up -d caddy。
+	@about path /about /about/*
+	handle @about {
+		route {
+			header {
+				Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+				X-Robots-Tag "noindex, nofollow"
+				X-Content-Type-Options nosniff
+				Referrer-Policy no-referrer
+				Cache-Control "public, max-age=300"
+			}
+			redir /about/ /about 308
+			respond /about/* 404
+			root * /srv/about
+			rewrite * /index.html
+			file_server
+		}
+	}
+	handle {
+		reverse_proxy api:8000
+	}
 	log {
 		output stdout
 		format filter {
