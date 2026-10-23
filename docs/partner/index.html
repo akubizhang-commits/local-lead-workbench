@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#f5f6f3">
+<title>寻迹线索工作台 · 产品与架构简介</title>
+<style>
+:root{--ink:#233346;--muted:#53636b;--teal:#247a70;--teal-dark:#1f6b62;--teal-bg:#e8f2f0;--bg:#f5f6f3;--paper:#fff;--line:#dfe5e2;--warn-bg:#fcf1e9;--warn-fg:#8a5530}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC","Segoe UI",sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+header.top{background:var(--paper);border-bottom:1px solid var(--line)}
+header.top .wrap{display:flex;align-items:center;gap:12px;min-height:60px}
+.logo{width:30px;height:30px;border-radius:8px;background:var(--teal);color:#fff;display:grid;place-items:center;font-weight:700;font-size:16px;flex:none}
+.brand{font-weight:700;font-size:17px}
+.brand small{font-weight:400;color:var(--muted);font-size:14px;margin-left:8px}
+.hero{padding:48px 0 32px}
+.hero h1{font-size:32px;line-height:1.35;margin:0 0 12px}
+.hero p.lead{font-size:18px;color:var(--ink);margin:0 0 16px;max-width:760px}
+.tag{display:inline-block;font-size:14px;line-height:1.5;padding:3px 10px;border-radius:999px;background:var(--teal-bg);color:var(--teal-dark);margin:0 8px 8px 0}
+.tag.warn{background:var(--warn-bg);color:var(--warn-fg)}
+nav.toc{margin-top:20px;font-size:14px;color:var(--muted)}
+nav.toc a{color:var(--teal-dark);margin-right:14px;white-space:nowrap}
+section{padding:32px 0;border-top:1px solid var(--line)}
+h2{font-size:24px;line-height:1.4;margin:0 0 6px}
+h2 .num{color:var(--teal);margin-right:8px}
+h3{font-size:17px;line-height:1.45;margin:0 0 6px}
+.sub{color:var(--muted);margin:0 0 20px;font-size:15px}
+p{margin:0 0 12px}
+ul{margin:0;padding-left:1.2em}
+li{margin:4px 0}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+.grid.two{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+.card p,.card li{font-size:15px;color:var(--muted)}
+.card p:last-child{margin-bottom:0}
+.card .k{display:inline-block;font-size:13px;color:var(--teal-dark);background:var(--teal-bg);border-radius:6px;padding:1px 8px;margin-bottom:8px}
+.problem h3{color:var(--teal-dark)}
+.value{background:var(--paper);border-left:4px solid var(--teal);border-radius:8px;padding:16px 20px;margin-top:16px}
+.value li{color:var(--ink)}
+ol.flow{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(6,1fr);gap:14px;counter-reset:s}
+ol.flow li{position:relative;margin:0;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:16px 14px;counter-increment:s}
+ol.flow li::before{content:counter(s);display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--teal);color:#fff;font-weight:700;font-size:14px;margin-bottom:8px}
+ol.flow li:not(:last-child)::after{content:"";position:absolute;top:28px;right:-12px;width:10px;height:10px;border-top:2px solid var(--teal);border-right:2px solid var(--teal);transform:rotate(45deg)}
+ol.flow b{display:block;font-size:16px;margin-bottom:4px}
+ol.flow span{display:block;font-size:14px;color:var(--muted);line-height:1.6}
+.loop{font-size:14px;color:var(--muted);margin-top:12px}
+figure{margin:0 0 20px;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:16px}
+figure svg{display:block;width:100%;height:auto}
+figcaption{font-size:14px;color:var(--muted);margin-top:8px}
+.d-narrow{display:none}
+svg .grp{fill:#f7faf9;stroke:#9fbfb9;stroke-width:1.5}
+svg .grp.pc{fill:#fbf8f4;stroke:#c9ab90}
+svg .bx{fill:#fff;stroke:#247a70;stroke-width:1.5}
+svg .bx.ext{stroke:#6b7a80;stroke-dasharray:0}
+svg .t{fill:#233346;font-size:15px;font-weight:700}
+svg .s{fill:#53636b;font-size:13px}
+svg .g{fill:#1f6b62;font-size:14px;font-weight:700}
+svg .g.pc{fill:#8a5530}
+svg .lb{fill:#1f6b62;font-size:13px}
+svg .ln{stroke:#247a70;stroke-width:1.8;fill:none}
+svg .ln.gray{stroke:#6b7a80}
+svg .ln.dash{stroke-dasharray:6 5}
+svg text{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif}
+.planned{background:var(--warn-bg);color:var(--warn-fg);border-radius:8px;padding:10px 14px;font-size:15px;margin-bottom:16px}
+.status li{margin:6px 0}
+footer{border-top:1px solid var(--line);padding:24px 0 40px;font-size:14px;color:var(--muted)}
+footer .wrap{display:flex;flex-wrap:wrap;gap:6px 20px}
+a:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+@media (max-width:960px){
+ ol.flow{grid-template-columns:repeat(3,1fr)}
+ ol.flow li:nth-child(3)::after{display:none}
+}
+@media (max-width:720px){
+ body{font-size:15px}
+ .wrap{padding:0 16px}
+ .hero{padding:32px 0 24px}
+ .hero h1{font-size:25px}
+ .hero p.lead{font-size:16px}
+ h2{font-size:21px}
+ section{padding:26px 0}
+ .grid,.grid.two{grid-template-columns:1fr}
+ ol.flow{grid-template-columns:1fr;gap:10px}
+ ol.flow li{display:grid;grid-template-columns:28px 1fr;column-gap:12px;padding:12px 14px}
+ ol.flow li::before{grid-row:span 2;margin:0}
+ ol.flow li:not(:last-child)::after,ol.flow li:nth-child(3)::after{display:block;top:auto;bottom:-9px;left:26px;right:auto;transform:rotate(135deg);width:8px;height:8px}
+ figure{padding:10px}
+ .d-wide{display:none}
+ .d-narrow{display:block}
+ .brand small{display:none}
+}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap"><div class="logo" aria-hidden="true">迹</div><div class="brand">寻迹线索工作台<small>产品与架构简介</small></div></div></header>
+
+<main>
+<div class="wrap">
+
+<div class="hero">
+ <h1>帮助海外获客团队，从一个目标市场找到可联系的企业</h1>
+ <p class="lead">寻迹线索工作台按“国家 / 城市 + 行业或关键词”定义目标市场，从地图上的公开商户信息发现企业，再复核企业官网和社媒公开资料，整理出可联系的入口，经人工审核后导出，并按月持续更新。</p>
+ <span class="tag">适用：做海外获客的 B2B 团队</span><span class="tag">外贸业务员 / 海外销售 / 市场负责人</span><span class="tag warn">当前为体验版</span>
+ <nav class="toc" aria-label="页面目录">
+  <a href="#problem">解决什么问题</a><a href="#features">核心功能</a><a href="#flow">使用流程</a><a href="#arch">系统架构</a><a href="#roadmap">规划中的架构</a><a href="#status">当前状态</a>
+ </nav>
+</div>
+
+<section id="problem" aria-labelledby="h-problem">
+ <h2 id="h-problem"><span class="num">01</span>解决什么问题</h2>
+ <p class="sub">开拓一个新的海外市场时，团队通常会遇到三类麻烦。</p>
+ <div class="grid problem">
+  <div class="card"><h3>找企业难</h3><p>目标城市里有哪些相关企业，靠人工搜索费时，结果零散、重复多。</p></div>
+  <div class="card"><h3>找联系入口难</h3><p>官网、社媒上的信息分散，不容易分清哪个是采购、哪个只是通用邮箱或表单。</p></div>
+  <div class="card"><h3>保持更新难</h3><p>名单整理一次很快过时，难以知道这次新增了谁、哪些资料变了。</p></div>
+ </div>
+ <div class="value">
+  <h3>主要价值</h3>
+  <ul>
+   <li>一个流程完成“发现企业 → 找联系入口 → 人工核实 → 导出”。</li>
+   <li>联系入口按等级区分，并说明缺少更好入口的原因，便于决定先联系谁。</li>
+   <li>每条资料都能看到来源和时间；人工修改不会被后续更新覆盖。</li>
+   <li>市场长期累积、按月更新，清楚区分本轮新增与已有企业。</li>
+  </ul>
+ </div>
+</section>
+
+<section id="features" aria-labelledby="h-features">
+ <h2 id="h-features"><span class="num">02</span>核心功能</h2>
+ <p class="sub">以下均为当前版本已有的功能，实际结果取决于公开来源能读取到的内容。</p>
+ <div class="grid">
+  <div class="card"><span class="k">目标市场</span><h3>定义要开拓的市场</h3><p>选择国家、州 / 城市，填写行业或关键词。提交前可预览检索词和预计查询次数。</p></div>
+  <div class="card"><span class="k">地图检索</span><h3>发现目标企业</h3><p>按城市分区和检索词，从地图上的公开商户信息中发现相关企业，每一轮的进度和结果都有记录。</p></div>
+  <div class="card"><span class="k">官网复核</span><h3>提取公开联系入口</h3><p>读取企业官网的联系、关于、团队等页面，按等级整理：具名采购、相关岗位、部门邮箱、通用邮箱、表单、电话；没有更好入口时说明缺口原因。</p></div>
+  <div class="card"><span class="k">社媒</span><h3>账号发现与公开资料</h3><p>查找企业在 Facebook、Instagram、X 上的候选账号，读取公开的基础资料。</p></div>
+  <div class="card"><span class="k">待审核</span><h3>审核与降噪</h3><p>不确定的联系人和字段变化进入待审核，由人工确认；自动过滤招聘等明显无关的入口。人工修改受保护，不会被采集覆盖。</p></div>
+  <div class="card"><span class="k">企业库</span><h3>统一管理企业</h3><p>按市场、类别、联系入口等筛选；显示来源类别，支持排除规则，区分企业实际所在城市与邻近城市。</p></div>
+  <div class="card"><span class="k">导出</span><h3>导出名单</h3><p>导出联系入口表，支持 CSV 和 XLSX，按当前筛选导出全部匹配记录，在后台生成后下载。</p></div>
+  <div class="card"><span class="k">轮次</span><h3>月度计划与本轮摘要</h3><p>可为市场开启按月更新的计划；每一轮显示本轮新增、已有企业和资料变化。</p></div>
+  <div class="card"><span class="k">备份</span><h3>备份与恢复</h3><p>可随时创建备份，也可从备份恢复；恢复前会自动备份当前数据。</p></div>
+  <div class="card"><span class="k">账号</span><h3>账号登录</h3><p>使用管理员创建的账号密码登录，网页上没有公开注册入口。</p></div>
+ </div>
+</section>
+
+<section id="flow" aria-labelledby="h-flow">
+ <h2 id="h-flow"><span class="num">03</span>使用流程</h2>
+ <p class="sub">六步完成一个市场，之后按月重复更新。</p>
+ <ol class="flow" aria-label="使用流程六个步骤">
+  <li><b>建市场</b><span>国家、城市、行业或关键词</span></li>
+  <li><b>地图检索</b><span>发现目标城市的相关企业</span></li>
+  <li><b>官网复核</b><span>整理公开联系入口</span></li>
+  <li><b>审核</b><span>人工确认联系人与资料</span></li>
+  <li><b>导出</b><span>CSV / XLSX 联系入口表</span></li>
+  <li><b>按月更新</b><span>只看本轮新增与变化</span></li>
+ </ol>
+ <p class="loop">第 6 步会回到第 2 步：同一个市场长期累积，重复发现的企业只更新，不重复建档。</p>
+</section>
+
+<section id="arch" aria-labelledby="h-arch">
+ <h2 id="h-arch"><span class="num">04</span>系统架构（当前版本）</h2>
+ <p class="sub">用户只需要浏览器。所有处理和数据都在为该客户单独部署的云服务器上。</p>
+ <figure>
+  <svg class="d-wide" viewBox="0 0 960 440" role="img" aria-labelledby="a1t a1d">
+   <title id="a1t">当前系统架构</title>
+   <desc id="a1d">用户浏览器通过 HTTPS 访问 AWS 新加坡的云服务器。服务器上运行 Web/API 服务、后台任务服务和数据库，每位客户独立一套环境。后台任务服务读取地图上的公开商户信息、企业官网和社媒公开页面；数据库每日自动备份到同区域的云存储。</desc>
+   <defs><marker id="m1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#247a70"/></marker></defs>
+   <rect class="bx" x="20" y="175" width="150" height="80" rx="10"/>
+   <text class="t" x="95" y="208" text-anchor="middle">用户浏览器</text>
+   <text class="s" x="95" y="233" text-anchor="middle">账号密码登录</text>
+   <path class="ln" d="M170 215H241" marker-end="url(#m1)"/>
+   <text class="lb" x="206" y="204" text-anchor="middle">HTTPS</text>
+   <rect class="grp" x="245" y="30" width="440" height="380" rx="14"/>
+   <text class="g" x="265" y="60">云服务器（AWS 新加坡）</text>
+   <text class="s" x="265" y="82">每位客户独立一套环境</text>
+   <rect class="bx" x="270" y="100" width="185" height="90" rx="10"/>
+   <text class="t" x="362" y="135" text-anchor="middle">Web / API 服务</text>
+   <text class="s" x="362" y="160" text-anchor="middle">页面、登录、企业库</text>
+   <text class="s" x="362" y="178" text-anchor="middle">导出文件生成</text>
+   <rect class="bx" x="475" y="100" width="185" height="90" rx="10"/>
+   <text class="t" x="567" y="135" text-anchor="middle">后台任务服务</text>
+   <text class="s" x="567" y="160" text-anchor="middle">地图检索、官网复核</text>
+   <text class="s" x="567" y="178" text-anchor="middle">社媒公开资料、月度计划</text>
+   <rect class="bx" x="370" y="262" width="190" height="80" rx="10"/>
+   <text class="t" x="465" y="293" text-anchor="middle">数据库</text>
+   <text class="s" x="465" y="318" text-anchor="middle">市场、企业、联系入口</text>
+   <path class="ln" d="M362 190L425 259" marker-end="url(#m1)"/>
+   <path class="ln" d="M567 190L505 259" marker-end="url(#m1)"/>
+   <rect class="grp" x="735" y="30" width="205" height="230" rx="14"/>
+   <text class="g" x="752" y="60">外部公开来源</text>
+   <rect class="bx ext" x="750" y="78" width="175" height="46" rx="8"/>
+   <text class="s" x="837" y="106" text-anchor="middle">地图上的公开商户信息</text>
+   <rect class="bx ext" x="750" y="138" width="175" height="46" rx="8"/>
+   <text class="s" x="837" y="166" text-anchor="middle">企业官网公开页面</text>
+   <rect class="bx ext" x="750" y="198" width="175" height="46" rx="8"/>
+   <text class="s" x="837" y="226" text-anchor="middle">社媒公开页面</text>
+   <path class="ln" d="M660 145H733" marker-end="url(#m1)"/>
+   <text class="lb" x="697" y="132" text-anchor="middle">只读取</text>
+   <text class="lb" x="697" y="168" text-anchor="middle">公开信息</text>
+   <rect class="bx" x="750" y="310" width="175" height="80" rx="10"/>
+   <text class="t" x="837" y="343" text-anchor="middle">云存储（同区域）</text>
+   <text class="s" x="837" y="368" text-anchor="middle">保存每日备份</text>
+   <path class="ln" d="M560 302H715V350H748" marker-end="url(#m1)"/>
+   <text class="lb" x="622" y="292" text-anchor="middle">每日自动备份</text>
+  </svg>
+  <svg class="d-narrow" viewBox="0 0 360 640" role="img" aria-labelledby="a2t a2d">
+   <title id="a2t">当前系统架构</title>
+   <desc id="a2d">用户浏览器通过 HTTPS 访问 AWS 新加坡的云服务器。服务器上运行 Web/API 服务、后台任务服务和数据库，每位客户独立一套环境。后台任务服务读取外部公开来源；数据库每日自动备份到云存储。</desc>
+   <defs><marker id="m2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#247a70"/></marker></defs>
+   <rect class="bx" x="80" y="10" width="200" height="60" rx="10"/>
+   <text class="t" x="180" y="36" text-anchor="middle">用户浏览器</text>
+   <text class="s" x="180" y="57" text-anchor="middle">账号密码登录</text>
+   <path class="ln" d="M180 70V112" marker-end="url(#m2)"/>
+   <text class="lb" x="190" y="96">HTTPS</text>
+   <rect class="grp" x="10" y="115" width="340" height="295" rx="14"/>
+   <text class="g" x="25" y="141">云服务器（AWS 新加坡）</text>
+   <text class="s" x="25" y="162">每位客户独立一套环境</text>
+   <rect class="bx" x="25" y="175" width="150" height="90" rx="10"/>
+   <text class="t" x="100" y="203" text-anchor="middle">Web / API 服务</text>
+   <text class="s" x="100" y="226" text-anchor="middle">页面、登录</text>
+   <text class="s" x="100" y="246" text-anchor="middle">企业库、导出</text>
+   <rect class="bx" x="185" y="175" width="150" height="90" rx="10"/>
+   <text class="t" x="260" y="203" text-anchor="middle">后台任务服务</text>
+   <text class="s" x="260" y="226" text-anchor="middle">地图检索、官网复核</text>
+   <text class="s" x="260" y="246" text-anchor="middle">社媒资料、月度计划</text>
+   <rect class="bx" x="80" y="315" width="200" height="75" rx="10"/>
+   <text class="t" x="180" y="344" text-anchor="middle">数据库</text>
+   <text class="s" x="180" y="368" text-anchor="middle">市场、企业、联系入口</text>
+   <path class="ln" d="M100 265L148 312" marker-end="url(#m2)"/>
+   <path class="ln" d="M260 265L212 312" marker-end="url(#m2)"/>
+   <path class="ln" d="M110 410V468" marker-end="url(#m2)"/>
+   <text class="lb" x="118" y="444">只读取公开信息</text>
+   <path class="ln" d="M287 410V468" marker-end="url(#m2)"/>
+   <text class="lb" x="295" y="444">备份</text>
+   <rect class="grp" x="10" y="470" width="200" height="150" rx="12"/>
+   <text class="g" x="25" y="497">外部公开来源</text>
+   <text class="s" x="25" y="530">地图上的公开商户信息</text>
+   <text class="s" x="25" y="560">企业官网公开页面</text>
+   <text class="s" x="25" y="590">社媒公开页面</text>
+   <rect class="bx" x="225" y="470" width="125" height="150" rx="12"/>
+   <text class="t" x="287" y="530" text-anchor="middle">云存储</text>
+   <text class="s" x="287" y="555" text-anchor="middle">每日自动备份</text>
+  </svg>
+  <figcaption>图：当前版本架构。用户端不需要安装任何软件。</figcaption>
+ </figure>
+ <div class="grid">
+  <div class="card"><h3>部署形态</h3><ul><li>每位客户一套独立环境，部署在 AWS 新加坡区域。</li><li>不同客户的数据按部署隔离，互不可见。</li><li>同一环境内的账号看到相同的数据。</li></ul></div>
+  <div class="card"><h3>安全</h3><ul><li>账号密码登录，账号由管理员创建。</li><li>全程 HTTPS 访问。</li><li>密码只保存加盐哈希，不保存明文。</li><li>登录失败过多会被限速。</li><li>数据只存放在该客户的环境中；不调用第三方付费模型。</li></ul></div>
+  <div class="card"><h3>数据</h3><ul><li>每天自动备份，并保存到同区域的云存储。</li><li>也可在网页上手动创建备份或恢复。</li><li>单台服务器、没有多机热备；极端情况下以最近一次每日备份为准恢复。</li></ul></div>
+ </div>
+</section>
+
+<section id="roadmap" aria-labelledby="h-roadmap">
+ <h2 id="h-roadmap"><span class="num">05</span>规划中的架构</h2>
+ <p class="planned" role="note">以下内容是规划，尚未上线，范围和顺序仍可能调整。</p>
+ <p class="sub">原则：能放在云端的都放在云端；用户电脑上只放一个很小的本机助手，专门处理需要登录账号的社媒读取。</p>
+ <figure>
+  <svg class="d-wide" viewBox="0 0 960 470" role="img" aria-labelledby="b1t b1d">
+   <title id="b1t">规划中的架构（尚未上线）</title>
+   <desc id="b1d">用户电脑上有浏览器和本机助手。浏览器通过 HTTPS 打开云端工作台；本机助手负责社媒账号登录和登录后的读取，只把读取结果回传云端，登录状态和 Cookie 不离开用户电脑。云端核心负责业务规则与数据库、默认的地图检索、官网复核、计划、导出和每日备份。云端受限时，可以按市场把地图检索切到本机助手执行。</desc>
+   <defs><marker id="m3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#247a70"/></marker></defs>
+   <rect class="grp pc" x="20" y="30" width="280" height="380" rx="14"/>
+   <text class="g pc" x="40" y="60">用户电脑</text>
+   <rect class="bx" x="45" y="80" width="230" height="70" rx="10"/>
+   <text class="t" x="160" y="109" text-anchor="middle">浏览器</text>
+   <text class="s" x="160" y="132" text-anchor="middle">打开云端工作台</text>
+   <rect class="bx" x="45" y="190" width="230" height="195" rx="10"/>
+   <text class="t" x="160" y="221" text-anchor="middle">本机助手（规划）</text>
+   <text class="s" x="160" y="250" text-anchor="middle">社媒账号在本机登录</text>
+   <text class="s" x="160" y="274" text-anchor="middle">需要登录的社媒读取</text>
+   <text class="s" x="160" y="298" text-anchor="middle">可选：按市场执行地图检索</text>
+   <text class="lb" x="160" y="340" text-anchor="middle">登录状态和 Cookie</text>
+   <text class="lb" x="160" y="362" text-anchor="middle">不离开这台电脑</text>
+   <path class="ln" d="M275 115H358" marker-end="url(#m3)"/>
+   <text class="lb" x="316" y="104" text-anchor="middle">HTTPS</text>
+   <path class="ln" d="M275 250H358" marker-end="url(#m3)"/>
+   <text class="lb" x="316" y="239" text-anchor="middle">回传结果</text>
+   <rect class="grp" x="360" y="30" width="300" height="380" rx="14"/>
+   <text class="g" x="380" y="60">云端核心</text>
+   <text class="s" x="380" y="82">与当前版本相同的云端部署</text>
+   <rect class="bx" x="380" y="100" width="260" height="56" rx="8"/>
+   <text class="t" x="510" y="133" text-anchor="middle">业务规则与数据库</text>
+   <rect class="bx" x="380" y="170" width="260" height="56" rx="8"/>
+   <text class="t" x="510" y="203" text-anchor="middle">地图检索（默认在云端）</text>
+   <rect class="bx" x="380" y="240" width="260" height="56" rx="8"/>
+   <text class="t" x="510" y="273" text-anchor="middle">官网复核、社媒公开资料</text>
+   <rect class="bx" x="380" y="310" width="260" height="56" rx="8"/>
+   <text class="t" x="510" y="343" text-anchor="middle">计划、导出、每日备份</text>
+   <rect class="grp" x="720" y="30" width="220" height="380" rx="14"/>
+   <text class="g" x="740" y="60">外部公开来源</text>
+   <rect class="bx ext" x="740" y="100" width="180" height="56" rx="8"/>
+   <text class="s" x="830" y="133" text-anchor="middle">地图公开商户信息</text>
+   <rect class="bx ext" x="740" y="210" width="180" height="56" rx="8"/>
+   <text class="s" x="830" y="243" text-anchor="middle">企业官网</text>
+   <rect class="bx ext" x="740" y="310" width="180" height="56" rx="8"/>
+   <text class="s" x="830" y="343" text-anchor="middle">社媒平台</text>
+   <path class="ln" d="M640 198L738 132" marker-end="url(#m3)"/>
+   <path class="ln" d="M640 268L738 240" marker-end="url(#m3)"/>
+   <path class="ln" d="M160 385V440H830V368" marker-end="url(#m3)"/>
+   <text class="lb" x="495" y="460" text-anchor="middle">在用户电脑上登录并读取社媒</text>
+  </svg>
+  <svg class="d-narrow" viewBox="0 0 360 720" role="img" aria-labelledby="b2t b2d">
+   <title id="b2t">规划中的架构（尚未上线）</title>
+   <desc id="b2d">用户电脑上有浏览器和本机助手。浏览器通过 HTTPS 打开云端工作台；本机助手负责社媒账号登录和登录后的读取，只回传读取结果，登录状态和 Cookie 不离开用户电脑。云端核心默认负责地图检索、官网复核、计划、导出和备份。</desc>
+   <defs><marker id="m4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#247a70"/></marker></defs>
+   <rect class="grp pc" x="10" y="10" width="330" height="230" rx="14"/>
+   <text class="g pc" x="25" y="36">用户电脑</text>
+   <rect class="bx" x="25" y="50" width="130" height="70" rx="10"/>
+   <text class="t" x="90" y="80" text-anchor="middle">浏览器</text>
+   <text class="s" x="90" y="103" text-anchor="middle">打开云端工作台</text>
+   <rect class="bx" x="165" y="50" width="160" height="175" rx="10"/>
+   <text class="t" x="245" y="78" text-anchor="middle">本机助手</text>
+   <text class="s" x="245" y="103" text-anchor="middle">社媒账号本机登录</text>
+   <text class="s" x="245" y="125" text-anchor="middle">登录后读取社媒</text>
+   <text class="s" x="245" y="147" text-anchor="middle">可选：地图检索</text>
+   <text class="lb" x="245" y="182" text-anchor="middle">登录状态和 Cookie</text>
+   <text class="lb" x="245" y="203" text-anchor="middle">不离开这台电脑</text>
+   <path class="ln" d="M90 120V283" marker-end="url(#m4)"/>
+   <text class="lb" x="98" y="200">HTTPS</text>
+   <path class="ln" d="M245 225V283" marker-end="url(#m4)"/>
+   <text class="lb" x="253" y="260">回传结果</text>
+   <rect class="grp" x="10" y="285" width="325" height="235" rx="14"/>
+   <text class="g" x="25" y="311">云端核心</text>
+   <rect class="bx" x="25" y="325" width="295" height="40" rx="8"/>
+   <text class="s" x="172" y="350" text-anchor="middle">业务规则与数据库</text>
+   <rect class="bx" x="25" y="370" width="295" height="40" rx="8"/>
+   <text class="s" x="172" y="395" text-anchor="middle">地图检索（默认在云端）</text>
+   <rect class="bx" x="25" y="415" width="295" height="40" rx="8"/>
+   <text class="s" x="172" y="440" text-anchor="middle">官网复核、社媒公开资料</text>
+   <rect class="bx" x="25" y="460" width="295" height="40" rx="8"/>
+   <text class="s" x="172" y="485" text-anchor="middle">计划、导出、每日备份</text>
+   <path class="ln" d="M172 520V568" marker-end="url(#m4)"/>
+   <text class="lb" x="180" y="549">默认由云端访问</text>
+   <rect class="grp" x="10" y="570" width="320" height="130" rx="12"/>
+   <text class="g" x="25" y="597">外部公开来源</text>
+   <text class="s" x="25" y="627">地图公开商户信息</text>
+   <text class="s" x="25" y="652">企业官网</text>
+   <text class="s" x="25" y="677">社媒平台</text>
+   <path class="ln" d="M325 140H352V672H90" marker-end="url(#m4)"/>
+  </svg>
+  <figcaption>图：规划中的架构（尚未上线）。右侧 / 下方的连线表示本机助手直接在用户电脑上登录并读取社媒。</figcaption>
+ </figure>
+ <div class="grid two">
+  <div class="card"><h3>云端核心 + 本机助手</h3><ul><li>业务规则、数据库、官网复核、计划、导出和备份都留在云端。</li><li>本机助手只负责社媒账号登录和登录后的读取，回传读取结果，登录状态和 Cookie 不离开用户电脑。</li><li>用户仍然通过浏览器使用工作台。</li></ul></div>
+  <div class="card"><h3>地图检索与后续方向</h3><ul><li>地图检索默认在云端执行。</li><li>云端访问受限时，可以按市场切换到本机助手执行，之后也可以切回云端。</li><li>先做手动切换，之后再考虑自动切换。</li><li>更远的方向是多租户：多个客户共用一套服务，数据仍然互相隔离。</li></ul></div>
+ </div>
+</section>
+
+<section id="status" aria-labelledby="h-status">
+ <h2 id="h-status"><span class="num">06</span>当前状态与说明</h2>
+ <div class="card status">
+  <ul>
+   <li>目前是体验版，功能和界面仍在调整。</li>
+   <li>目前只在 macOS 和云服务器上验证过。</li>
+   <li>地图结果会混入少量不相关或邻近城市的企业，需要人工筛选相关性。</li>
+   <li>部分企业官网只能部分读取，已读取到的内容会保留。</li>
+   <li>服务器版暂不支持登录社媒账号读取，只读取社媒公开资料。</li>
+   <li>不保证找到某个城市的全部企业，也不保证联系方式完整或准确；结果需人工核实。</li>
+   <li>使用公开数据需遵守各平台条款与当地法规，由使用方负责确认。</li>
+  </ul>
+ </div>
+</section>
+
+</div>
+</main>
+<footer><div class="wrap"><span>寻迹线索工作台</span><span>内部体验版资料</span><span>生成日期：2026-10-23</span></div></footer>
+</body>
+</html>

@@ -111,6 +111,7 @@ npm run build
 
 ## 文档
 
+- [合作伙伴版产品与架构简介（静态网页）](docs/partner/index.html)
 - [部署到 AWS（首个客户体验版）](docs/deploy/aws.md)
 - [技术文档总览：架构、拓扑、模块、接口与数据库](docs/technical/README.md)
 - [产品文档总览：当前目标与实现边界](docs/product/README.md)
